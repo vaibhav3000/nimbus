@@ -116,8 +116,10 @@ the app.
 - Two test files: `test_contracts.py` (fixtures valid/invalid against the four schemas,
   plus the cross-field rule) and `test_api.py` (live server: SC-1 end to end — request →
   question → answer → schema-valid lease; timeline contains requester + cloud + rule rows;
-  repeated `message_id` ignored; outdated lease_version escalation dropped; OUTPUT_READY
-  completes the task; schemas served over HTTP; cost counters move).
+  repeated `message_id` ignored; failed deliveries don't burn their `message_id`; OUTPUT_READY
+  completes the task; schemas served over HTTP; cost counters move). The outdated
+  `lease_version` drop is implemented as an ingress guard but is only publicly reachable
+  once Person 3's re-planning issues lease v2, so its test lives with Person 3's slice.
 - Prior art: the old Nimbus workspace's `tests/test_lease_schema.py` style (schema-fixtures
   in pytest) and its HTTP-free, public-behaviour-first conventions.
 

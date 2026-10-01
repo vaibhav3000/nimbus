@@ -45,7 +45,7 @@ def wants_clarification(text: str) -> bool:
     )
 
 
-def clarifying_question(text: str) -> dict:
+def clarifying_question() -> dict:
     """The question and its possible readings (CLARIFY payload shape, Table 2)."""
     return {
         "question": "2B-12 is a paediatric bed. Do you need a paediatric pump?",

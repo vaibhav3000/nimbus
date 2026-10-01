@@ -8,11 +8,11 @@ Person 2 and Person 3.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `contracts/lease.schema.json` requires exactly the v5.0 field set (lease_id, version, priority, deadline_ts, expiry_ts, allowed_zones, forbidden_zones, speed_limit, assigned_robots, task_sequence, cluster_id, when_to_escalate); version >= 1; priority in {routine, urgent}; task_sequence items are robot sub-tasks
-- [ ] `contracts/escalation.schema.json` enforces the three types with PRD Table 2 payload keys per type, plus message_id and lease_version on every escalation
-- [ ] `contracts/robot_subtask.schema.json` allows only cmd in {go_to, wait, stop, photo, beep, report}
-- [ ] `contracts/decision_log_entry.schema.json` requires who, inputs, output, lease_version, timestamp, task_id
-- [ ] A validation module loads each schema, checks it, validates documents, and enforces the cross-field rule deadline_ts <= expiry_ts outside JSON Schema
-- [ ] Tests prove a valid SC-1 lease and the three escalation payloads pass, and missing-field / bad-cmd / extra-property documents fail
+- [x] `contracts/lease.schema.json` requires exactly the v5.0 field set (lease_id, version, priority, deadline_ts, expiry_ts, allowed_zones, forbidden_zones, speed_limit, assigned_robots, task_sequence, cluster_id, when_to_escalate); version >= 1; priority in {routine, urgent}; task_sequence items are robot sub-tasks
+- [x] `contracts/escalation.schema.json` enforces the three types with PRD Table 2 payload keys per type, plus message_id and lease_version on every escalation
+- [x] `contracts/robot_subtask.schema.json` allows only cmd in {go_to, wait, stop, photo, beep, report}
+- [x] `contracts/decision_log_entry.schema.json` requires who, inputs, output, lease_version, timestamp, task_id
+- [x] A validation module loads each schema, checks it, validates documents, and enforces the cross-field rule deadline_ts <= expiry_ts outside JSON Schema
+- [x] Tests prove a valid SC-1 lease and the three escalation payloads pass, and missing-field / bad-cmd / extra-property documents fail

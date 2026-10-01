@@ -140,8 +140,24 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- request handling (the cloud stand-in's ingress) ------------------
 
+    def _row(self, who: str, inputs: dict, output: dict, lease_version, task_id: str) -> dict:
+        """One decision-log entry (FR-20 contract shape)."""
+        return {
+            "who": who,
+            "inputs": inputs,
+            "output": output,
+            "lease_version": lease_version,
+            "timestamp": standin.now_iso(),
+            "task_id": task_id,
+        }
+
     def _dedupe(self, body: dict) -> tuple[bool, str | None]:
-        """FR-8 shape: a repeated message_id is acknowledged, not acted on."""
+        """FR-8 shape: a repeated message_id is acknowledged, not acted on.
+
+        Check only — the caller records the id once the message is accepted,
+        so a delivery that fails validation never burns its id and an honest
+        retry still goes through.
+        """
         message_id = body.get("message_id")
         if not isinstance(message_id, str) or not message_id:
             self._send_json(400, {"error": "message_id is required"})
@@ -149,7 +165,6 @@ class Handler(BaseHTTPRequestHandler):
         if message_id in self.store.seen_message_ids:
             self._send_json(200, {"duplicate": True})
             return True, message_id
-        self.store.see_message_id(message_id)
         return False, message_id
 
     def _post_request(self, body: dict):
@@ -161,7 +176,7 @@ class Handler(BaseHTTPRequestHandler):
         if dup:
             return
 
-        task_id = f"task-{len(self.store.tasks) + 1:06d}"
+        task_id = self.store.next_task_id()
         task = {
             "task_id": task_id,
             "message_id": message_id,
@@ -172,30 +187,22 @@ class Handler(BaseHTTPRequestHandler):
             "result_ref": None,
         }
         self.store.append_decision(
-            {
-                "who": "requester",
-                "inputs": {"text": text},
-                "output": {"event": "request_received"},
-                "lease_version": None,
-                "timestamp": standin.now_iso(),
-                "task_id": task_id,
-            }
+            self._row("requester", {"text": text}, {"event": "request_received"}, None, task_id)
         )
 
         if standin.wants_clarification(text):
-            question = standin.clarifying_question(text)
+            question = standin.clarifying_question()
             task["status"] = "needs_clarification"
             task["question"] = question
-            self.store.put_task(task)
+            self.store.put_task(task)  # records task["message_id"] as seen
             self.store.append_decision(
-                {
-                    "who": "cloud",
-                    "inputs": {"request_text": text},
-                    "output": {"decision": "ask_clarify", "question": question},
-                    "lease_version": None,
-                    "timestamp": standin.now_iso(),
-                    "task_id": task_id,
-                }
+                self._row(
+                    "cloud",
+                    {"request_text": text},
+                    {"decision": "ask_clarify", "question": question},
+                    None,
+                    task_id,
+                )
             )
             self._record_cloud_decision(text)
             self._send_json(
@@ -238,14 +245,13 @@ class Handler(BaseHTTPRequestHandler):
 
         task["message_id"] = message_id
         self.store.append_decision(
-            {
-                "who": "requester",
-                "inputs": {"text": text, "question": task["question"]},
-                "output": {"event": "clarification_answered"},
-                "lease_version": None,
-                "timestamp": standin.now_iso(),
-                "task_id": task_id,
-            }
+            self._row(
+                "requester",
+                {"text": text, "question": task["question"]},
+                {"event": "clarification_answered"},
+                None,
+                task_id,
+            )
         )
         # Urgency and zones come from the original request, so the lease is
         # built from request + answer together.
@@ -270,50 +276,34 @@ class Handler(BaseHTTPRequestHandler):
             self.store.put_task(task)
             self._send_json(500, {"error": "stand-in produced an invalid lease", "detail": errors})
             return
+        proposal = {
+            "cluster": lease["cluster_id"],
+            "robots": lease["assigned_robots"],
+            "zones": lease["allowed_zones"],
+        }
         self.store.append_decision(
-            {
-                "who": "cloud",
-                "inputs": {"request_text": text},
-                "output": {
-                    "decision": "propose_lease",
-                    "cluster": lease["cluster_id"],
-                    "robots": lease["assigned_robots"],
-                    "zones": lease["allowed_zones"],
-                },
-                "lease_version": None,
-                "timestamp": standin.now_iso(),
-                "task_id": task_id,
-            }
+            self._row(
+                "cloud", {"request_text": text}, {"decision": "propose_lease", **proposal},
+                None, task_id,
+            )
         )
         self.store.append_decision(
-            {
-                "who": "rule",
-                "inputs": {
-                    "proposal": {
-                        "cluster": lease["cluster_id"],
-                        "robots": lease["assigned_robots"],
-                        "zones": lease["allowed_zones"],
-                    }
-                },
-                "output": {"decision": "approve", "checks": ["zones", "robots", "route"]},
-                "lease_version": lease["version"],
-                "timestamp": standin.now_iso(),
-                "task_id": task_id,
-            }
+            self._row(
+                "rule", {"proposal": proposal},
+                {"decision": "approve", "checks": ["zones", "robots", "route"]},
+                lease["version"], task_id,
+            )
         )
         task["lease"] = lease
         task["status"] = "leased"
         task["question"] = None
         self.store.put_task(task)
         self.store.append_decision(
-            {
-                "who": "cloud",
-                "inputs": {"lease_id": lease["lease_id"]},
-                "output": {"decision": "issue_lease", "lease_id": lease["lease_id"]},
-                "lease_version": lease["version"],
-                "timestamp": standin.now_iso(),
-                "task_id": task_id,
-            }
+            self._row(
+                "cloud", {"lease_id": lease["lease_id"]},
+                {"decision": "issue_lease", "lease_id": lease["lease_id"]},
+                lease["version"], task_id,
+            )
         )
         self._record_cloud_decision(text)
 
@@ -355,20 +345,17 @@ class Handler(BaseHTTPRequestHandler):
             # FR-8: outdated lease versions are dropped, never acted on.
             self._send_json(409, {"error": "outdated lease_version", "current": current})
             return
-        self.store.append_decision(
-            {
-                "who": "edge",
-                "inputs": dict(body["payload"]),
-                "output": {"event": esc_type},
-                "lease_version": body["lease_version"],
-                "timestamp": standin.now_iso(),
-                "task_id": task_id,
-            }
-        )
         if esc_type == "OUTPUT_READY":
             task["status"] = "completed"
             task["result_ref"] = body["payload"]["result_ref"]
             self.store.put_task(task)
+        self.store.see_message_id(message_id)  # accepted: record for FR-8 dedup
+        self.store.append_decision(
+            self._row(
+                "edge", dict(body["payload"]), {"event": esc_type},
+                body["lease_version"], task_id,
+            )
+        )
         # M: escalation arrived via the messaging queue; Q: queue delivery;
         # W: log row; S: result storage. CLARIFY/UNEXPECTED_EVENT reactions
         # (re-plan, ask the user) are Person 3's orchestrator.
@@ -377,15 +364,6 @@ class Handler(BaseHTTPRequestHandler):
             cost["s3_ops"] = 1
         self.cost.record(**cost)
         self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
-        self._send_json(
-            201,
-            {
-                "duplicate": False,
-                "task_id": task_id,
-                "status": task["status"],
-                "question": None,
-            },
-        )
 
 
 def make_server(host: str, port: int, data_dir: Path) -> ThreadingHTTPServer:

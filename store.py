@@ -31,6 +31,10 @@ class Store:
             blob = json.loads(self.tasks_path.read_text(encoding="utf-8"))
             self.seen_message_ids = set(blob.get(_SEEN_KEY, []))
             self.tasks = {k: v for k, v in blob.items() if k != _SEEN_KEY}
+        self._task_seq = max(
+            (int(t["task_id"].split("-")[1]) for t in self.tasks.values() if t["task_id"].startswith("task-")),
+            default=0,
+        )
 
     def _save_tasks(self) -> None:
         blob = dict(self.tasks)
@@ -38,6 +42,13 @@ class Store:
         tmp = self.tasks_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(blob, indent=1), encoding="utf-8")
         os.replace(tmp, self.tasks_path)
+
+    def next_task_id(self) -> str:
+        """Allocate the next task id from a monotonic counter under the lock,
+        so concurrent requests can never mint the same id."""
+        with _LOCK:
+            self._task_seq += 1
+            return f"task-{self._task_seq:06d}"
 
     def get_task(self, task_id: str) -> dict | None:
         return self.tasks.get(task_id)

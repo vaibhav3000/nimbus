@@ -25,6 +25,14 @@ function shortText(t) {
   return t.length > 44 ? t.slice(0, 44) + "…" : t;
 }
 
+/* Escape before any innerHTML interpolation: the timeline carries edge-supplied
+   text (escalation payloads), which is this app's trust boundary. */
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
 async function refreshTasks() {
   const { data } = await api("GET", "/tasks");
   $("task-count").textContent = `(${data.tasks.length})`;
@@ -33,7 +41,7 @@ async function refreshTasks() {
   for (const t of data.tasks) {
     const li = document.createElement("li");
     li.innerHTML = `<strong>${t.task_id}</strong>${chip(t.status)}<br>
-      <span class="muted">${shortText(t.request_text)}</span>`;
+      <span class="muted">${esc(shortText(t.request_text))}</span>`;
     if (t.task_id === selectedTaskId) li.className = "active";
     li.onclick = () => selectTask(t.task_id);
     list.appendChild(li);
@@ -56,11 +64,11 @@ async function renderDetail() {
   if (status === 404) { box.innerHTML = `<p class="muted">Task not found.</p>`; return; }
 
   let html = `<h3>${task.task_id} ${chip(task.status)}</h3>
-    <p class="muted">“${task.request_text}”</p>`;
+    <p class="muted">“${esc(task.request_text)}”</p>`;
 
   if (task.question) {
-    html += `<div class="qbox"><strong>Question:</strong> ${task.question.question}
-      <br><span class="muted">Readings: ${task.question.possible_readings.join(" · ")}</span>
+    html += `<div class="qbox"><strong>Question:</strong> ${esc(task.question.question)}
+      <br><span class="muted">Readings: ${esc(task.question.possible_readings.join(" · "))}</span>
       <p><input type="text" id="answer" placeholder="Type your answer…">
       <button id="answer-btn">Answer</button></p></div>`;
   }
@@ -69,7 +77,7 @@ async function renderDetail() {
       <pre class="lease">${JSON.stringify(task.lease, null, 2)}</pre>`;
   }
   if (task.result_ref) {
-    html += `<div class="result"><strong>Result:</strong> ${task.result_ref}</div>`;
+    html += `<div class="result"><strong>Result:</strong> ${esc(task.result_ref)}</div>`;
   }
   if (task.status === "leased") {
     html += `<p><button class="secondary" id="finish-btn">Demo: edge sends OUTPUT_READY</button></p>`;
@@ -78,7 +86,7 @@ async function renderDetail() {
   const { data: tl } = await api("GET", `/tasks/${selectedTaskId}/timeline`);
   html += `<h4>Decision timeline (FR-20)</h4><ol class="timeline">` +
     tl.timeline.map(r =>
-      `<li><strong>${r.who}</strong> — ${r.output.event || r.output.decision || "?"}
+      `<li><strong>${r.who}</strong> — ${esc(r.output.event || r.output.decision || "?")}
        <span class="muted">${r.timestamp}</span></li>`).join("") +
     `</ol>`;
   box.innerHTML = html;

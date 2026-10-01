@@ -9,11 +9,11 @@ browser.
 
 **Blocked by:** 01 (Contracts and validators).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `python server.py` boots API + static app hosting on one port; data survives restart
-- [ ] POST /requests creates a task and returns task_id + status; a lease v1 validating against the lease schema is stored and visible via GET /tasks/{id}
-- [ ] GET /tasks/{id}/timeline returns the full ordered decision-log rows for the task, including requester, cloud and rule rows
-- [ ] Repeated message_id on POST /requests is ignored: the same task is returned with duplicate flagged, no new rows (FR-8 shape)
-- [ ] GET /cost reports counters for every PRD Sec. 7 formula term and moves as requests are served
-- [ ] Tests hit only the public HTTP surface and the published schemas
+- [x] `python server.py` boots API + static app hosting on one port; data survives restart
+- [x] POST /requests creates a task and returns task_id + status; a lease v1 validating against the lease schema is stored and visible via GET /tasks/{id}
+- [x] GET /tasks/{id}/timeline returns the full ordered decision-log rows for the task, including requester, cloud and rule rows
+- [x] Repeated message_id on POST /requests is ignored: the same task is returned with duplicate flagged, no new rows (FR-8 shape)
+- [x] GET /cost reports counters for every PRD Sec. 7 formula term and moves as requests are served
+- [x] Tests hit only the public HTTP surface and the published schemas

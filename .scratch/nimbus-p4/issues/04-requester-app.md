@@ -8,9 +8,9 @@ lost state.
 
 **Blocked by:** 03 (Clarify flow, escalation ingress, SC-1 end to end).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The page loads at the server root and needs no build step or new dependency
-- [ ] Sending the SC-1 request shows the clarifying question; answering it shows the lease and status; the result appears once an OUTPUT_READY escalation arrives
-- [ ] A refresh re-renders tasks, status, question and timeline from GET /tasks and GET /tasks/{id}/timeline
-- [ ] No private API surface is used: only the documented endpoints
+- [x] The page loads at the server root and needs no build step or new dependency
+- [x] Sending the SC-1 request shows the clarifying question; answering it shows the lease and status; the result appears once an OUTPUT_READY escalation arrives
+- [x] A refresh re-renders tasks, status, question and timeline from GET /tasks and GET /tasks/{id}/timeline
+- [x] No private API surface is used: only the documented endpoints

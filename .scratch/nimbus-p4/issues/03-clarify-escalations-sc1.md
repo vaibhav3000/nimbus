@@ -9,10 +9,10 @@ urgent." → question → answer → lease) works over HTTP.
 
 **Blocked by:** 02 (Local API, cloud stand-in, decision log, cost hooks).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] POST /requests with the SC-1 text returns a status that includes the clarifying question; the question and its possible readings validate as a CLARIFY escalation payload
-- [ ] POST /requests/{id}/answer records the answer and issues lease v1; the timeline gains the answer and lease rows
-- [ ] POST /escalations validates against the escalation schema; repeated message_id is ignored; an escalation with a lease_version lower than the task's current lease is dropped as outdated
-- [ ] An OUTPUT_READY escalation marks the task completed and its result_ref visible via GET /tasks/{id}
-- [ ] Tests cover the whole SC-1 path plus dedup and staleness over public HTTP only
+- [x] POST /requests with the SC-1 text returns a status that includes the clarifying question; the question and its possible readings validate as a CLARIFY escalation payload
+- [x] POST /requests/{id}/answer records the answer and issues lease v1; the timeline gains the answer and lease rows
+- [x] POST /escalations validates against the escalation schema; repeated message_id is ignored; an escalation with a lease_version lower than the task's current lease is dropped as outdated
+- [x] An OUTPUT_READY escalation marks the task completed and its result_ref visible via GET /tasks/{id}
+- [x] Tests cover the whole SC-1 path plus dedup and staleness over public HTTP only

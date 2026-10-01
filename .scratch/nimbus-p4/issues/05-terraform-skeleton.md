@@ -8,10 +8,10 @@ is ever applied or planned against a real account.
 
 **Blocked by:** None (can start immediately; table/queue/topic names follow the contracts).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] All scoped resources present, names aligned with the contracts' vocabulary; IoT topic names declared as locals
-- [ ] No Lambda resource anywhere; ECS service is always-on Fargate
-- [ ] IAM policies are scoped to specific table, queue, bucket-prefix, Bedrock-invoke and IoT ARNs, plus a minimal execution role
-- [ ] `terraform init -backend=false` + `terraform validate` exit 0 with the checked-in provider lock
-- [ ] A comment marks the placeholder integration for Person 3 to replace with a VPC-link proxy
+- [x] All scoped resources present, names aligned with the contracts' vocabulary; IoT topic names declared as locals
+- [x] No Lambda resource anywhere; ECS service is always-on Fargate
+- [x] IAM policies are scoped to specific table, queue, bucket-prefix, Bedrock-invoke and IoT ARNs, plus a minimal execution role
+- [x] `terraform init -backend=false` + `terraform validate` exit 0 with the checked-in provider lock
+- [x] A comment marks the placeholder integration for Person 3 to replace with a VPC-link proxy

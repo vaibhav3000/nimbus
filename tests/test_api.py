@@ -199,6 +199,45 @@ def test_schemas_served_over_http(api):
     assert status == 404
 
 
+def test_failed_escalation_does_not_burn_message_id(api):
+    """FR-8 dedup protects redeliveries of ACCEPTED messages; a message that
+    failed validation never executed, so its honest retry must go through."""
+    task_id = leased_task(api)
+    bad = {
+        "type": "OUTPUT_READY",
+        "message_id": "msg-retry-1",
+        "lease_version": 1,
+        "task_id": task_id,
+        "payload": {"note": "no result_ref"},
+    }
+    status, _ = http_json("POST", api + "/escalations", bad)
+    assert status == 400
+    good = dict(bad, payload={"result_ref": "s3://nimbus-outputs/x.jpg"})
+    status, body = http_json("POST", api + "/escalations", good)
+    assert status == 201 and body["accepted"] is True
+
+
+def test_concurrent_requests_all_survive(api):
+    """Task ids are allocated under the store lock: concurrent POSTs must all
+    produce distinct, retrievable tasks (no silent overwrite)."""
+    import concurrent.futures
+
+    def send(i):
+        return http_json(
+            "POST",
+            api + "/requests",
+            {"text": f"Deliver blanket to ward 5, routine.", "message_id": f"msg-c-{i}"},
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(send, range(12)))
+    task_ids = [body["task_id"] for _, body in results]
+    assert len(set(task_ids)) == 12
+    for task_id in task_ids:
+        status, task = http_json("GET", api + f"/tasks/{task_id}")
+        assert status == 200 and task["status"] == "leased"
+
+
 def test_requester_app_served_at_root(api):
     import json as _json
     from urllib import request as urlreq

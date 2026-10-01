@@ -77,3 +77,27 @@ entry below is a PRD detail the scope left open and the reading chosen.
     order (requester → cloud → rule → cloud; edge rows when escalations
     arrive); `GET /timeline` returns append order; no separate sequence
     number field.
+
+14. **FR-8 dedup marks a message id only on acceptance.** A delivery that
+    fails validation or task lookup does not burn its `message_id`, so an
+    honest retry still executes (a repeated id is ignored only after its
+    message was accepted once). Simplest safe reading of "repeated … ones are
+    ignored".
+
+15. **The app's "Demo: edge sends OUTPUT_READY" button.** FR-21 requires the
+    app to show a result, but no edge exists in this slice; the button posts a
+    real OUTPUT_READY escalation so the result path is demoable. It is demo
+    glue, clearly labelled — Person 2's edge replaces it.
+
+16. **IAM policy carries two extras beyond the minimal enumeration.**
+    `events:PutEvents` (the service must publish onto the EventBridge bus the
+    skeleton declares) and `iot:Subscribe` (an always-on container consuming
+    check-ins needs it, not just connect/publish). Both are scoped to the
+    specific bus/topic ARNs, keeping NFR-5's least-privilege intent.
+
+17. **Code-review findings (both axes) were fixed before handoff:** duplicate
+    response in the escalation handler removed, task-id allocation moved under
+    a lock with a monotonic counter, dedup moved to mark-on-acceptance,
+    decision-row construction deduplicated through one helper, app HTML
+    interpolation escaped, and the stale-version test expectation aligned with
+    what is publicly reachable (see SPEC-P4.md).
