@@ -197,3 +197,17 @@ def test_schemas_served_over_http(api):
         assert schema["$id"].endswith(f"/{name}.schema.json")
     status, _ = http_json("GET", api + "/schemas/nope.json")
     assert status == 404
+
+
+def test_requester_app_served_at_root(api):
+    import json as _json
+    from urllib import request as urlreq
+
+    with urlreq.urlopen(api + "/") as resp:
+        html = resp.read().decode("utf-8")
+        ctype = resp.headers["Content-Type"]
+    assert resp.status == 200 and "text/html" in ctype
+    assert "Requester App" in html  # the page renders tasks from GET /tasks
+
+    with urlreq.urlopen(api + "/app.js") as resp:
+        assert "application/javascript" in resp.headers["Content-Type"]

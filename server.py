@@ -66,7 +66,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
-        if path.startswith("/tasks/"):
+        if path == "/":
+            self._send_static("index.html")
+        elif path == "/app.js":
+            self._send_static("app.js")
+        elif path.startswith("/tasks/"):
             task_id = path.split("/")[2]
             task = self.store.get_task(task_id)
             if task is None:
@@ -91,6 +95,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send_schema(path[len("/schemas/"):])
         else:
             self._send_json(404, {"error": f"no route for {path}"})
+
+    def _send_static(self, filename: str) -> None:
+        """Serve the requester app (FR-21). Files only from STATIC_DIR; the
+        names are fixed here, so no path traversal is possible."""
+        allowed = {"index.html": "text/html", "app.js": "application/javascript"}
+        if filename not in allowed:
+            self._send_json(404, {"error": "not found"})
+            return
+        data = (STATIC_DIR / filename).read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", allowed[filename])
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def _send_schema(self, name: str) -> None:
         """Serve the published contracts so Person 3 can fetch them at plug-in
