@@ -216,7 +216,8 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
-        self._issue_lease(task, text)
+        if not self._issue_lease(task, text):
+            return
         self._send_json(
             201,
             {
@@ -255,7 +256,8 @@ class Handler(BaseHTTPRequestHandler):
         )
         # Urgency and zones come from the original request, so the lease is
         # built from request + answer together.
-        self._issue_lease(task, f"{task['request_text']} {text}")
+        if not self._issue_lease(task, f"{task['request_text']} {text}"):
+            return
         self._send_json(
             201,
             {
@@ -266,16 +268,21 @@ class Handler(BaseHTTPRequestHandler):
             },
         )
 
-    def _issue_lease(self, task: dict, text: str) -> None:
-        """The stand-in's FR-15 order: propose, verify, then issue (v1)."""
+    def _issue_lease(self, task: dict, text: str) -> bool:
+        """The stand-in's FR-15 order: propose, verify, then issue (v1).
+
+        Returns True once the lease is issued; False after sending the caller
+        a 500, in which case the caller must not send anything further.
+        """
         task_id = task["task_id"]
         lease = standin.build_lease(task_id, text)
         errors = contracts.validate_document("lease", lease)
         if errors:
             task["status"] = "rejected"
+            task.pop("message_id", None)  # faulted delivery must not burn the id
             self.store.put_task(task)
             self._send_json(500, {"error": "stand-in produced an invalid lease", "detail": errors})
-            return
+            return False
         proposal = {
             "cluster": lease["cluster_id"],
             "robots": lease["assigned_robots"],
@@ -306,6 +313,7 @@ class Handler(BaseHTTPRequestHandler):
             )
         )
         self._record_cloud_decision(text)
+        return True
 
     def _record_cloud_decision(self, text: str) -> None:
         # T_in/T_out stand-ins (Person 3 reads real usage from Bedrock);

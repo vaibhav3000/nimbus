@@ -4,6 +4,7 @@ public HTTP surface only.
 """
 
 import contracts
+import standin
 from conftest import http_json
 
 ROUTINE_REQUEST = {
@@ -236,6 +237,47 @@ def test_concurrent_requests_all_survive(api):
     for task_id in task_ids:
         status, task = http_json("GET", api + f"/tasks/{task_id}")
         assert status == 200 and task["status"] == "leased"
+
+
+def test_invalid_lease_is_single_500_and_id_not_burned(api, monkeypatch):
+    """A stand-in fault must produce exactly one 500 response on the wire and
+    must not burn the message_id: the same message can be retried afterwards."""
+    import json
+    import socket
+
+    monkeypatch.setattr(
+        standin, "build_lease",
+        lambda task_id, text, version=1: {"lease_id": "broken"},
+    )
+    body = {"text": "Deliver a wheelchair to ward 3, routine.", "message_id": "msg-500-1"}
+
+    # Raw-socket POST read to EOF, so a stray second response is visible.
+    payload = json.dumps(body).encode()
+    request = (
+        "POST /requests HTTP/1.1\r\nHost: localhost\r\n"
+        f"Content-Type: application/json\r\nContent-Length: {len(payload)}\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode() + payload
+    port = int(api.rsplit(":", 1)[1])
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as sock:
+        sock.sendall(request)
+        wire = b""
+        while True:
+            part = sock.recv(4096)
+            if not part:
+                break
+            wire += part
+
+    status_lines = [line for line in wire.split(b"\r\n") if line.startswith(b"HTTP/")]
+    assert len(status_lines) == 1, status_lines
+    assert b" 500 " in status_lines[0]
+    assert b"invalid lease" in wire
+
+    monkeypatch.undo()
+    status2, second = http_json("POST", api + "/requests", body)
+    assert status2 == 201
+    assert second.get("duplicate") is not True
+    assert second["status"] == "leased"
 
 
 def test_requester_app_served_at_root(api):
