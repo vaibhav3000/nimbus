@@ -87,8 +87,22 @@ class Handler(BaseHTTPRequestHandler):
                     "tasks": len(self.store.tasks),
                 },
             )
+        elif path.startswith("/schemas/"):
+            self._send_schema(path[len("/schemas/"):])
         else:
             self._send_json(404, {"error": f"no route for {path}"})
+
+    def _send_schema(self, name: str) -> None:
+        """Serve the published contracts so Person 3 can fetch them at plug-in
+        time instead of reaching into the repo."""
+        if not name.endswith(".json"):
+            name += ".json"
+        try:
+            schema = contracts.load_schema(name[: -len(".json")])
+        except KeyError:
+            self._send_json(404, {"error": f"unknown schema {name}"})
+            return
+        self._send_json(200, schema)
 
     def do_POST(self):
         path = urlparse(self.path).path
@@ -99,24 +113,35 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/requests":
             self._post_request(body)
+        elif path.startswith("/requests/") and path.endswith("/answer"):
+            self._post_answer(path.split("/")[2], body)
+        elif path == "/escalations":
+            self._post_escalation(body)
         else:
             self._send_json(404, {"error": f"no route for {path}"})
 
     # -- request handling (the cloud stand-in's ingress) ------------------
 
+    def _dedupe(self, body: dict) -> tuple[bool, str | None]:
+        """FR-8 shape: a repeated message_id is acknowledged, not acted on."""
+        message_id = body.get("message_id")
+        if not isinstance(message_id, str) or not message_id:
+            self._send_json(400, {"error": "message_id is required"})
+            return True, None
+        if message_id in self.store.seen_message_ids:
+            self._send_json(200, {"duplicate": True})
+            return True, message_id
+        self.store.see_message_id(message_id)
+        return False, message_id
+
     def _post_request(self, body: dict):
         text = body.get("text")
-        message_id = body.get("message_id")
         if not isinstance(text, str) or not text.strip():
             self._send_json(400, {"error": "text is required"})
             return
-        if not isinstance(message_id, str) or not message_id:
-            self._send_json(400, {"error": "message_id is required"})
+        dup, message_id = self._dedupe(body)
+        if dup:
             return
-        if message_id in self.store.seen_message_ids:
-            self._send_json(200, {"duplicate": True})
-            return
-        self.store.see_message_id(message_id)
 
         task_id = f"task-{len(self.store.tasks) + 1:06d}"
         task = {
@@ -139,6 +164,87 @@ class Handler(BaseHTTPRequestHandler):
             }
         )
 
+        if standin.wants_clarification(text):
+            question = standin.clarifying_question(text)
+            task["status"] = "needs_clarification"
+            task["question"] = question
+            self.store.put_task(task)
+            self.store.append_decision(
+                {
+                    "who": "cloud",
+                    "inputs": {"request_text": text},
+                    "output": {"decision": "ask_clarify", "question": question},
+                    "lease_version": None,
+                    "timestamp": standin.now_iso(),
+                    "task_id": task_id,
+                }
+            )
+            self._record_cloud_decision(text)
+            self._send_json(
+                201,
+                {
+                    "duplicate": False,
+                    "task_id": task_id,
+                    "status": task["status"],
+                    "question": question,
+                },
+            )
+            return
+
+        self._issue_lease(task, text)
+        self._send_json(
+            201,
+            {
+                "duplicate": False,
+                "task_id": task_id,
+                "status": task["status"],
+                "question": None,
+            },
+        )
+
+    def _post_answer(self, task_id: str, body: dict):
+        task = self.store.get_task(task_id)
+        if task is None:
+            self._send_json(404, {"error": f"unknown task {task_id}"})
+            return
+        if task["status"] != "needs_clarification":
+            self._send_json(409, {"error": f"task {task_id} is not awaiting an answer"})
+            return
+        text = body.get("text")
+        if not isinstance(text, str) or not text.strip():
+            self._send_json(400, {"error": "text is required"})
+            return
+        dup, message_id = self._dedupe(body)
+        if dup:
+            return
+
+        task["message_id"] = message_id
+        self.store.append_decision(
+            {
+                "who": "requester",
+                "inputs": {"text": text, "question": task["question"]},
+                "output": {"event": "clarification_answered"},
+                "lease_version": None,
+                "timestamp": standin.now_iso(),
+                "task_id": task_id,
+            }
+        )
+        # Urgency and zones come from the original request, so the lease is
+        # built from request + answer together.
+        self._issue_lease(task, f"{task['request_text']} {text}")
+        self._send_json(
+            201,
+            {
+                "duplicate": False,
+                "task_id": task_id,
+                "status": task["status"],
+                "lease": task["lease"],
+            },
+        )
+
+    def _issue_lease(self, task: dict, text: str) -> None:
+        """The stand-in's FR-15 order: propose, verify, then issue (v1)."""
+        task_id = task["task_id"]
         lease = standin.build_lease(task_id, text)
         errors = contracts.validate_document("lease", lease)
         if errors:
@@ -146,9 +252,6 @@ class Handler(BaseHTTPRequestHandler):
             self.store.put_task(task)
             self._send_json(500, {"error": "stand-in produced an invalid lease", "detail": errors})
             return
-        # FR-15 order: the LLM (stand-in) proposes, the rule checker verifies,
-        # only then is the lease issued. Three cloud/rule rows plus the
-        # requester row give a replayable chain.
         self.store.append_decision(
             {
                 "who": "cloud",
@@ -182,6 +285,7 @@ class Handler(BaseHTTPRequestHandler):
         )
         task["lease"] = lease
         task["status"] = "leased"
+        task["question"] = None
         self.store.put_task(task)
         self.store.append_decision(
             {
@@ -193,9 +297,12 @@ class Handler(BaseHTTPRequestHandler):
                 "task_id": task_id,
             }
         )
+        self._record_cloud_decision(text)
+
+    def _record_cloud_decision(self, text: str) -> None:
         # T_in/T_out stand-ins (Person 3 reads real usage from Bedrock);
         # M: lease published to the cluster; W: rows written; F/K: stand-ins.
-        # ponytail: Fargate GB-s as a flat per-request constant, replace with
+        # ponytail: Fargate GB-s as a flat per-decision constant, replace with
         # wall-clock * vCPU/mem if the report needs finer Fargate accounting.
         self.cost.record(
             input_tokens=max(1, len(text) // 4),
@@ -205,6 +312,53 @@ class Handler(BaseHTTPRequestHandler):
             fargate_gbs=0.001,
             cloudwatch_metrics=1,
         )
+
+    def _post_escalation(self, body: dict):
+        """Ingress for edge escalations (PRD Table 2; Person 3 replaces the
+        reaction logic, the route and its guards stay)."""
+        esc_type = body.get("type")
+        task_id = body.get("task_id")
+        if esc_type not in ("CLARIFY", "UNEXPECTED_EVENT", "OUTPUT_READY"):
+            self._send_json(400, {"error": "unknown escalation type"})
+            return
+        dup, message_id = self._dedupe(body)
+        if dup:
+            return
+        errors = contracts.validate_document("escalation", body)
+        if errors:
+            self._send_json(400, {"error": "escalation violates schema", "detail": errors})
+            return
+        task = self.store.get_task(task_id)
+        if task is None:
+            self._send_json(404, {"error": f"unknown task {task_id}"})
+            return
+        current = task["lease"]["version"] if task.get("lease") else 0
+        if body["lease_version"] < current:
+            # FR-8: outdated lease versions are dropped, never acted on.
+            self._send_json(409, {"error": "outdated lease_version", "current": current})
+            return
+        self.store.append_decision(
+            {
+                "who": "edge",
+                "inputs": dict(body["payload"]),
+                "output": {"event": esc_type},
+                "lease_version": body["lease_version"],
+                "timestamp": standin.now_iso(),
+                "task_id": task_id,
+            }
+        )
+        if esc_type == "OUTPUT_READY":
+            task["status"] = "completed"
+            task["result_ref"] = body["payload"]["result_ref"]
+            self.store.put_task(task)
+        # M: escalation arrived via the messaging queue; Q: queue delivery;
+        # W: log row; S: result storage. CLARIFY/UNEXPECTED_EVENT reactions
+        # (re-plan, ask the user) are Person 3's orchestrator.
+        cost = {"sqs_messages": 1, "dynamodb_ops": 1}
+        if esc_type == "OUTPUT_READY":
+            cost["s3_ops"] = 1
+        self.cost.record(**cost)
+        self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
         self._send_json(
             201,
             {

@@ -22,11 +22,18 @@ def api(tmp_path):
 
 
 def http_json(method: str, url: str, body: dict | None = None):
-    data = None if body is None else bytes(__import__("json").dumps(body), "utf-8")
+    import json
+    from urllib.error import HTTPError
+
+    data = None if body is None else bytes(json.dumps(body), "utf-8")
     req = urlreq.Request(url, data=data, method=method)
     if data is not None:
         req.add_header("Content-Type", "application/json")
-    with urlreq.urlopen(req) as resp:
-        import json as _json
-
-        return resp.status, _json.loads(resp.read().decode("utf-8"))
+    try:
+        resp = urlreq.urlopen(req)
+    except HTTPError as err:
+        resp = err
+    with resp:
+        return resp.status if hasattr(resp, "status") else resp.code, json.loads(
+            resp.read().decode("utf-8")
+        )
