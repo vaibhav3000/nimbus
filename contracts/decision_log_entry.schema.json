@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nimbus.ds252.local/schemas/decision_log_entry.schema.json",
+  "title": "Nimbus decision log entry",
+  "description": "One append-only row of the decision log (PRD v5.0 FR-20): who decided, with which inputs, producing which output, under which lease version. who names the deciding party: cloud, edge, or rule for decisions; requester for the human's own words and answers, which enter the same log so a task's timeline can be replayed end to end. lease_version is null when no lease existed yet (e.g. the initial request).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["who", "inputs", "output", "lease_version", "timestamp", "task_id"],
+  "properties": {
+    "who": {
+      "enum": ["requester", "cloud", "edge", "rule"],
+      "description": "Deciding party (FR-20: cloud, edge or rule); requester rows carry the human's request and answers."
+    },
+    "inputs": {
+      "type": "object",
+      "description": "What the decision was based on (request text, robot status, map state, ...)."
+    },
+    "output": {
+      "type": "object",
+      "description": "What was decided (question asked, lease issued, event handled, ...)."
+    },
+    "lease_version": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "Lease version in force, or null before any lease exists."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the decision was recorded (wall-clock, ISO 8601)."
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Task the decision belongs to; GET /tasks/{id}/timeline returns all rows for one task."
+    }
+  }
+}
