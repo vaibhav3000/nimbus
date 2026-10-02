@@ -457,10 +457,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "control intent violates decision-log contract", "detail": errors})
             return
         new_status = {"pause": "paused", "cancel": "cancelled"}[action]
+        # Log row first, then the state it explains (FR-20 replay order).
+        self.store.append_decision(row)
         task["status"] = new_status
         self.store.put_task(task)
         self.store.see_message_id(message_id)  # accepted: record for FR-8 dedup
-        self.store.append_decision(row)
         self.cost.record(dynamodb_ops=2)  # status write + log row
         self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
 

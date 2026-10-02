@@ -50,7 +50,8 @@ Terraform binary for this machine lives (gitignored) in `tools/terraform.exe`.
   (and a real FR-22 console) is the next slice.
 - FR-8 dedupe is check-then-mark (mark on acceptance), so two identical
   concurrent deliveries can both pass; Person 3's real ingress (SQS/IoT) must
-  make the claim atomic.
+  make the claim atomic. Task status writes are last-writer-wins under
+  concurrent ingresses for the same reason.
 - Cost counters carry stand-in values; prices are never applied.
 - The app's "Demo: edge sends OUTPUT_READY" button is labelled demo glue for
   Person 2's edge.

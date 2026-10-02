@@ -70,7 +70,12 @@ async function renderDetail() {
 }
 
 async function control(action) {
-  await api("POST", `/tasks/${selectedTaskId}/control`, { action, message_id: msgId() });
+  const { status, data } = await api(
+    "POST", `/tasks/${selectedTaskId}/control`, { action, message_id: msgId() }
+  );
+  if (status !== 201) {
+    alert(`Intent not recorded: ${data.error || status}`);
+  }
   await renderDetail();
   await refreshTasks();
 }
