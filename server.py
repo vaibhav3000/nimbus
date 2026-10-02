@@ -9,6 +9,7 @@ touching these routes. Endpoints are the public seam; see SPEC-P4.md.
 from __future__ import annotations
 
 import json
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -91,6 +92,8 @@ class Handler(BaseHTTPRequestHandler):
                     "tasks": len(self.store.tasks),
                 },
             )
+        elif path == "/outbox":
+            self._send_json(200, {"outbox": self.store.outbox()})
         elif path.startswith("/schemas/"):
             self._send_schema(path[len("/schemas/"):])
         else:
@@ -135,6 +138,8 @@ class Handler(BaseHTTPRequestHandler):
             self._post_answer(path.split("/")[2], body)
         elif path == "/escalations":
             self._post_escalation(body)
+        elif path == "/checkins":
+            self._post_checkin(body)
         else:
             self._send_json(404, {"error": f"no route for {path}"})
 
@@ -313,6 +318,11 @@ class Handler(BaseHTTPRequestHandler):
             )
         )
         self._record_cloud_decision(text)
+        # Publish the lease to the edge cluster (topic pattern in
+        # contracts/topics.md); the outbox file is the messaging stand-in.
+        self.store.append_outbox(
+            {"topic": f"nimbus/{lease['cluster_id']}/lease", "payload": lease}
+        )
         return True
 
     def _record_cloud_decision(self, text: str) -> None:
@@ -372,6 +382,41 @@ class Handler(BaseHTTPRequestHandler):
             cost["s3_ops"] = 1
         self.cost.record(**cost)
         self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
+
+    def _post_checkin(self, body: dict):
+        """Edge check-in ingress (shape in contracts/topics.md): record one
+        decision-log row, nothing more — no re-planning, no routing. Person 3
+        replaces the reaction with lease renewal."""
+        dup, message_id = self._dedupe(body)
+        if dup:
+            return
+        missing = [
+            k for k in ("cluster_id", "lease_id", "lease_version", "timestamp")
+            if k not in body
+        ]
+        if missing:
+            self._send_json(400, {"error": f"check-in missing {missing}"})
+            return
+        match = re.fullmatch(r"lease-(.+)-v\d+", body["lease_id"])
+        if not match:
+            self._send_json(400, {"error": "lease_id must be lease-<task_id>-v<version>"})
+            return
+        row = self._row(
+            "edge",
+            {"cluster_id": body["cluster_id"], "lease_id": body["lease_id"],
+             "checkin_timestamp": body["timestamp"]},
+            {"event": "checkin"},
+            body["lease_version"],
+            match.group(1),
+        )
+        errors = contracts.validate_document("decision_log_entry", row)
+        if errors:
+            self._send_json(400, {"error": "check-in violates decision-log contract", "detail": errors})
+            return
+        self.store.see_message_id(message_id)  # accepted: record for FR-8 dedup
+        self.store.append_decision(row)
+        self.cost.record(sqs_messages=1, dynamodb_ops=1)  # queue delivery + log row
+        self._send_json(201, {"duplicate": False, "accepted": True})
 
 
 def make_server(host: str, port: int, data_dir: Path) -> ThreadingHTTPServer:

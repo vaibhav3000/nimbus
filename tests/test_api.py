@@ -200,6 +200,63 @@ def test_schemas_served_over_http(api):
     assert status == 404
 
 
+def test_sc1_answer_publishes_lease_to_outbox(api):
+    _, body = http_json("POST", api + "/requests", SC1_REQUEST)
+    http_json(
+        "POST",
+        api + f"/requests/{body['task_id']}/answer",
+        {"text": "Yes, a paediatric pump please.", "message_id": "msg-sc1-out"},
+    )
+    status, out = http_json("GET", api + "/outbox")
+    assert status == 200
+    rows = out["outbox"]
+    assert len(rows) == 1
+    assert rows[0]["topic"] == "nimbus/east-wing/lease"
+    assert contracts.validate_document("lease", rows[0]["payload"]) == []
+
+
+def test_checkin_records_edge_row_and_dedupes(api):
+    task_id = leased_task(api)
+    checkin = {
+        "cluster_id": "east-wing",
+        "lease_id": f"lease-{task_id}-v1",
+        "lease_version": 1,
+        "timestamp": "2026-10-02T10:00:00Z",
+        "message_id": "msg-ci-1",
+    }
+    status, first = http_json("POST", api + "/checkins", checkin)
+    assert status == 201 and first["accepted"] is True
+
+    status2, second = http_json("POST", api + "/checkins", checkin)
+    assert status2 == 200 and second.get("duplicate") is True
+
+    _, tl = http_json("GET", api + f"/tasks/{task_id}/timeline")
+    edge_rows = [r for r in tl["timeline"] if r["who"] == "edge"]
+    assert len(edge_rows) == 1
+    assert edge_rows[0]["output"]["event"] == "checkin"
+    assert edge_rows[0]["lease_version"] == 1
+    assert contracts.validate_document("decision_log_entry", edge_rows[0]) == []
+
+
+def test_checkin_unknown_cluster_still_records(api):
+    """The stand-in does no routing or cluster validation; that is Person 3's."""
+    task_id = leased_task(api)
+    status, body = http_json(
+        "POST",
+        api + "/checkins",
+        {
+            "cluster_id": "north-wing",
+            "lease_id": f"lease-{task_id}-v1",
+            "lease_version": 1,
+            "timestamp": "2026-10-02T10:00:00Z",
+            "message_id": "msg-ci-2",
+        },
+    )
+    assert status == 201 and body["accepted"] is True
+    _, tl = http_json("GET", api + f"/tasks/{task_id}/timeline")
+    assert any(r["who"] == "edge" for r in tl["timeline"])
+
+
 def test_failed_escalation_does_not_burn_message_id(api):
     """FR-8 dedup protects redeliveries of ACCEPTED messages; a message that
     failed validation never executed, so its honest retry must go through."""

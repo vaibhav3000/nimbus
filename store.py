@@ -74,6 +74,27 @@ class Store:
             with self.decisions_path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(row) + "\n")
 
+    def append_outbox(self, entry: dict) -> None:
+        """Append one {topic, payload} publication to the outbox file.
+
+        The outbox is the cloud-edge messaging stand-in (PRD Fig 4 component
+        6): Person 2 reads data/outbox.jsonl until a real IoT client exists;
+        the API exposes the same rows via GET /outbox.
+        """
+        with _LOCK:
+            with (self.data_dir / "outbox.jsonl").open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+
+    def outbox(self) -> list[dict]:
+        path = self.data_dir / "outbox.jsonl"
+        if not path.exists():
+            return []
+        return [
+            json.loads(line)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
     def timeline(self, task_id: str) -> list[dict]:
         """All decision-log rows for one task, in append order (FR-20)."""
         if not self.decisions_path.exists():
