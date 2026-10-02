@@ -89,11 +89,12 @@ class Store:
         path = self.data_dir / "outbox.jsonl"
         if not path.exists():
             return []
-        return [
-            json.loads(line)
-            for line in path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
+        with _LOCK:  # a concurrent append must not hand us a torn line
+            return [
+                json.loads(line)
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
 
     def timeline(self, task_id: str) -> list[dict]:
         """All decision-log rows for one task, in append order (FR-20)."""
