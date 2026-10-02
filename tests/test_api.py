@@ -337,6 +337,58 @@ def test_invalid_lease_is_single_500_and_id_not_burned(api, monkeypatch):
     assert second["status"] == "leased"
 
 
+def test_operator_page_served(api):
+    from urllib import request as urlreq
+
+    with urlreq.urlopen(api + "/operator") as resp:
+        html = resp.read().decode("utf-8")
+        ctype = resp.headers["Content-Type"]
+    assert resp.status == 200 and "text/html" in ctype
+    assert "Operator console" in html
+    assert "not yet delivered to robots" in html
+    with urlreq.urlopen(api + "/operator.js") as resp:
+        assert "application/javascript" in resp.headers["Content-Type"]
+
+
+def test_operator_pause_then_cancel_records_intents(api):
+    task_id = leased_task(api)
+    status, p = http_json(
+        "POST", api + f"/tasks/{task_id}/control", {"action": "pause", "message_id": "msg-op-1"}
+    )
+    assert status == 201 and p["status"] == "paused"
+    status, c = http_json(
+        "POST", api + f"/tasks/{task_id}/control", {"action": "cancel", "message_id": "msg-op-2"}
+    )
+    assert status == 201 and c["status"] == "cancelled"
+
+    _, tl = http_json("GET", api + f"/tasks/{task_id}/timeline")
+    op_rows = [
+        r for r in tl["timeline"]
+        if r["who"] == "rule" and str(r["output"].get("decision", "")).startswith("operator_")
+    ]
+    assert [r["output"]["decision"] for r in op_rows] == ["operator_pause", "operator_cancel"]
+    for row in op_rows:
+        assert contracts.validate_document("decision_log_entry", row) == []
+
+
+def test_operator_repeated_message_id_ignored(api):
+    task_id = leased_task(api)
+    body = {"action": "pause", "message_id": "msg-op-dup"}
+    status, first = http_json("POST", api + f"/tasks/{task_id}/control", body)
+    status2, second = http_json("POST", api + f"/tasks/{task_id}/control", body)
+    assert status == 201 and status2 == 200
+    assert second.get("duplicate") is True
+
+    _, task = http_json("GET", api + f"/tasks/{task_id}")
+    assert task["status"] == "paused"
+    _, tl = http_json("GET", api + f"/tasks/{task_id}/timeline")
+    op_rows = [
+        r for r in tl["timeline"]
+        if r["who"] == "rule" and str(r["output"].get("decision", "")).startswith("operator_")
+    ]
+    assert len(op_rows) == 1
+
+
 def test_requester_app_served_at_root(api):
     import json as _json
     from urllib import request as urlreq

@@ -71,6 +71,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_static("index.html")
         elif path == "/app.js":
             self._send_static("app.js")
+        elif path == "/operator":
+            self._send_static("operator.html")
+        elif path == "/operator.js":
+            self._send_static("operator.js")
         elif path.startswith("/tasks/"):
             task_id = path.split("/")[2]
             task = self.store.get_task(task_id)
@@ -102,7 +106,12 @@ class Handler(BaseHTTPRequestHandler):
     def _send_static(self, filename: str) -> None:
         """Serve the requester app (FR-21). Files only from STATIC_DIR; the
         names are fixed here, so no path traversal is possible."""
-        allowed = {"index.html": "text/html", "app.js": "application/javascript"}
+        allowed = {
+            "index.html": "text/html",
+            "app.js": "application/javascript",
+            "operator.html": "text/html",
+            "operator.js": "application/javascript",
+        }
         if filename not in allowed:
             self._send_json(404, {"error": "not found"})
             return
@@ -140,6 +149,8 @@ class Handler(BaseHTTPRequestHandler):
             self._post_escalation(body)
         elif path == "/checkins":
             self._post_checkin(body)
+        elif path.startswith("/tasks/") and path.endswith("/control"):
+            self._post_control(path.split("/")[2], body)
         else:
             self._send_json(404, {"error": f"no route for {path}"})
 
@@ -417,6 +428,41 @@ class Handler(BaseHTTPRequestHandler):
         self.store.append_decision(row)
         self.cost.record(sqs_messages=1, dynamodb_ops=1)  # queue delivery + log row
         self._send_json(201, {"duplicate": False, "accepted": True})
+
+    def _post_control(self, task_id: str, body: dict):
+        """Operator pause/cancel: a RECORDED INTENT only. One decision-log row
+        (who=rule) plus the status change; nothing is delivered to a robot.
+        Person 3's real console wires delivery through the messaging layer."""
+        action = body.get("action")
+        if action not in ("pause", "cancel"):
+            self._send_json(400, {"error": "action must be pause or cancel"})
+            return
+        task = self.store.get_task(task_id)
+        if task is None:
+            self._send_json(404, {"error": f"unknown task {task_id}"})
+            return
+        dup, message_id = self._dedupe(body)
+        if dup:
+            return
+        lease_version = task["lease"]["version"] if task.get("lease") else None
+        row = self._row(
+            "rule",
+            {"action": action, "by": "operator"},
+            {"decision": f"operator_{action}"},
+            lease_version,
+            task_id,
+        )
+        errors = contracts.validate_document("decision_log_entry", row)
+        if errors:
+            self._send_json(400, {"error": "control intent violates decision-log contract", "detail": errors})
+            return
+        new_status = {"pause": "paused", "cancel": "cancelled"}[action]
+        task["status"] = new_status
+        self.store.put_task(task)
+        self.store.see_message_id(message_id)  # accepted: record for FR-8 dedup
+        self.store.append_decision(row)
+        self.cost.record(dynamodb_ops=2)  # status write + log row
+        self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
 
 
 def make_server(host: str, port: int, data_dir: Path) -> ThreadingHTTPServer:

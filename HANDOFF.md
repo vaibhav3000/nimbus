@@ -46,6 +46,8 @@ Terraform binary for this machine lives (gitignored) in `tools/terraform.exe`.
 
 - The stand-in issues only lease v1; no re-planning, no v2, no FR-18 fallback.
 - Escalations CLARIFY/UNEXPECTED_EVENT are recorded, not acted on.
+- Operator pause/cancel are recorded intents only; delivering them to robots
+  (and a real FR-22 console) is the next slice.
 - FR-8 dedupe is check-then-mark (mark on acceptance), so two identical
   concurrent deliveries can both pass; Person 3's real ingress (SQS/IoT) must
   make the claim atomic.

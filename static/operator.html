@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nimbus — Operator Console</title>
+<style>
+  :root { font-family: system-ui, sans-serif; }
+  body { margin: 0; background: #f4f6f8; color: #1c2733; }
+  header { background: #5b3a6b; color: #fff; padding: 10px 18px; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header p { margin: 2px 0 0; font-size: 12px; opacity: .85; }
+  main { display: grid; grid-template-columns: 460px 1fr; gap: 14px; padding: 14px; max-width: 1200px; margin: 0 auto; }
+  .card { background: #fff; border: 1px solid #d7dee5; border-radius: 8px; padding: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e4e9ee; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: #f2ecf6; }
+  tbody tr.active { background: #ece2f3; }
+  .chip { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: #d7dee5; }
+  .chip.paused { background: #ffd666; }
+  .chip.cancelled { background: #f79f9f; }
+  .chip.leased { background: #9fd6a9; }
+  .chip.completed { background: #7fc9f7; }
+  .muted { color: #5b7183; font-size: 13px; }
+  ol.timeline { font-size: 13px; padding-left: 18px; }
+  button { font: inherit; padding: 6px 14px; border: 0; border-radius: 6px; background: #5b3a6b; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Nimbus — Operator Console</h1>
+  <p>Operator console: intents are recorded, not yet delivered to robots.</p>
+</header>
+<main>
+  <section class="card">
+    <h3>Tasks</h3>
+    <table>
+      <thead><tr><th>task</th><th>status</th><th>priority</th><th>lease v</th><th>cluster</th></tr></thead>
+      <tbody id="task-rows"></tbody>
+    </table>
+  </section>
+  <section class="card" id="detail">
+    <p class="muted">Click a row to load its decision timeline.</p>
+  </section>
+</main>
+<script src="/operator.js"></script>
+</body>
+</html>

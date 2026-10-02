@@ -56,9 +56,11 @@ terraform validate        # passes; do NOT apply without the account owner
 | `POST /requests/{id}/answer` `{text, message_id}` | Answer a clarifying question → lease v1 issued. |
 | `POST /escalations` | Edge escalation (CLARIFY / UNEXPECTED_EVENT / OUTPUT_READY per PRD Table 2). Schema-validated, deduped, stale versions dropped. OUTPUT_READY completes the task. |
 | `POST /checkins` | Edge check-in (`contracts/topics.md`): one `edge` decision-log row, deduped by `message_id`; no re-planning. |
+| `POST /tasks/{id}/control` | Operator pause/cancel — a recorded intent only (one `rule` log row, status change); nothing is delivered to robots. |
 | `GET /tasks/{id}` | Status, question, lease, result. |
 | `GET /tasks/{id}/timeline` | Full decision log for the task (FR-20 replay). |
 | `GET /tasks` | All tasks (app status view). |
+| `GET /operator` | Minimal operator console (FR-22 slice): task list + timeline + pause/cancel intents. |
 | `GET /outbox` | Lease publications recorded in `data/outbox.jsonl` (the messaging stand-in Person 2 reads). |
 | `GET /schemas/{name}.json` | The published contracts (Person 3's plug-in point). |
 | `GET /cost` | PRD Sec. 7 counters + task count. |
