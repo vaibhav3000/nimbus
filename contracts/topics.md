@@ -78,7 +78,7 @@ lease renewal are Person 3's; the stand-in does not validate the cluster.
 
 ---
 
-## Addendum (Person 3, PROPOSED: additive, in use, awaiting P4 / P2 agreement)
+## Addendum (Person 3: additive; agreed by P4 on 14 Oct, P2 confirmation pending)
 
 Nothing above changes. These only add, so existing consumers keep working.
 

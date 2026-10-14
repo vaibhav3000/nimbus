@@ -10,7 +10,7 @@ GLOSSARY.md. Assumptions: ASSUMPTIONS.md. Reused work: REUSE.md.
 
 > **Person 3 layer (cloud decision plane) is in `cloud/`**: context-aware intent parsing, fleet health
 > check, Rule Checker, DynamoDB lease manager, re-planning (lease v2), renewal, fallback, Bedrock and
-> DynamoDB adapters. What it is, how to run it, and how to connect to AWS: `docs/p3/05-implementation.md`.
+> DynamoDB adapters. What it is, how to run it, and how to connect to AWS: `context/p3-cloud.md`.
 
 ## Run it (one command)
 
