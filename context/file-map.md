@@ -60,6 +60,7 @@ This document catalogues every important file in the `nimbus-p4` repository and 
 - `scripts/`: `edge_sim.py` (fake edge cluster), `bedrock_hello.py`, `smoke_live.py` (live AWS checks, run by a human with credentials).
 - `infra/terraform/p3.tf`, `infra/iam/p3-dev-policy.json`: orchestrator state table, egress, task-role permissions, budget alarm; scoped dev IAM policy. Validated only, never applied.
 - `context/p3-cloud.md`: how the cloud decision plane works, how to run it, settings and AWS notes.
+- `Dockerfile`, `.dockerignore`: the cloud service image (runtime deps only; AWS backend and Bedrock by default; credentials from the IAM task role).
 - `requirements-aws.txt`: boto3 and moto, optional (only for the AWS backend and its emulated tests).
 
 ## Agent Context (`context/`)
