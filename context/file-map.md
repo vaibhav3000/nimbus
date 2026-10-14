@@ -53,6 +53,14 @@ This document catalogues every important file in the `nimbus-p4` repository and 
 - `pyproject.toml`: Pytest configuration defining test discovery paths.
 - `.gitignore`: Git exclusion patterns for local data directories, tools, caches, and compiled bytecode.
 
+## Cloud orchestrator, Person 3 (`cloud/`, `packs/`, `scripts/`)
+
+- `cloud/`: domain-agnostic brain that replaces `standin.py` (pipeline: health check, context, intent, allocation, rule checker, conditional lease commit, re-plan, renewal, rules-only fallback). Includes `llm.py` (Bedrock Converse adapter, circuit breaker, record/replay) and `aws_dynamo.py` / `aws_store.py` (DynamoDB backends, used when `NIMBUS_BACKEND=aws`).
+- `packs/`: domain data (`hospital`, `rescue`): topology, fleet, policies, prompts, scenarios, validated by `packs/pack.schema.json`. No domain words live in `cloud/`.
+- `scripts/`: `edge_sim.py` (fake edge cluster), `bedrock_hello.py`, `smoke_live.py` (live AWS checks, run by a human with credentials).
+- `infra/terraform/p3.tf`, `infra/iam/p3-dev-policy.json`: orchestrator state table, egress, task-role permissions, budget alarm; scoped dev IAM policy. Validated only, never applied.
+- `requirements-aws.txt`: boto3 and moto, optional (only for the AWS backend and its emulated tests).
+
 ## Agent Context (`context/`)
 
 - `context/README.md`: Primary onboarding guide for future agents working in this repository.

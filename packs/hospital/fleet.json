@@ -1,0 +1,39 @@
+{
+  "note": "Seed fleet registry. Live state arrives in edge check-ins (robots[] and stock{} are optional additive fields).",
+  "clusters": {
+    "east-wing": {
+      "home": "E-STORE",
+      "robots": [
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "stock": {
+        "infusion_pump": 3,
+        "infusion_pump_paediatric": 2,
+        "wheelchair": 4,
+        "iv_pole": 5,
+        "monitor": 2,
+        "blanket": 20
+      },
+      "area": "east"
+    },
+    "west-wing": {
+      "home": "W-STORE",
+      "robots": [
+        "R4",
+        "R5",
+        "R6"
+      ],
+      "stock": {
+        "infusion_pump": 2,
+        "infusion_pump_paediatric": 1,
+        "wheelchair": 2,
+        "iv_pole": 3,
+        "monitor": 1,
+        "blanket": 15
+      },
+      "area": "west"
+    }
+  }
+}

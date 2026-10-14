@@ -1,0 +1,181 @@
+{
+  "version": "topo-v0",
+  "note": "Hand-made v0 hospital graph for SC-1..SC-3. Person 1 replaces it with the Gazebo world's real zones (same shape).",
+  "nodes": {
+    "E-STORE": {
+      "kind": "store",
+      "area": "east"
+    },
+    "E1": {
+      "kind": "corridor",
+      "area": "east"
+    },
+    "E2": {
+      "kind": "corridor",
+      "area": "east"
+    },
+    "E3": {
+      "kind": "corridor",
+      "area": "east"
+    },
+    "E4": {
+      "kind": "corridor",
+      "area": "east"
+    },
+    "2A": {
+      "kind": "ward",
+      "beds": 20,
+      "paediatric": false,
+      "speed_cap": 0.5,
+      "area": "east"
+    },
+    "2B": {
+      "kind": "ward",
+      "beds": 20,
+      "paediatric": true,
+      "speed_cap": 0.5,
+      "area": "east"
+    },
+    "ward-3": {
+      "kind": "ward",
+      "beds": 30,
+      "paediatric": false,
+      "speed_cap": 0.5,
+      "area": "east"
+    },
+    "W0": {
+      "kind": "gate",
+      "exclusive": true,
+      "area": "shared"
+    },
+    "W1": {
+      "kind": "gate",
+      "exclusive": true,
+      "area": "shared"
+    },
+    "W-STORE": {
+      "kind": "store",
+      "area": "west"
+    },
+    "W2": {
+      "kind": "corridor",
+      "area": "west"
+    },
+    "W3": {
+      "kind": "corridor",
+      "area": "west"
+    },
+    "2C": {
+      "kind": "ward",
+      "beds": 20,
+      "paediatric": false,
+      "speed_cap": 0.5,
+      "area": "west"
+    },
+    "3A": {
+      "kind": "ward",
+      "beds": 20,
+      "paediatric": false,
+      "speed_cap": 0.5,
+      "area": "west"
+    },
+    "ward-5": {
+      "kind": "ward",
+      "beds": 30,
+      "paediatric": false,
+      "speed_cap": 0.5,
+      "area": "west"
+    }
+  },
+  "edges": [
+    [
+      "E-STORE",
+      "E1",
+      1
+    ],
+    [
+      "E1",
+      "E2",
+      1
+    ],
+    [
+      "E2",
+      "E3",
+      1
+    ],
+    [
+      "E2",
+      "E4",
+      1
+    ],
+    [
+      "E1",
+      "2A",
+      1
+    ],
+    [
+      "E3",
+      "2B",
+      1
+    ],
+    [
+      "E4",
+      "2B",
+      1
+    ],
+    [
+      "E3",
+      "ward-3",
+      1
+    ],
+    [
+      "E4",
+      "W0",
+      2
+    ],
+    [
+      "E3",
+      "W1",
+      2
+    ],
+    [
+      "W0",
+      "W2",
+      2
+    ],
+    [
+      "W1",
+      "W2",
+      2
+    ],
+    [
+      "W2",
+      "W-STORE",
+      1
+    ],
+    [
+      "W2",
+      "W3",
+      1
+    ],
+    [
+      "W2",
+      "2C",
+      1
+    ],
+    [
+      "W3",
+      "3A",
+      1
+    ],
+    [
+      "W3",
+      "ward-5",
+      1
+    ]
+  ],
+  "clusters": {
+    "east-wing": "east",
+    "west-wing": "west"
+  }
+}

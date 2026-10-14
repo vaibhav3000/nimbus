@@ -1,0 +1,23 @@
+[
+  {"id": "SC-1", "title": "Vague urgent request: ask, then lease (PRD SC-1)", "turns": [
+    {"say": "Need an infusion pump at 2B-12, urgent.", "expect": {"kind": "clarify", "question_contains": "paediatric bed"}},
+    {"answer": "Yes, a paediatric pump please.", "expect": {"kind": "leased", "lease_cluster": "east-wing", "lease_priority": "urgent",
+      "item": "infusion_pump_paediatric", "deadline_minutes": 12, "zones_include": ["E3", "E4", "2B-12"],
+      "sequence_cmds": ["go_to", "wait", "go_to", "beep", "photo", "report"]}}]},
+  {"id": "SC-1b", "title": "The requester insists on a standard pump", "turns": [
+    {"say": "Need an infusion pump at 2B-12, urgent.", "expect": {"kind": "clarify"}},
+    {"answer": "No, standard is fine", "expect": {"kind": "leased", "item": "infusion_pump", "spec_field": {"variant_confirmed_by_requester": true}}}]},
+  {"id": "T1", "title": "Routine delivery, clear corridors", "turns": [
+    {"say": "Deliver a wheelchair to ward 3, routine.", "expect": {"kind": "leased", "lease_cluster": "east-wing", "lease_priority": "routine", "deadline_minutes": 60}}]},
+  {"id": "T3", "title": "Vague clinical request: a pump to 2B", "turns": [
+    {"say": "a pump to 2B", "expect": {"kind": "clarify", "question_contains": "paediatric ward"}}]},
+  {"id": "T3b", "title": "Missing destination", "turns": [
+    {"say": "I need a wheelchair", "expect": {"kind": "clarify", "question_contains": "Which ward or bed"}}]},
+  {"id": "SC-3-hold", "title": "Isolation: routine deliveries into the ward are held", "setup": {"restrict": [["2C", "isolation"]]}, "turns": [
+    {"say": "Deliver a blanket to 2C, routine", "expect": {"kind": "queued", "reason_contains": "SOP-ISO-02"}}]},
+  {"id": "SC-3-urgent", "title": "Isolation: urgent ones can still go in", "setup": {"restrict": [["2C", "isolation"]]}, "turns": [
+    {"say": "Deliver a blanket to 2C, urgent", "expect": {"kind": "leased", "lease_cluster": "west-wing", "forbidden_zones": []}}]},
+  {"id": "SC-3-extract", "title": "Isolation: robots, not staff, move the pumps out", "setup": {"restrict": [["2C", "isolation"]]}, "turns": [
+    {"say": "Get the spare pumps out of 2C, urgent", "expect": {"kind": "leased", "lease_cluster": "west-wing",
+      "first_goto": "2C", "last_goto": "W-STORE", "zones_include": ["2C", "W2", "W-STORE"]}}]}
+]
