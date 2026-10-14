@@ -62,7 +62,7 @@ async function renderDetail() {
     </p>
     <h4>Decision timeline</h4>
     <ol class="timeline">${tl.timeline.map((r) =>
-      `<li><strong>${esc(r.who)}</strong> — ${esc(r.output.event || r.output.decision || "?")}
+      `<li><strong>${esc(r.who)}</strong>: ${esc(r.output.event || r.output.decision || "?")}
        <span class="muted">${esc(r.timestamp)}</span></li>`).join("")}</ol>`;
 
   $("pause-btn").onclick = () => control("pause");

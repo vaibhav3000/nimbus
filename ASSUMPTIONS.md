@@ -1,4 +1,4 @@
-# ASSUMPTIONS.md — Person 4's readings of PRD v5.0 gaps
+# ASSUMPTIONS.md: Person 4's readings of PRD v5.0 gaps
 
 The mediator instructed: pick the simplest reading, record it, continue. Every
 entry below is a PRD detail the scope left open and the reading chosen.
@@ -6,7 +6,7 @@ entry below is a PRD detail the scope left open and the reading chosen.
 1. **Old Nimbus workspace is v3.1, not v5.0.** `Projects/NIMBUS_WORKSPACE`
    targets PRD v3.1 (corridor/waypoint/epoch/seq leases, L0–L3 rung ladder).
    Its schema documents do not match the v5.0 field list in the scope, so they
-   were not reused as documents — see REUSE.md for what was carried over
+   were not reused as documents (see REUSE.md for what was carried over
    (style, dependency set, validation pattern).
 
 2. **Project location.** New directory `Projects/nimbus-p4/`, next to the old
@@ -47,7 +47,7 @@ entry below is a PRD detail the scope left open and the reading chosen.
 8. **Lease v1 content.** SC-1: East-wing cluster, urgent, allowed zone derived
    from the request text (2B-12 → zone `2B-12`), one robot (R1), a two-step
    task sequence (`go_to` + `beep`), speed limit 0.8 m/s,
-   `when_to_escalate` as above. Zone/robot assignment is deliberately crude —
+   `when_to_escalate` as above. Zone/robot assignment is deliberately crude;
    the real assignment is Person 3's rule checker + scheduler.
 
 9. **`/escalations` ingress exists though Person 3 owns escalation handling.**
@@ -55,18 +55,18 @@ entry below is a PRD detail the scope left open and the reading chosen.
    (b) FR-8's dedup/staleness shape is observable at a public boundary, and
    (c) Person 3 has a drop-in ingress: the route, guards and log rows stay,
    only the reaction logic gets replaced. UNEXPECTED_EVENT/CLARIFY reactions
-   (re-plan, map update) are NOT implemented — rows are recorded only.
+   (re-plan, map update) are NOT implemented: rows are recorded only.
 
 10. **Cost counters record stand-in values.** Input tokens = `len(text)//4`
     (crude stand-in tokenizer), output tokens = 150 per cloud decision (the
     PRD's edge decision cap, used here as a plausible per-decision constant),
     Fargate GB-s = flat 0.001 per decision, IoT = 1 per lease published,
     DynamoDB = rows written, SQS = escalations, S3 = OUTPUT_READY results.
-    Prices are never applied — PRD Sec. 7 keeps p_* symbolic. No Cost
+    Prices are never applied: PRD Sec. 7 keeps p_* symbolic. No Cost
     Explorer calls (scope).
 
 11. **API Gateway integration is a MOCK placeholder.** A real API Gateway →
-    ECS Fargate hop needs a VPC link + NLB (or internal ALB) — infra sizing
+    ECS Fargate hop needs a VPC link + NLB (or internal ALB), an infra sizing
     beyond a skeleton. Comment in `main.tf` marks the replacement point.
 
 12. **Terraform binary.** None was installed on this machine, so a portable
@@ -87,7 +87,7 @@ entry below is a PRD detail the scope left open and the reading chosen.
 15. **The app's "Demo: edge sends OUTPUT_READY" button.** FR-21 requires the
     app to show a result, but no edge exists in this slice; the button posts a
     real OUTPUT_READY escalation so the result path is demoable. It is demo
-    glue, clearly labelled — Person 2's edge replaces it.
+    glue, clearly labelled: Person 2's edge replaces it.
 
 16. **IAM policy carries two extras beyond the minimal enumeration.**
     `events:PutEvents` (the service must publish onto the EventBridge bus the

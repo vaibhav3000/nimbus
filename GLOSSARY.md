@@ -1,4 +1,4 @@
-# Nimbus — Cloud Orchestration Context
+# Nimbus: Cloud Orchestration Context
 
 Person 4's slice of Team Nimbus (DS252): the shared wire contracts, the requester app,
 the decision log, a thin local API that stands in for the Bedrock orchestrator, the

@@ -1,0 +1,58 @@
+# Team Nimbus roles, assignments, and repository merge plan
+
+team:
+  p1:
+    role: Simulation and Evaluation
+    focus:
+      - Robot simulation in Gazebo
+      - Robot positions for a real map
+      - Baseline comparisons (C2, C3)
+      - Trace harness and network degradation (E4-E6)
+      - Evaluation replay for final report
+  p2:
+    role: Edge Cluster
+    focus:
+      - Edge SLM deployment via llama.cpp
+      - Local cluster supervisor daemon
+      - Consumption of outbox leases
+      - Autonomous lease execution during disconnections
+      - Posting edge escalations and check-ins
+  p3:
+    role: Cloud Orchestrator and Fallback
+    focus:
+      - Bedrock LLM orchestrator for request parsing and task planning
+      - Task scheduler and deterministic rule checker
+      - Replacing standin.py
+      - Replacing store.py with DynamoDB
+      - Wiring AWS IoT Core and SQS
+      - FR-18 reduced-autonomy fallback mode during cloud outages
+  p4:
+    owner: Vaibhav
+    role: Shared Foundation and Boundary Infrastructure
+    focus:
+      - Wire contracts (contracts/)
+      - Requester web application (FR-21)
+      - Append-only decision log and timeline replay (FR-20)
+      - Local API server and cloud stand-in
+      - Cloud-edge messaging topics and outbox
+      - Terraform infrastructure skeleton (PRD Fig 4)
+      - Cost counters (PRD Sec. 7)
+      - This repository (nimbus-p4)
+
+merge_plan:
+  shared_repository:
+    name: nimbus
+    role: This repository serves as the single shared foundation for the whole team.
+  integration_workflow:
+    strategy: Pull Requests (PR)
+    process:
+      - Other teammates (Person 1, Person 2, Person 3) branch from or fork this repository.
+      - Features, components, and replacements are added via clean, targeted PRs.
+      - Person 3 replaces standin.py and plugs in DynamoDB storage via PR.
+      - Person 2 integrates edge communications and consumes outbox/IoT topics via PR.
+      - Person 1 adds map evaluation data and simulation interfaces via PR.
+  collaboration_rules:
+    - Never modify wire contracts in contracts/ without explicit team review and consensus.
+    - Keep test coverage comprehensive through public HTTP endpoints and schemas.
+    - All PRs must ensure test suites pass and terraform validate succeeds cleanly.
+    - Maintain the ponytail discipline: minimal code diffs, no unnecessary dependencies.

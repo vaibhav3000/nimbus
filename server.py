@@ -170,7 +170,7 @@ class Handler(BaseHTTPRequestHandler):
     def _dedupe(self, body: dict) -> tuple[bool, str | None]:
         """FR-8 shape: a repeated message_id is acknowledged, not acted on.
 
-        Check only — the caller records the id once the message is accepted,
+        Check only : the caller records the id once the message is accepted,
         so a delivery that fails validation never burns its id and an honest
         retry still goes through.
         """
@@ -396,7 +396,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _post_checkin(self, body: dict):
         """Edge check-in ingress (shape in contracts/topics.md): record one
-        decision-log row, nothing more — no re-planning, no routing. Person 3
+        decision-log row, nothing more: no re-planning, no routing. Person 3
         replaces the reaction with lease renewal."""
         dup, message_id = self._dedupe(body)
         if dup:

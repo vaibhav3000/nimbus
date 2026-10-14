@@ -1,4 +1,4 @@
-# Nimbus — Person 4 slice (DS252, Team Nimbus)
+# Nimbus - Person 4 slice (DS252, Team Nimbus)
 
 The shared wire contracts, the requester app (FR-21), the decision log (FR-20),
 a thin local API with a **cloud stand-in** so everything runs with no AWS
@@ -15,7 +15,7 @@ python server.py          # http://127.0.0.1:8000  (PORT / DATA_DIR env vars)
 ```
 
 Then open http://127.0.0.1:8000 and send **"Need an infusion pump at 2B-12,
-urgent."** — the app asks the paediatric-pump question, your answer produces a
+urgent."**: the app asks the paediatric-pump question, your answer produces a
 schema-valid lease v1, and the timeline replays the whole decision chain.
 State is file-backed under `data/`, so a refresh or restart loses nothing.
 
@@ -38,14 +38,14 @@ terraform validate        # passes; do NOT apply without the account owner
 
 | Piece | Status |
 |---|---|
-| Contracts in `contracts/` (lease, escalation, robot sub-task, decision log) | **Real** — the team wire format; change via PR, everyone reviews |
-| Decision log (FR-20) + `GET /tasks/{id}/timeline` | **Real** — append-only JSONL, replayable |
-| Requester app (FR-21) | **Real** — static page, documented API only |
+| Contracts in `contracts/` (lease, escalation, robot sub-task, decision log) | **Real**: the team wire format; change via PR, everyone reviews |
+| Decision log (FR-20) + `GET /tasks/{id}/timeline` | **Real**: append-only JSONL, replayable |
+| Requester app (FR-21) | **Real**: static page, documented API only |
 | FR-8 shape at the ingress (repeated `message_id` ignored, outdated `lease_version` dropped) | **Real** as a shape; edge-side enforcement is Person 2 |
-| Cloud decisions (parse, clarify, propose, lease) | **Stand-in** (`standin.py` rules) — Person 3 replaces with Bedrock + scheduler + rule checker |
-| Storage (`data/*.json`, JSONL) | **Stand-in** — Person 3 swaps `store.py` calls for DynamoDB (tables already in Terraform) |
+| Cloud decisions (parse, clarify, propose, lease) | **Stand-in** (`standin.py` rules): Person 3 replaces with Bedrock + scheduler + rule checker |
+| Storage (`data/*.json`, JSONL) | **Stand-in**: Person 3 swaps `store.py` calls for DynamoDB (tables already in Terraform) |
 | Result delivery (`OUTPUT_READY` completing a task) | **Stand-in** ingress; Person 3 wires real edge escalations via SQS/IoT |
-| Token/cost numbers | **Stand-in values** (`cost.py` counters; `len//4` tokens, 150-token cap) — Person 3 feeds real Bedrock usage |
+| Token/cost numbers | **Stand-in values** (`cost.py` counters; `len//4` tokens, 150-token cap): Person 3 feeds real Bedrock usage |
 | AWS deployment | **Skeleton only** (`infra/terraform/`), validates but never applied |
 
 ## API
@@ -56,7 +56,7 @@ terraform validate        # passes; do NOT apply without the account owner
 | `POST /requests/{id}/answer` `{text, message_id}` | Answer a clarifying question → lease v1 issued. |
 | `POST /escalations` | Edge escalation (CLARIFY / UNEXPECTED_EVENT / OUTPUT_READY per PRD Table 2). Schema-validated, deduped, stale versions dropped. OUTPUT_READY completes the task. |
 | `POST /checkins` | Edge check-in (`contracts/topics.md`): one `edge` decision-log row, deduped by `message_id`; no re-planning. |
-| `POST /tasks/{id}/control` | Operator pause/cancel — a recorded intent only (one `rule` log row, status change); nothing is delivered to robots. |
+| `POST /tasks/{id}/control` | Operator pause/cancel: a recorded intent only (one `rule` log row, status change); nothing is delivered to robots. |
 | `GET /tasks/{id}` | Status, question, lease, result. |
 | `GET /tasks/{id}/timeline` | Full decision log for the task (FR-20 replay). |
 | `GET /tasks` | All tasks (app status view). |

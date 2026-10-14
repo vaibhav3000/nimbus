@@ -1,4 +1,4 @@
-# Nimbus — planned AWS deployment skeleton (PRD v5.0 Fig 4).
+# Nimbus: planned AWS deployment skeleton (PRD v5.0 Fig 4).
 #
 # SKELETON ONLY: `terraform validate` passes; never apply without the team's
 # AWS account owner. Person 3 extends this with the real orchestrator wiring.

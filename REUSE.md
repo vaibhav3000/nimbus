@@ -1,4 +1,4 @@
-# REUSE.md — what Person 4 reused, and from where
+# REUSE.md: what Person 4 reused, and from where
 
 The mediator's rule: do not rewrite what already matches the PRD. Scan result:
 the old `Projects/NIMBUS_WORKSPACE` targets PRD **v3.1**, whose lease model

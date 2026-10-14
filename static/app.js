@@ -86,7 +86,7 @@ async function renderDetail() {
   const { data: tl } = await api("GET", `/tasks/${selectedTaskId}/timeline`);
   html += `<h4>Decision timeline (FR-20)</h4><ol class="timeline">` +
     tl.timeline.map(r =>
-      `<li><strong>${r.who}</strong> — ${esc(r.output.event || r.output.decision || "?")}
+      `<li><strong>${r.who}</strong>: ${esc(r.output.event || r.output.decision || "?")}
        <span class="muted">${r.timestamp}</span></li>`).join("") +
     `</ol>`;
   box.innerHTML = html;

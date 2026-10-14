@@ -1,5 +1,5 @@
 """API tests: SC-1 end to end, dedup (FR-8 shape), timeline replay (FR-20),
-escalation ingress, schemas over HTTP, and cost counters — all through the
+escalation ingress, schemas over HTTP, and cost counters: all through the
 public HTTP surface only.
 """
 

@@ -1,4 +1,4 @@
-# HANDOFF.md — Person 4 slice, for the next agent
+# HANDOFF.md: Person 4 slice, for the next agent
 
 **State: complete and green.** 28 tests pass, `terraform validate` passes, SC-1
 verified clickable in a real browser (request → clarify → answer → lease v1 →
@@ -7,12 +7,12 @@ all findings fixed. Work is committed on `main` (7 ticket commits + review fix).
 
 ## Read first (do not duplicate, they are current)
 
-- README.md — run instructions, real vs stand-in vs Person-3-replace table, API list
-- SPEC-P4.md — the spec this was built against
-- ASSUMPTIONS.md — every PRD-gap reading chosen (17 numbered)
-- REUSE.md — what was reused from the old v3.1 workspace and why
-- GLOSSARY.md — the team vocabulary; use these terms
-- .scratch/nimbus-p4/issues/ — the six tickets, all closed
+- README.md: run instructions, real vs stand-in vs Person-3-replace table, API list
+- SPEC-P4.md: the spec this was built against
+- ASSUMPTIONS.md: every PRD-gap reading chosen (17 numbered)
+- REUSE.md: what was reused from the old v3.1 workspace and why
+- GLOSSARY.md: the team vocabulary; use these terms
+- .scratch/nimbus-p4/issues/: the six tickets, all closed
 
 ## How to run
 
@@ -26,19 +26,19 @@ Terraform binary for this machine lives (gitignored) in `tools/terraform.exe`.
 
 ## What the next agent (Person 3) plugs in where
 
-1. **standin.py** — replace entirely with the Bedrock orchestrator + scheduler +
+1. **standin.py**: replace entirely with the Bedrock orchestrator + scheduler +
    rule checker. Keep the module boundary: server.py calls
    `wants_clarification / clarifying_question / build_lease / now_iso`.
-2. **server.py `_post_escalation`** — keep route + guards (dedupe, schema,
+2. **server.py `_post_escalation`**: keep route + guards (dedupe, schema,
    stale-version 409, log rows); replace the "record only" reaction with real
    re-planning. The stale-version guard has no public test until a lease v2
-   path exists — write it when re-planning lands.
-3. **store.py** — swap for DynamoDB (tables exist in Terraform: leases, tasks,
+   path exists; write it when re-planning lands.
+3. **store.py**: swap for DynamoDB (tables exist in Terraform: leases, tasks,
    robot_status, decision_log with task_id+ts keys). `next_task_id` /
    `put_task` / `append_decision` / `timeline` are the callsites.
-4. **cost.py callers** — feed real Bedrock usage (input/output tokens) into
+4. **cost.py callers**: feed real Bedrock usage (input/output tokens) into
    `record()`; counter names are the PRD Sec. 7 terms.
-5. **Terraform** — replace the API Gateway MOCK integration with a VPC-link
+5. **Terraform**: replace the API Gateway MOCK integration with a VPC-link
    proxy; set `app_image`; add VPC endpoints/NAT. Never apply without the
    account owner.
 
@@ -58,6 +58,6 @@ Terraform binary for this machine lives (gitignored) in `tools/terraform.exe`.
 
 ## Suggested skills
 
-- `tdd` — any behaviour change in server.py/store.py (public HTTP seam only)
-- `code-review` — re-run on the next diff against this commit
-- `ponytail` (full) — still the house discipline for this repo
+- `tdd`: any behaviour change in server.py/store.py (public HTTP seam only)
+- `code-review`: re-run on the next diff against this commit
+- `ponytail` (full): still the house discipline for this repo

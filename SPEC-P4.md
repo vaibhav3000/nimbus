@@ -1,4 +1,4 @@
-# SPEC-P4 — Nimbus Person 4 slice (contracts, requester app, decision log, cloud stand-in, Terraform skeleton, cost hooks)
+# SPEC-P4: Nimbus Person 4 slice (contracts, requester app, decision log, cloud stand-in, Terraform skeleton, cost hooks)
 
 Source: Nimbus PRD v5.0 (26 Sep 2026), mediator scope order. Glossary: GLOSSARY.md.
 
@@ -13,9 +13,9 @@ against. The AWS deployment and the per-task cost figure for the report also do 
 
 Check four JSON Schemas into `contracts/` as the team's wire contracts. Ship a
 single-command local stack: a plain-language requester app (static page) talking to a thin
-HTTP API backed by a file store. The API contains a **cloud stand-in** — a fake
+HTTP API backed by a file store. The API contains a **cloud stand-in**, a fake
 orchestrator that parses a request, asks a clarifying question when the stand-in rules say
-so, emits a schema-valid lease v1, writes decision-log rows, and reports status — so SC-1
+so, emits a schema-valid lease v1, writes decision-log rows, and reports status, so SC-1
 is clickable with no AWS account. `GET /tasks/{id}/timeline` replays any task's full
 decision log. A Terraform skeleton (validated, never applied) lays out the real AWS
 deployment, and a cost counter records the PRD Sec. 7 formula inputs. Schemas and the
@@ -48,23 +48,23 @@ the app.
   `pytest` for tests. No web framework, no new dependency.
 - **One seam**: all tests go through the public HTTP API and the published schema files.
   No private helpers are imported by tests. The server starts on an ephemeral port in-process.
-- **Storage**: file-backed, under `data/` — `tasks.json` (whole task map, rewritten atomically)
+- **Storage**: file-backed, under `data/`: `tasks.json` (whole task map, rewritten atomically)
   and `decisions.jsonl` (append-only decision log). This is what makes a refresh/restart
   safe; DynamoDB replaces it only in Terraform.
 - **Contracts** (`contracts/`, JSON Schema draft 2020-12, house `$id` style inherited from
   the old Nimbus workspace):
-  - `lease.schema.json` — required: `lease_id`, `version`, `priority`, `deadline_ts`,
+  - `lease.schema.json`: required: `lease_id`, `version`, `priority`, `deadline_ts`,
     `expiry_ts`, `allowed_zones`, `forbidden_zones`, `speed_limit`, `assigned_robots`,
     `task_sequence`, `cluster_id`, `when_to_escalate`. `version` >= 1. `priority` in
     {routine, urgent}. `task_sequence` items are robot sub-tasks. Cross-field rule
     `deadline_ts <= expiry_ts` lives in the validation module, not the schema.
-  - `escalation.schema.json` — `type` in {CLARIFY, UNEXPECTED_EVENT, OUTPUT_READY},
+  - `escalation.schema.json`: `type` in {CLARIFY, UNEXPECTED_EVENT, OUTPUT_READY},
     `message_id`, `lease_version`, `task_id`, plus a `payload` object whose required keys
     follow PRD Table 2: CLARIFY → `question`, `possible_readings`; UNEXPECTED_EVENT →
     `what_happened`, `where`, `robots_saw`; OUTPUT_READY → `result_ref`.
-  - `robot_subtask.schema.json` — `cmd` in {go_to, wait, stop, photo, beep, report},
+  - `robot_subtask.schema.json`: `cmd` in {go_to, wait, stop, photo, beep, report},
     optional `robot` and `params`.
-  - `decision_log_entry.schema.json` — `who` in {requester, cloud, edge, rule}, `inputs`
+  - `decision_log_entry.schema.json`: `who` in {requester, cloud, edge, rule}, `inputs`
     (object), `output` (object), `lease_version` (integer or null), `timestamp`, `task_id`.
 - **API surface** (all JSON):
   - `POST /requests` `{text, message_id}` → creates the task; stand-in decides clarify vs
@@ -82,7 +82,7 @@ the app.
   - `GET /cost` → PRD Sec. 7 counters.
 - **Cloud stand-in** (`standin.py`, the only file Person 3 must replace): rule-driven.
   SC-1 heuristic: a request naming bed 2B (a paediatric bed) that does not name a pump
-  type produces a CLARIFY-style question ("2B-12 is a paediatric bed — do you need a
+  type produces a CLARIFY-style question ("2B-12 is a paediatric bed. Do you need a
   paediatric pump?"); the answer (any) resolves it and a lease v1 is issued for the
   East-wing cluster with a 12-minute deadline (issued+12 min), expiry issued+15 min,
   allowed zones [2B], speed limit, a go_to task sequence for one assigned robot, and
@@ -95,7 +95,7 @@ the app.
   to `data/cost.json`. The API records every term of the PRD Sec. 7 formula as a stand-in
   value: input/output tokens (len//4 heuristic / 150-token cap), Fargate GB-s, IoT
   messages, DynamoDB ops, SQS sends, S3 ops, data-transfer bytes, API Gateway requests,
-  CloudWatch metrics. Prices are NOT applied — the PRD keeps p_* symbolic. No Cost
+  CloudWatch metrics. Prices are NOT applied: the PRD keeps p_* symbolic. No Cost
   Explorer calls.
 - **Terraform skeleton** (`infra/terraform/`, AWS provider ~> 5, single region): VPC
   (placeholder: one VPC, two private subnets), ECS Fargate cluster + always-on service
@@ -112,9 +112,9 @@ the app.
 ## Testing Decisions
 
 - A good test exercises documented, public behaviour: HTTP status codes, JSON bodies, and
-  schema validity — the same surface Person 3 and the app see.
+  schema validity: the same surface Person 3 and the app see.
 - Two test files: `test_contracts.py` (fixtures valid/invalid against the four schemas,
-  plus the cross-field rule) and `test_api.py` (live server: SC-1 end to end — request →
+  plus the cross-field rule) and `test_api.py` (live server: SC-1 end to end : request →
   question → answer → schema-valid lease; timeline contains requester + cloud + rule rows;
   repeated `message_id` ignored; failed deliveries don't burn their `message_id`; OUTPUT_READY
   completes the task; schemas served over HTTP; cost counters move). The outdated

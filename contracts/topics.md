@@ -6,10 +6,10 @@ Every message carries a `message_id` and the lease version it belongs to
 (FR-8); a repeated message is dropped, an outdated lease version is never
 honoured. In the real AWS deployment leases go out and escalations/check-ins
 come back through AWS IoT Core + SQS; in this slice **the outbox file
-`data/outbox.jsonl` is the stand-in** — Person 2 reads it until a real IoT
+`data/outbox.jsonl` is the stand-in**: Person 2 reads it until a real IoT
 client exists, and nothing is published anywhere else.
 
-## `nimbus/{cluster_id}/lease` — cloud → edge
+## `nimbus/{cluster_id}/lease`: cloud → edge
 
 Carries the lease document (`contracts/lease.schema.json`). One publication
 per lease issue; a new version replaces the old one outright.
@@ -37,7 +37,7 @@ per lease issue; a new version replaces the old one outright.
 }
 ```
 
-## `nimbus/{cluster_id}/escalation` — edge → cloud
+## `nimbus/{cluster_id}/escalation`: edge → cloud
 
 Carries the escalation document (`contracts/escalation.schema.json`), POSTed
 to the existing `POST /escalations` route; see that schema for the three types
@@ -56,10 +56,10 @@ and their Table 2 payloads.
 }
 ```
 
-## `nimbus/{cluster_id}/checkin` — edge → cloud
+## `nimbus/{cluster_id}/checkin`: edge → cloud
 
 The regular renewal signal (no LLM involved, PRD Sec. 6). Accepted at
-`POST /checkins`; recorded as one `edge` decision-log row and nothing more —
+`POST /checkins`; recorded as one `edge` decision-log row and nothing more:
 no re-planning. `message_id` dedupes exactly like escalations. Routing and
 lease renewal are Person 3's; the stand-in does not validate the cluster.
 

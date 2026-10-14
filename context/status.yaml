@@ -1,0 +1,78 @@
+# Nimbus implementation status across work tracks
+
+done:
+  contracts:
+    description: Wire format JSON Schemas in contracts/ (lease, escalation, robot subtask, decision log)
+    files:
+      - contracts/lease.schema.json
+      - contracts/escalation.schema.json
+      - contracts/robot_subtask.schema.json
+      - contracts/decision_log_entry.schema.json
+  requester_app:
+    description: Static plain-language web application (FR-21) served without frameworks
+    files:
+      - static/index.html
+      - static/app.js
+  decision_log:
+    description: Append-only decision log (FR-20) replayed at GET /tasks/{id}/timeline
+    files:
+      - store.py
+      - server.py
+  terraform_skeleton:
+    description: AWS deployment structure (PRD Fig 4) passing terraform validate cleanly
+    files:
+      - infra/terraform/main.tf
+      - infra/terraform/variables.tf
+      - infra/terraform/outputs.tf
+  cost_counters:
+    description: PRD Section 7 formula tracking counters accessible at GET /cost
+    files:
+      - cost.py
+  topics_and_outbox:
+    description: Cloud-edge messaging topic spec and lease outbox file at data/outbox.jsonl
+    files:
+      - contracts/topics.md
+      - store.py
+  checkins_ingress:
+    description: POST /checkins route accepting edge check-ins with FR-8 deduplication
+    files:
+      - server.py
+  operator_console:
+    description: Minimal operator console at /operator for FR-22 with pause and cancel intents recorded
+    files:
+      - static/operator.html
+      - static/operator.js
+      - server.py
+
+stand_in:
+  standin_py:
+    description: Rule-based cloud stand-in simulating SC-1 clarification and lease generation
+    file: standin.py
+    replacement: Person 3 will replace with Bedrock orchestrator, scheduler, and rule checker
+  file_store:
+    description: Local JSON and JSONL files under data/ for task state and decision log
+    file: store.py
+    replacement: Person 3 will swap with DynamoDB tables already defined in Terraform
+  outbox_storage:
+    description: Local JSONL outbox (data/outbox.jsonl) standing in for AWS IoT Core pub/sub
+    file: store.py
+    replacement: Person 3 and Person 2 will wire AWS IoT Core topics and SQS queues
+
+waiting:
+  p3_cloud_orchestrator:
+    person: Person 3
+    action: Replace standin.py with Bedrock LLM orchestrator, task scheduler, and lease rule checker
+  p2_edge_cluster:
+    person: Person 2
+    action: Consume outbox leases and post live edge escalations and check-ins
+  p1_simulation_and_eval:
+    person: Person 1
+    action: Provide robot position tracking for a real map and replay logs for evaluation report
+
+out_of_scope:
+  bedrock: Prompts, model invocation, and LLM orchestration (Person 3)
+  gazebo: Simulation environment, physics, and world maps (Person 1)
+  edge_slm: On-device SLM execution via llama.cpp on edge nodes (Person 2)
+  fr18: Reduced-autonomy fallback mode during cloud outages (Person 3)
+  tc_netem: Network degradation and trace harness for experiments E4 through E6 (Person 1 / Person 2)
+  aws_apply: Actual terraform apply on live AWS accounts (forbidden without account owner)
