@@ -1,0 +1,15 @@
+.git
+.venv
+venv
+data
+tests
+scripts
+docs
+context
+infra
+.scratch
+tools
+**/__pycache__
+.pytest_cache
+*.pyc
+*.md
