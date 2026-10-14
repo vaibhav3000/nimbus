@@ -19,20 +19,23 @@ done:
       - store.py
       - server.py
   terraform_skeleton:
-    description: AWS deployment structure (PRD Fig 4) passing terraform validate cleanly
+    description: AWS deployment structure (PRD Fig 4) passing terraform validate cleanly with topic names matching topics.md
+    note: Terraform apply waits on the team AWS account and Bedrock quota
     files:
       - infra/terraform/main.tf
       - infra/terraform/variables.tf
       - infra/terraform/outputs.tf
+      - infra/terraform/p3.tf
   cost_counters:
     description: PRD Section 7 formula tracking counters accessible at GET /cost
     files:
       - cost.py
   topics_and_outbox:
-    description: Cloud-edge messaging topic spec and lease outbox file at data/outbox.jsonl
+    description: Canonical topic spec in contracts/topics.md covering all five patterns (lease, escalation, checkin, renewal, probe). Terraform now matches it directly.
     files:
       - contracts/topics.md
       - store.py
+      - infra/terraform/main.tf
   checkins_ingress:
     description: POST /checkins route accepting edge check-ins with FR-8 deduplication
     files:
@@ -56,23 +59,22 @@ stand_in:
   standin_py:
     description: Rule-based cloud stand-in simulating SC-1 clarification and lease generation
     file: standin.py
-    replacement: Person 3 will replace with Bedrock orchestrator, scheduler, and rule checker
+    replacement: Person 3 replaced on main request path with cloud/ orchestrator
   file_store:
     description: Local JSON and JSONL files under data/ for task state and decision log
     file: store.py
-    replacement: Person 3 will swap with DynamoDB tables already defined in Terraform
+    replacement: Person 3 added DynamoDB backend option (NIMBUS_BACKEND=aws); local file store remains default for local runs
   outbox_storage:
-    description: Local JSONL outbox (data/outbox.jsonl) standing in for AWS IoT Core pub/sub
+    description: Local JSONL outbox standing in for AWS IoT Core pub/sub. HTTP is the Milestone 1 transport; IoT/MQTT is later.
     file: store.py
-    replacement: Person 3 and Person 2 will wire AWS IoT Core topics and SQS queues
+    replacement: Person 3 and Person 2 will wire AWS IoT Core topics and SQS queues in a later milestone
 
 waiting:
-  p3_cloud_orchestrator:
-    person: Person 3
-    action: Replace standin.py with Bedrock LLM orchestrator, task scheduler, and lease rule checker
+  aws_deployment:
+    action: Terraform apply waits on the team AWS account and Bedrock quota
   p2_edge_cluster:
     person: Person 2
-    action: Consume outbox leases and post live edge escalations and check-ins
+    action: Consume outbox leases and post live edge escalations and check-ins (HTTP in Milestone 1, IoT/MQTT later)
   p1_simulation_and_eval:
     person: Person 1
     action: Provide robot position tracking for a real map and replay logs for evaluation report
@@ -83,4 +85,4 @@ out_of_scope:
   edge_slm: On-device SLM execution via llama.cpp on edge nodes (Person 2)
   fr18: Reduced-autonomy fallback mode during cloud outages (Person 3)
   tc_netem: Network degradation and trace harness for experiments E4 through E6 (Person 1 / Person 2)
-  aws_apply: Actual terraform apply on live AWS accounts (forbidden without account owner)
+  aws_apply: Actual terraform apply on live AWS accounts (waits on team AWS account and Bedrock quota)

@@ -25,12 +25,14 @@ provider "aws" {
 locals {
   name_prefix = "nimbus-${var.project_name}"
 
-  # Cloud-edge messaging (PRD Fig 4, component 6/7). One topic family per edge
-  # cluster; the edge subscribes to its own topics only (FR-11 selective sharing).
+  # Cloud-edge messaging (PRD Fig 4, component 6/7). Five topic patterns
+  # connecting the cloud and edge clusters per contracts/topics.md.
   iot_topics = {
-    leases      = "nimbus/${var.project_name}/leases/+"
-    escalations = "nimbus/${var.project_name}/escalations/+"
-    checkins    = "nimbus/${var.project_name}/checkins/+"
+    lease      = "nimbus/+/lease"
+    escalation = "nimbus/+/escalation"
+    checkin    = "nimbus/+/checkin"
+    renewal    = "nimbus/+/renewal"
+    probe      = "nimbus/+/probe"
   }
 }
 

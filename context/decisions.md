@@ -73,3 +73,8 @@ All findings from the standards and specification review were resolved: removed 
 ### 18. Cloud Orchestrator Merged (Person 3)
 `server.py` now routes requests, answers, escalations, check-ins and control intents to `cloud/` (Orchestrator). The wire contracts are unchanged; `contracts/topics.md` gains an additive P3 section (`renewal`, `probe`, optional digest and `segments`). Two tests in `tests/test_api.py` were changed deliberately (a 3-robot wing leases 3 tasks and queues the rest). P3 tests import `cloud/` directly because they test the orchestrator, not the HTTP seam.
 - Files: `server.py`, `cloud/`, `packs/`, `contracts/topics.md`, `tests/test_api.py`
+
+### 19. Canonical Topics, Milestone 1 Transport, and Infrastructure Deferral
+`contracts/topics.md` is the canonical wire specification for all five cloud-edge topic patterns (`nimbus/{cluster_id}/lease`, `nimbus/{cluster_id}/escalation`, `nimbus/{cluster_id}/checkin`, `nimbus/{cluster_id}/renewal`, `nimbus/{cluster_id}/probe`). Terraform configuration in `infra/terraform/main.tf` now matches this contract directly, removing earlier placeholders. HTTP is the active transport for Milestone 1 across local testing and edge simulation; live IoT/MQTT brokers will be connected in a subsequent milestone. Executing `terraform apply` is deferred and waits on the provisioned team AWS account and Bedrock model quota.
+- Files: `contracts/topics.md`, `infra/terraform/main.tf`, `infra/terraform/outputs.tf`, `context/status.yaml`
+
