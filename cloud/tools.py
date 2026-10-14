@@ -3,7 +3,7 @@ which step may use which (least privilege). Schemas are generated from the
 pack, so a new domain's items, priority classes and extra spec fields appear
 in the tool definitions without touching this file.
 
-Tool classes (see docs/p3/06-agent-architecture.md):
+Tool classes (see context/p3-cloud.md):
   propose  produces a structured proposal that is validated and stored
   read     side-effect-free lookups (cloud/readtools.py)
 The model is never given a commit-class tool: only the Committer, after the

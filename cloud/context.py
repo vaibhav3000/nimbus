@@ -1,7 +1,7 @@
 """The context pack: everything the cloud LLM is allowed to know when it turns
 a request into a task spec and a proposed allocation.
 
-Layers (docs/p3/06): the pack's instructions (static); the situation (fleet
+Layers: the pack's instructions (static); the situation (fleet
 health, free robots, stock, active restrictions); the task (the conversation
 as messages plus a *task log* of what has happened since: leases issued,
 edge events, re-plans, queue decisions); and on-demand lookups (read tools).
