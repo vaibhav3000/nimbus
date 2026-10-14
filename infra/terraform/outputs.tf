@@ -27,3 +27,8 @@ output "iot_topics" {
   description = "Cloud-edge messaging topic names (leases down, escalations/check-ins up)."
   value       = local.iot_topics
 }
+
+output "state_table" {
+  description = "Lease/claim/dedupe state table (cloud/aws_dynamo.py)."
+  value       = aws_dynamodb_table.state.name
+}

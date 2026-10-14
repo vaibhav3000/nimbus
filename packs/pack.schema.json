@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nimbus.ds252.local/schemas/pack.schema.json",
+  "title": "Nimbus Domain Pack",
+  "description": "Everything the domain-agnostic agent core needs to know about one application domain. A new domain (or a new task type, PRD NFR-7) is a new pack; the core and the lease schema do not change. Cross-file checks (kinds exist, commands are valid sub-tasks, priorities map to the lease enum) live in cloud/pack.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "nouns", "ontology", "locators", "items", "priorities", "default_priority",
+               "deadline", "nlp", "questions", "rules", "restrictions", "task_templates", "default_template",
+               "lease", "steps", "prompts"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*$"},
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "description": {"type": "string"},
+    "nouns": {
+      "type": "object", "additionalProperties": false, "required": ["item", "destination", "example"],
+      "properties": {"item": {"type": "string"}, "destination": {"type": "string"}, "example": {"type": "string"}}
+    },
+    "ontology": {
+      "type": "object", "additionalProperties": false,
+      "required": ["destination_kinds", "source_kinds", "destination_line"],
+      "properties": {
+        "destination_kinds": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "source_kinds": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "flag_labels": {"type": "object", "additionalProperties": {"type": "string"}},
+        "destination_line": {"type": "string"}
+      }
+    },
+    "locators": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["type", "label", "pattern", "id"],
+        "properties": {
+          "type": {"enum": ["node", "child"]}, "label": {"type": "string"}, "pattern": {"type": "string"},
+          "id": {"type": "string"}, "kinds": {"type": "array", "items": {"type": "string"}},
+          "parent": {"type": "string"}, "parent_kinds": {"type": "array", "items": {"type": "string"}},
+          "index": {"type": "string"}, "limit_attr": {"type": "string"}
+        }
+      }
+    },
+    "items": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "label", "patterns"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}, "label": {"type": "string"},
+          "patterns": {"type": "array", "items": {"type": "string"}},
+          "variant_of": {"type": "string"},
+          "uses_stock": {"type": "boolean"},
+          "template": {"type": "string"}
+        }
+      }
+    },
+    "priorities": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "rank", "default_deadline_minutes", "lease_priority", "patterns"],
+        "properties": {
+          "id": {"type": "string"}, "rank": {"type": "integer", "minimum": 0},
+          "default_deadline_minutes": {"type": "integer", "minimum": 1},
+          "lease_priority": {"type": "string"}, "patterns": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "default_priority": {"type": "string"},
+    "deadline": {
+      "type": "object", "additionalProperties": false, "required": ["min_minutes", "max_minutes", "patterns"],
+      "properties": {
+        "min_minutes": {"type": "integer"}, "max_minutes": {"type": "integer"},
+        "patterns": {"type": "array", "items": {"type": "object", "required": ["pattern", "minutes_per_unit"],
+                     "properties": {"pattern": {"type": "string"}, "minutes_per_unit": {"type": "number"}}}},
+        "soft": {"type": "object", "required": ["pattern", "minutes"],
+                 "properties": {"pattern": {"type": "string"}, "minutes": {"type": "integer"},
+                                "only_priorities": {"type": "array", "items": {"type": "string"}}}}
+      }
+    },
+    "nlp": {
+      "type": "object", "additionalProperties": false, "required": ["affirm", "deny"],
+      "properties": {
+        "affirm": {"type": "array", "items": {"type": "string"}},
+        "deny": {"type": "array", "items": {"type": "string"}},
+        "source": {"type": "array", "items": {"type": "object", "required": ["pattern", "group"],
+                   "properties": {"pattern": {"type": "string"}, "group": {"type": "integer"}}}},
+        "default_destination": {"enum": ["area_source", "none"]}
+      }
+    },
+    "questions": {
+      "type": "object", "required": ["missing_item", "missing_destination", "missing_both"],
+      "additionalProperties": {"type": "object", "required": ["text", "readings"],
+                               "properties": {"text": {"type": "string"}, "readings": {"anyOf": [{"const": "items"}, {"type": "array", "items": {"type": "string"}}]}}}
+    },
+    "spec_extensions": {"type": "object", "additionalProperties": {"type": "object"}},
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "title", "applies", "requires", "otherwise", "message"],
+        "properties": {
+          "id": {"type": "string"}, "title": {"type": "string"},
+          "applies": {"type": "object"}, "requires": {"type": "object"},
+          "otherwise": {"enum": ["clarify", "veto"]}, "message": {"type": "string"},
+          "question": {
+            "type": "object", "required": ["text", "readings"],
+            "properties": {
+              "text": {"type": "string"}, "missing_field": {"type": "string"},
+              "affirm": {"type": "integer"}, "deny": {"type": "integer"},
+              "resolve_items": {"type": "array", "items": {"type": "string"}},
+              "readings": {"type": "array", "minItems": 1, "items": {
+                "type": "object", "required": ["label", "patterns", "set"],
+                "properties": {"label": {"type": "string"}, "patterns": {"type": "array", "items": {"type": "string"}},
+                               "exclude": {"type": "array", "items": {"type": "string"}}, "set": {"type": "object"}}}}
+            }
+          }
+        }
+      }
+    },
+    "restrictions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["policy_id", "effect"],
+        "properties": {"policy_id": {"type": "string"}, "effect": {"enum": ["hold", "forbid"]},
+                       "exempt_priorities": {"type": "array", "items": {"type": "string"}}}
+      }
+    },
+    "task_templates": {
+      "type": "object", "minProperties": 1,
+      "additionalProperties": {"type": "array", "minItems": 1,
+                               "items": {"type": "object", "required": ["cmd"], "properties": {"cmd": {"type": "string"}, "params": {"type": "object"}}}}
+    },
+    "default_template": {"type": "string"},
+    "lease": {
+      "type": "object", "additionalProperties": false, "required": ["speed_limit", "expiry_grace_seconds", "when_to_escalate"],
+      "properties": {"speed_limit": {"type": "number", "exclusiveMinimum": 0}, "expiry_grace_seconds": {"type": "integer", "minimum": 0},
+                     "when_to_escalate": {"type": "array", "items": {"type": "string"}}}
+    },
+    "steps": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
+    "prompts": {"type": "object", "required": ["intent", "allocation"], "additionalProperties": {"type": "string"}}
+  }
+}

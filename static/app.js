@@ -66,6 +66,12 @@ async function renderDetail() {
   let html = `<h3>${task.task_id} ${chip(task.status)}</h3>
     <p class="muted">“${esc(task.request_text)}”</p>`;
 
+  if (task.notice) {
+    html += `<div class="notice">${esc(task.notice)}</div>`;
+  }
+  if (task.reason && (task.status === "queued" || task.status === "rejected")) {
+    html += `<p class="muted"><strong>${task.status === "queued" ? "Waiting" : "Not possible"}:</strong> ${esc(task.reason)}</p>`;
+  }
   if (task.question) {
     html += `<div class="qbox"><strong>Question:</strong> ${esc(task.question.question)}
       <br><span class="muted">Readings: ${esc(task.question.possible_readings.join(" · "))}</span>
@@ -107,11 +113,13 @@ async function submitAnswer() {
 
 async function simulateOutputReady() {
   // In the real system the edge sends this; here the app offers it as a
-  // one-click stand-in so the full result path is demoable.
+  // one-click stand-in so the full result path is demoable. It reports under
+  // the lease version currently in force (a re-plan moves it past 1).
+  const { data: current } = await api("GET", `/tasks/${selectedTaskId}`);
   await api("POST", "/escalations", {
     type: "OUTPUT_READY",
     message_id: msgId(),
-    lease_version: 1,
+    lease_version: current.lease ? current.lease.version : 1,
     task_id: selectedTaskId,
     payload: { result_ref: `local://outputs/${selectedTaskId}/delivery-confirmed` },
   });

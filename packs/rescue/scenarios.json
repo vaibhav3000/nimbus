@@ -1,0 +1,17 @@
+[
+  {"id": "R-1", "title": "Critical supply run (three priority classes)", "turns": [
+    {"say": "Deliver a med kit to sector 3, critical", "expect": {"kind": "leased", "lease_cluster": "search-team", "lease_priority": "urgent",
+      "deadline_minutes": 10, "sequence_cmds": ["go_to", "go_to", "report"]}}]},
+  {"id": "R-2", "title": "Survey of an unstable sector needs confirmation; surveys use no stock", "turns": [
+    {"say": "Survey sector 2", "expect": {"kind": "clarify", "question_contains": "structurally unstable"}},
+    {"answer": "confirm", "expect": {"kind": "leased", "lease_cluster": "mapper-team", "item": "survey", "sequence_cmds": ["go_to", "photo", "report"],
+      "spec_field": {"entry_confirmed": true}}}]},
+  {"id": "R-3", "title": "A flooded sector is closed to every class", "setup": {"restrict": [["SEC-3", "flooded"]]}, "turns": [
+    {"say": "Deliver a med kit to sector 3, critical", "expect": {"kind": "rejected", "reason_contains": "RESCUE-FLOOD-02"}}]},
+  {"id": "R-4a", "title": "Aftershock hold: normal work waits", "setup": {"restrict": [["SEC-1", "aftershock"]]}, "turns": [
+    {"say": "Send a radio relay to sector 1", "expect": {"kind": "queued", "reason_contains": "RESCUE-AFTERSHOCK-03"}}]},
+  {"id": "R-4b", "title": "Aftershock hold: critical work may still go in", "setup": {"restrict": [["SEC-1", "aftershock"]]}, "turns": [
+    {"say": "Critical: radio relay to sector 1", "expect": {"kind": "leased", "lease_cluster": "mapper-team", "forbidden_zones": []}}]},
+  {"id": "R-5", "title": "Missing payload", "turns": [
+    {"say": "Send something to sector 4", "expect": {"kind": "clarify", "question_contains": "Which payload"}}]}
+]

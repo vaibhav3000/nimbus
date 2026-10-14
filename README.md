@@ -8,6 +8,10 @@ the cost counters for the PRD Sec. 7 formula.
 Built against Nimbus PRD v5.0 (26 Sep 2026). Spec: SPEC-P4.md. Terms:
 GLOSSARY.md. Assumptions: ASSUMPTIONS.md. Reused work: REUSE.md.
 
+> **Person 3 layer (cloud decision plane) is in `cloud/`**: context-aware intent parsing, fleet health
+> check, Rule Checker, DynamoDB lease manager, re-planning (lease v2), renewal, fallback, Bedrock and
+> DynamoDB adapters. What it is, how to run it, and how to connect to AWS: `docs/p3/05-implementation.md`.
+
 ## Run it (one command)
 
 ```bash
