@@ -1,0 +1,85 @@
+{
+  "$schema": "../pack.schema.json",
+  "name": "rescue",
+  "version": "0.1.0",
+  "description": "Disaster response (PRD T9, stretch): deliver supplies to and survey sectors of a partly collapsed building.",
+  "nouns": {"item": "payload", "destination": "sector", "example": "med kit to sector 3"},
+  "ontology": {
+    "destination_kinds": ["sector"],
+    "source_kinds": ["depot"],
+    "flag_labels": {"unstable": "UNSTABLE"},
+    "destination_line": "{id} (area {area}{flags})"
+  },
+  "locators": [
+    {"type": "node", "label": "sector", "pattern": "\\bsector\\s+(\\d+)\\b", "id": "SEC-{g1}", "kinds": ["sector"]},
+    {"type": "node", "label": "sector", "pattern": "\\bSEC-(\\d+)\\b", "id": "SEC-{g1}", "kinds": ["sector"]}
+  ],
+  "items": [
+    {"id": "med_kit", "label": "medical kit", "patterns": ["med(?:ical)?\\s*kit", "first aid"]},
+    {"id": "radio_relay", "label": "radio relay", "patterns": ["radio", "\\brelay\\b"]},
+    {"id": "survey", "label": "sector survey", "uses_stock": false, "template": "survey",
+     "patterns": ["\\bsurvey\\b", "\\bsweep\\b", "\\bscout\\b", "\\bsearch\\b"]}
+  ],
+  "priorities": [
+    {"id": "critical", "rank": 0, "default_deadline_minutes": 10, "lease_priority": "urgent",
+     "patterns": ["\\bcritical\\b", "survivor", "life[- ]threatening"]},
+    {"id": "high", "rank": 1, "default_deadline_minutes": 20, "lease_priority": "urgent",
+     "patterns": ["\\bhigh\\b", "\\burgent\\b", "\\basap\\b"]},
+    {"id": "normal", "rank": 2, "default_deadline_minutes": 90, "lease_priority": "routine", "patterns": []}
+  ],
+  "default_priority": "normal",
+  "deadline": {
+    "min_minutes": 1, "max_minutes": 240,
+    "patterns": [{"pattern": "\\b(?:in|within)\\s+(\\d{1,3})\\s*(?:min|mins|minutes)\\b", "minutes_per_unit": 1}]
+  },
+  "nlp": {
+    "affirm": ["^\\s*(?:yes|confirm|confirmed|proceed|go ahead)\\b"],
+    "deny": ["^\\s*(?:no|hold|negative)\\b"],
+    "source": [{"pattern": "\\b(?:from)\\s+(sector\\s+\\d+|SEC-\\d+)", "group": 1}],
+    "default_destination": "none"
+  },
+  "questions": {
+    "missing_item": {"text": "Which {item_noun} is needed?", "readings": "items"},
+    "missing_destination": {"text": "Which {destination_noun}?", "readings": ["name a sector, e.g. sector 3"]},
+    "missing_both": {"text": "Which {item_noun}, and to which {destination_noun}?", "readings": ["e.g. {example}"]}
+  },
+  "spec_extensions": {"entry_confirmed": {"type": "boolean", "description": "The commander confirmed entry to an unstable sector."}},
+  "rules": [
+    {
+      "id": "RESCUE-UNSTABLE-01",
+      "title": "Unstable sectors",
+      "applies": {"truthy": "$dest.unstable"},
+      "requires": {"truthy": "$spec.entry_confirmed"},
+      "otherwise": "clarify",
+      "message": "RESCUE-UNSTABLE-01: entering an unstable sector needs confirmation",
+      "question": {
+        "text": "{dest.zone} is structurally unstable. Confirm entry?",
+        "missing_field": "entry_confirmation", "affirm": 0, "deny": 1,
+        "readings": [
+          {"label": "confirm entry", "patterns": ["confirm", "proceed", "go ahead"], "set": {"entry_confirmed": true}},
+          {"label": "hold off", "patterns": ["hold off", "do not enter"], "set": {}}
+        ]
+      }
+    }
+  ],
+  "restrictions": {
+    "flooded": {"policy_id": "RESCUE-FLOOD-02", "effect": "forbid"},
+    "aftershock": {"policy_id": "RESCUE-AFTERSHOCK-03", "effect": "hold", "exempt_priorities": ["critical"]}
+  },
+  "task_templates": {
+    "delivery": [
+      {"cmd": "go_to", "params": {"to": "{source}", "purpose": "load"}},
+      {"cmd": "go_to", "params": {"to": "{destination}", "via": "{route}"}},
+      {"cmd": "report", "params": {}}
+    ],
+    "survey": [
+      {"cmd": "go_to", "params": {"to": "{destination}", "via": "{route}"}},
+      {"cmd": "photo", "params": {"purpose": "survey"}},
+      {"cmd": "report", "params": {}}
+    ]
+  },
+  "default_template": "delivery",
+  "lease": {"speed_limit": 0.6, "expiry_grace_seconds": 120, "when_to_escalate": ["sector_unsafe", "robot_lost", "deadline_at_risk"]},
+  "steps": {"intent": ["submit_task_spec", "ask_clarification"], "allocation": ["propose_allocation"]},
+  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt"}
+}

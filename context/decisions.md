@@ -69,3 +69,7 @@ The task role policy adds `events:PutEvents` (for EventBridge publishing) and `i
 ### 17. Pre-Handoff Code Review Fixes
 All findings from the standards and specification review were resolved: removed duplicate escalation responses, made task ID allocation thread-safe with a monotonic counter, marked deduplication only on acceptance, consolidated decision row formatting, escaped UI HTML interpolation, and aligned test assertions with public interfaces.
 - Files: `server.py`, `store.py`, `static/app.js`, `tests/test_api.py`
+
+### 18. Cloud Orchestrator Merged (Person 3)
+`server.py` now routes requests, answers, escalations, check-ins and control intents to `cloud/` (Orchestrator). The wire contracts are unchanged; `contracts/topics.md` gains an additive P3 section (`renewal`, `probe`, optional digest and `segments`). Two tests in `tests/test_api.py` were changed deliberately (a 3-robot wing leases 3 tasks and queues the rest). P3 tests import `cloud/` directly because they test the orchestrator, not the HTTP seam.
+- Files: `server.py`, `cloud/`, `packs/`, `contracts/topics.md`, `tests/test_api.py`

@@ -1,0 +1,6 @@
+{
+  "clusters": {
+    "mapper-team": {"area": "alpha", "home": "DEPOT-A", "robots": ["M1", "M2"], "stock": {"med_kit": 2, "radio_relay": 1}},
+    "search-team": {"area": "bravo", "home": "DEPOT-B", "robots": ["S1", "S2"], "stock": {"med_kit": 3, "radio_relay": 0}}
+  }
+}

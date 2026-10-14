@@ -75,3 +75,39 @@ lease renewal are Person 3's; the stand-in does not validate the cluster.
   }
 }
 ```
+
+---
+
+## Addendum (Person 3, PROPOSED: additive, in use, awaiting P4 / P2 agreement)
+
+Nothing above changes. These only add, so existing consumers keep working.
+
+**`nimbus/{cluster_id}/renewal`: cloud → edge.** Sent when a check-in extends a live lease.
+The lease **version does not change**; only `expiry_ts` moves. The lease schema is untouched.
+
+```json
+{"topic": "nimbus/east-wing/renewal",
+ "payload": {"lease_id": "lease-task-000002-v1", "version": 1,
+             "expiry_ts": "2026-10-18T09:06:00Z", "message_id": "renew-lease-task-000002-v1-1792314360"}}
+```
+
+**`nimbus/{cluster_id}/probe`: cloud → edge.** Sent only to a cluster that was alive and went
+quiet (stale), before delegating. The edge answers with a heartbeat (below).
+
+```json
+{"topic": "nimbus/east-wing/probe",
+ "payload": {"type": "PROBE", "cluster_id": "east-wing", "message_id": "probe-east-wing-1792314300", "ts": "2026-10-18T09:05:00Z"}}
+```
+
+**Optional fields on a check-in** (also accepted by `POST /fleet/heartbeat`, which needs no lease):
+
+```json
+{"robots": [{"id": "R1", "state": "idle|busy|failed|charging", "zone": "E-STORE", "battery": 0.9}],
+ "stock":  {"wheelchair": 4, "infusion_pump_paediatric": 2}}
+```
+
+**Optional field on an UNEXPECTED_EVENT payload:** `segments: [{"segment_id": "E3", "state": "blocked|closed|crowded"}]`.
+The cloud re-plans around these; without it, any known zone id named in `where` is used.
+
+**Stale versions:** a check-in or escalation carrying a `lease_version` below the current one gets
+HTTP 409 `{"error": "outdated lease_version", "current": N}`, so the edge learns the current version.

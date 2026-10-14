@@ -1,0 +1,19 @@
+{
+  "version": "rescue-topo-v0",
+  "note": "Illustrative disaster-response map (PRD T9, stretch). Exists to prove the core is domain-agnostic (NFR-7).",
+  "nodes": {
+    "DEPOT-A": {"kind": "depot", "area": "alpha"},
+    "DEPOT-B": {"kind": "depot", "area": "bravo"},
+    "J1": {"kind": "junction", "area": "shared", "exclusive": true},
+    "J2": {"kind": "junction", "area": "shared"},
+    "SEC-1": {"kind": "sector", "area": "alpha", "unstable": false, "speed_cap": 0.4},
+    "SEC-2": {"kind": "sector", "area": "alpha", "unstable": true, "speed_cap": 0.3},
+    "SEC-3": {"kind": "sector", "area": "bravo", "unstable": false, "speed_cap": 0.4},
+    "SEC-4": {"kind": "sector", "area": "bravo", "unstable": false, "speed_cap": 0.4}
+  },
+  "edges": [
+    ["DEPOT-A", "SEC-1", 1], ["DEPOT-A", "J1", 1], ["J1", "SEC-2", 1], ["SEC-1", "SEC-2", 1],
+    ["J1", "J2", 2], ["J2", "DEPOT-B", 1], ["J2", "SEC-3", 1], ["DEPOT-B", "SEC-4", 1], ["SEC-3", "SEC-4", 1]
+  ],
+  "clusters": {"mapper-team": "alpha", "search-team": "bravo"}
+}

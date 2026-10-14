@@ -1,0 +1,27 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BedrockInvokeAndDiscover",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "bedrock:ListFoundationModels", "bedrock:ListInferenceProfiles", "bedrock:GetInferenceProfile"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DynamoDbOnNimbusTablesOnly",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable", "dynamodb:DeleteTable", "dynamodb:DescribeTable", "dynamodb:UpdateTimeToLive",
+        "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem",
+        "dynamodb:Query", "dynamodb:Scan"
+      ],
+      "Resource": "arn:aws:dynamodb:*:*:table/nimbus-*"
+    },
+    {
+      "Sid": "DynamoDbListTables",
+      "Effect": "Allow",
+      "Action": ["dynamodb:ListTables"],
+      "Resource": "*"
+    }
+  ]
+}
