@@ -291,9 +291,17 @@ def test_concurrent_requests_all_survive(api):
         results = list(pool.map(send, range(12)))
     task_ids = [body["task_id"] for _, body in results]
     assert len(set(task_ids)) == 12
+    statuses = []
     for task_id in task_ids:
         status, task = http_json("GET", api + f"/tasks/{task_id}")
-        assert status == 200 and task["status"] == "leased"
+        assert status == 200
+        statuses.append(task["status"])
+    # Ward 5 is in the west wing: 3 robots, so exactly 3 leases and the rest
+    # wait their turn. No robot may ever hold two live leases (Person 3).
+    assert statuses.count("leased") == 3 and statuses.count("queued") == 9
+    _, out = http_json("GET", api + "/outbox")
+    robots = [r["payload"]["assigned_robots"][0] for r in out["outbox"]]
+    assert len(robots) == len(set(robots)) == 3
 
 
 def test_invalid_lease_is_single_500_and_id_not_burned(api, monkeypatch):
@@ -302,9 +310,11 @@ def test_invalid_lease_is_single_500_and_id_not_burned(api, monkeypatch):
     import json
     import socket
 
+    from cloud import leasebuilder
+
     monkeypatch.setattr(
-        standin, "build_lease",
-        lambda task_id, text, version=1: {"lease_id": "broken"},
+        leasebuilder, "build_lease",
+        lambda *args, **kwargs: {"lease_id": "broken"},
     )
     body = {"text": "Deliver a wheelchair to ward 3, routine.", "message_id": "msg-500-1"}
 

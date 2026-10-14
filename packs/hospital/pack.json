@@ -1,0 +1,108 @@
+{
+  "$schema": "../pack.schema.json",
+  "name": "hospital",
+  "version": "1.0.0",
+  "description": "Hospital equipment logistics: PRD v5.0 scenarios SC-1 to SC-3 and evaluation tasks T1 to T8.",
+  "nouns": {"item": "equipment", "destination": "ward or bed", "example": "wheelchair to ward 3"},
+  "ontology": {
+    "destination_kinds": ["ward"],
+    "source_kinds": ["store"],
+    "flag_labels": {"paediatric": "PAEDIATRIC"},
+    "destination_line": "{id} (area {area}{flags}, beds 1-{beds})"
+  },
+  "locators": [
+    {"type": "child", "label": "bed", "pattern": "\\b(\\d[A-Za-z])\\s*[- ]\\s*(\\d{1,3})\\b",
+     "parent": "{G1}", "parent_kinds": ["ward"], "index": "{n2}", "limit_attr": "beds", "id": "{G1}-{n2}"},
+    {"type": "node", "label": "ward", "pattern": "\\bward\\s+(\\d+)\\b", "id": "ward-{g1}", "kinds": ["ward"]},
+    {"type": "node", "label": "ward", "pattern": "\\b(?:ward\\s*)?(\\d[A-Za-z])\\b", "id": "{G1}", "kinds": ["ward"]}
+  ],
+  "items": [
+    {"id": "infusion_pump_paediatric", "label": "paediatric infusion pump", "variant_of": "infusion_pump",
+     "patterns": ["(?:paediatric|pediatric|\\bpaeds?\\b|\\bpeds\\b)\\s+(?:infusion\\s+|iv\\s+)?pumps?"]},
+    {"id": "infusion_pump", "label": "infusion pump", "patterns": ["infusion pump", "iv pump", "\\bpumps?\\b"]},
+    {"id": "iv_pole", "label": "IV pole", "patterns": ["iv pole", "iv stand", "drip stand"]},
+    {"id": "wheelchair", "label": "wheelchair", "patterns": ["wheel ?chair"]},
+    {"id": "monitor", "label": "monitor", "patterns": ["\\bmonitor\\b"]},
+    {"id": "blanket", "label": "blanket", "patterns": ["blanket"]}
+  ],
+  "priorities": [
+    {"id": "urgent", "rank": 0, "default_deadline_minutes": 12, "lease_priority": "urgent",
+     "patterns": ["\\burgent\\b", "\\basap\\b", "\\bnow\\b", "immediately", "\\bstat\\b", "emergency", "code blue", "life[- ]threatening"]},
+    {"id": "routine", "rank": 1, "default_deadline_minutes": 60, "lease_priority": "routine", "patterns": []}
+  ],
+  "default_priority": "routine",
+  "deadline": {
+    "min_minutes": 1, "max_minutes": 480,
+    "patterns": [
+      {"pattern": "\\b(?:in|within)\\s+(\\d{1,3})\\s*(?:min|mins|minutes)\\b", "minutes_per_unit": 1},
+      {"pattern": "\\b(?:in|within)\\s+(\\d{1,2})\\s*(?:h|hr|hrs|hours?)\\b", "minutes_per_unit": 60}
+    ],
+    "soft": {"pattern": "\\bsoon\\b", "minutes": 30, "only_priorities": ["routine"]}
+  },
+  "nlp": {
+    "affirm": ["^\\s*(?:yes|yeah|yep|yup|correct|right|sure|ok|okay)\\b"],
+    "deny": ["^\\s*(?:no|nope|nah)\\b"],
+    "source": [{"pattern": "\\b(?:from|out of)\\s+((?:ward\\s+)?[\\w][\\w\\-]*)", "group": 1}],
+    "default_destination": "area_source"
+  },
+  "questions": {
+    "missing_item": {"text": "Which {item_noun} do you need?", "readings": "items"},
+    "missing_destination": {"text": "Which {destination_noun} should it go to?",
+                            "readings": ["name a ward or bed, e.g. 2B-12 or ward 3"]},
+    "missing_both": {"text": "What {item_noun} do you need, and where should it go?",
+                     "readings": ["name the item and a ward or bed, e.g. {example}"]}
+  },
+  "spec_extensions": {
+    "variant_confirmed_by_requester": {"type": "boolean",
+      "description": "True when the requester explicitly chose a variant that a rule would otherwise question."}
+  },
+  "rules": [
+    {
+      "id": "SOP-PAED-01",
+      "title": "Paediatric ward equipment",
+      "applies": {"all": [{"in": ["$spec.item", ["infusion_pump", "infusion_pump_paediatric"]]}, {"truthy": "$dest.paediatric"}]},
+      "requires": {"any": [{"eq": ["$spec.item", "infusion_pump_paediatric"]}, {"truthy": "$spec.variant_confirmed_by_requester"}]},
+      "otherwise": "clarify",
+      "message": "SOP-PAED-01: a standard pump to a paediatric location needs the requester's confirmation",
+      "question": {
+        "text": "{dest.zone} is a paediatric {dest.label}. Do you need a paediatric pump?",
+        "missing_field": "item_variant",
+        "affirm": 0, "deny": 1,
+        "resolve_items": ["infusion_pump"],
+        "readings": [
+          {"label": "paediatric infusion pump",
+           "patterns": ["paediatric", "pediatric", "\\bpaeds?\\b", "\\bpeds\\b", "child", "\\b(?:not|no)\\s+(?:a\\s+)?(?:standard|adult|regular|normal)"],
+           "set": {"item": "infusion_pump_paediatric"}},
+          {"label": "standard infusion pump",
+           "patterns": ["standard", "adult", "regular", "normal"],
+           "exclude": ["\\b(?:not|no)\\s+(?:a\\s+)?(?:standard|adult|regular|normal)"],
+           "set": {"variant_confirmed_by_requester": true}}
+        ]
+      }
+    }
+  ],
+  "restrictions": {
+    "isolation": {"policy_id": "SOP-ISO-02", "effect": "hold", "exempt_priorities": ["urgent"]}
+  },
+  "task_templates": {
+    "delivery": [
+      {"cmd": "go_to", "params": {"to": "{source}", "purpose": "pickup"}},
+      {"cmd": "wait", "params": {"seconds": 30, "reason": "load"}},
+      {"cmd": "go_to", "params": {"to": "{destination}", "via": "{route}"}},
+      {"cmd": "beep", "params": {}},
+      {"cmd": "photo", "params": {"purpose": "delivery_proof"}},
+      {"cmd": "report", "params": {}}
+    ]
+  },
+  "default_template": "delivery",
+  "lease": {
+    "speed_limit": 0.8,
+    "expiry_grace_seconds": 180,
+    "when_to_escalate": ["door_closed", "deadline_at_risk", "robot_failed", "route_blocked_no_alternative"]
+  },
+  "steps": {
+    "intent": ["submit_task_spec", "ask_clarification"],
+    "allocation": ["propose_allocation"]
+  },
+  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt"}
+}

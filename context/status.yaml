@@ -44,6 +44,14 @@ done:
       - static/operator.js
       - server.py
 
+p3_cloud_orchestrator_merged:
+  description: Cloud orchestrator behind the existing HTTP API (cloud/, packs/); standin.py is no longer on the request path
+  files:
+    - cloud/
+    - packs/
+    - scripts/edge_sim.py
+  note: Not yet run on real AWS (Bedrock and DynamoDB verified only against emulators)
+
 stand_in:
   standin_py:
     description: Rule-based cloud stand-in simulating SC-1 clarification and lease generation

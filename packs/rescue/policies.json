@@ -1,0 +1,11 @@
+[
+  {"id": "RESCUE-UNSTABLE-01", "title": "Unstable sectors",
+   "text": "Entering a structurally unstable sector needs the incident commander's explicit confirmation.",
+   "keywords": ["unstable", "collapse", "structural", "sector"]},
+  {"id": "RESCUE-FLOOD-02", "title": "Flooded sectors",
+   "text": "A flooded sector is closed to robots until the commander reopens it. No class of work may enter.",
+   "keywords": ["flooded", "flood", "water", "closed"]},
+  {"id": "RESCUE-AFTERSHOCK-03", "title": "Aftershock hold",
+   "text": "After an aftershock a sector is held: normal and high work waits, critical work may still go in.",
+   "keywords": ["aftershock", "tremor", "hold"]}
+]
