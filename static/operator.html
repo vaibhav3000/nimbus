@@ -5,27 +5,234 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nimbus: Operator Console</title>
 <style>
-  :root { font-family: system-ui, sans-serif; }
-  body { margin: 0; background: #f4f6f8; color: #1c2733; }
-  header { background: #5b3a6b; color: #fff; padding: 10px 18px; }
-  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
-  header p { margin: 2px 0 0; font-size: 12px; opacity: .85; }
-  main { display: grid; grid-template-columns: 460px 1fr; gap: 14px; padding: 14px; max-width: 1200px; margin: 0 auto; }
-  .card { background: #fff; border: 1px solid #d7dee5; border-radius: 8px; padding: 12px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e4e9ee; }
-  tbody tr { cursor: pointer; }
-  tbody tr:hover { background: #f2ecf6; }
-  tbody tr.active { background: #ece2f3; }
-  .chip { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: #d7dee5; }
-  .chip.paused { background: #ffd666; }
-  .chip.cancelled { background: #f79f9f; }
-  .chip.leased { background: #9fd6a9; }
-  .chip.completed { background: #7fc9f7; }
-  .muted { color: #5b7183; font-size: 13px; }
-  ol.timeline { font-size: 13px; padding-left: 18px; }
-  button { font: inherit; padding: 6px 14px; border: 0; border-radius: 6px; background: #5b3a6b; color: #fff; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: default; }
+  :root {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, system-ui, sans-serif;
+    color: #172428;
+    background-color: #eef1f1;
+    line-height: 1.4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    background: #eef1f1;
+    color: #172428;
+  }
+  header {
+    background: #09282b;
+    color: #f7f9f9;
+    padding: 10px 18px;
+    border-bottom: 2px solid #051618;
+  }
+  header h1 {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  header p {
+    margin: 3px 0 0;
+    font-size: 12px;
+    color: #c0d3d5;
+  }
+  main {
+    display: grid;
+    grid-template-columns: minmax(420px, 1.25fr) minmax(360px, 1fr);
+    gap: 14px;
+    padding: 14px 18px;
+    max-width: 1300px;
+    margin: 0 auto;
+  }
+  .card {
+    background: #ffffff;
+    border: 1px solid #cfd7d8;
+    border-radius: 2px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+  h3 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #0f4044;
+    border-bottom: 1px solid #e1e7e8;
+    padding-bottom: 6px;
+  }
+  h4 {
+    margin: 14px 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #3b4e52;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  thead th {
+    background: #e8eded;
+    color: #1c3538;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 2px solid #b8c4c7;
+  }
+  tbody td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #e5eaeb;
+    font-variant-numeric: tabular-nums;
+  }
+  tbody td:first-child {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: #0f4044;
+  }
+  tbody tr {
+    cursor: pointer;
+  }
+  tbody tr:hover {
+    background: #eaf0f0;
+  }
+  tbody tr.active {
+    background: #d9e5e7;
+    font-weight: 600;
+  }
+  .chip {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 2px 7px;
+    border-radius: 2px;
+    border: 1px solid #b8c4c7;
+    background: #e8eded;
+    color: #233438;
+    line-height: 1.2;
+  }
+  .chip.paused {
+    background: #fef3d6;
+    color: #784803;
+    border-color: #d8a832;
+  }
+  .chip.cancelled, .chip.rejected {
+    background: #fbebee;
+    color: #7f1d1d;
+    border-color: #e8b0b8;
+  }
+  .chip.leased {
+    background: #e6f4ea;
+    color: #14532d;
+    border-color: #a3d9b0;
+  }
+  .chip.completed {
+    background: #e8f1f5;
+    color: #1e425e;
+    border-color: #a8c5db;
+  }
+  .chip.queued {
+    background: #f5f2ea;
+    color: #534731;
+    border-color: #dcd4c0;
+  }
+  .chip.clarify, .chip.clarification {
+    background: #fef3d6;
+    color: #784803;
+    border-color: #e4c16a;
+  }
+  .muted {
+    color: #55666b;
+    font-size: 12px;
+  }
+  p.muted {
+    margin: 6px 0;
+    line-height: 1.4;
+  }
+  ol.timeline {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0;
+    border: 1px solid #cfd7d8;
+    background: #ffffff;
+    border-radius: 2px;
+  }
+  ol.timeline li {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 5px 8px;
+    border-bottom: 1px solid #e7ecee;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  ol.timeline li:last-child {
+    border-bottom: none;
+  }
+  ol.timeline li strong {
+    min-width: 80px;
+    width: 80px;
+    flex-shrink: 0;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    text-transform: uppercase;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #0f4044;
+  }
+  ol.timeline li span.muted {
+    margin-left: auto;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    color: #63757a;
+    white-space: nowrap;
+  }
+  button {
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 5px 12px;
+    border-radius: 2px;
+    border: 1px solid #b8c4c7;
+    cursor: pointer;
+    margin-right: 6px;
+    background: #e8eded;
+    color: #1a2c30;
+  }
+  button:hover:not(:disabled) {
+    background: #dce3e4;
+  }
+  #pause-btn {
+    background: #fef7e6;
+    color: #7a4608;
+    border-color: #caa26c;
+  }
+  #pause-btn:hover:not(:disabled) {
+    background: #f9eccf;
+  }
+  #cancel-btn {
+    background: #fbebee;
+    color: #7f1d1d;
+    border-color: #d89aa1;
+  }
+  #cancel-btn:hover:not(:disabled) {
+    background: #f5d4d7;
+  }
+  button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 </style>
 </head>
 <body>
