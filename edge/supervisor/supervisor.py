@@ -40,6 +40,16 @@ class EdgeSupervisor:
         }
         self.active_lease: Optional[Dict[str, Any]] = None
 
+    @staticmethod
+    def _extract_task_id(lease: Dict[str, Any]) -> str:
+        """Extracts canonical task_id ('task-000001') from lease document or lease_id ('lease-task-000001-v1')."""
+        if "task_id" in lease:
+            return lease["task_id"]
+        lid = lease.get("lease_id", "")
+        if lid.startswith("lease-") and "-v" in lid:
+            return lid[len("lease-"):lid.rindex("-v")]
+        return lid
+
     def fetch_leases_from_cloud(self) -> List[Dict[str, Any]]:
         """Polls GET /outbox on the cloud stand-in server."""
         url = f"{self.cloud_url}/outbox"
@@ -89,9 +99,11 @@ class EdgeSupervisor:
                 if resp.status in (200, 201, 204):
                     self.store.mark_outbox_uploaded(escalation["message_id"])
                     return True
-        except Exception:
-            # Remains pending in SQLite store for upload on reconnect (FR-10)
-            pass
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            print(f"[{self.cluster_id}] Escalation HTTP error {e.code}: {err_body}")
+        except Exception as e:
+            print(f"[{self.cluster_id}] Escalation network error: {e}")
         return False
 
     def process_lease(self, lease: Dict[str, Any]) -> Dict[str, Any]:
@@ -121,7 +133,7 @@ class EdgeSupervisor:
             return {"status": "DROPPED_STALE", "reason": store_msg}
 
         self.active_lease = lease
-        task_id = lease.get("task_id", lease_id)
+        task_id = self._extract_task_id(lease)
         task_sequence = lease.get("task_sequence", [])
         allowed_zones = set(lease.get("allowed_zones", []))
         forbidden_zones = set(lease.get("forbidden_zones", []))
@@ -247,3 +259,29 @@ class EdgeSupervisor:
             }
         }
         self.send_escalation_to_cloud(esc)
+
+    def flush_pending_escalations(self) -> int:
+        """Flushes any pending escalations in local outbox (FR-10)."""
+        pending = self.store.get_pending_outbox()
+        flushed = 0
+        for item in pending:
+            payload = item.get("payload")
+            if not payload:
+                continue
+            if "task_id" in payload and payload["task_id"].startswith("lease-") and "-v" in payload["task_id"]:
+                lid = payload["task_id"]
+                payload["task_id"] = lid[len("lease-"):lid.rindex("-v")]
+            url = f"{self.cloud_url}/escalations"
+            try:
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=5.0) as resp:
+                    if resp.status in (200, 201, 204):
+                        self.store.mark_outbox_uploaded(item["message_id"])
+                        flushed += 1
+            except Exception:
+                pass
+        return flushed
