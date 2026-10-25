@@ -1,0 +1,58 @@
+{
+  "frame": "world",
+  "units": "m",
+  "waypoints": {
+    "lift_lobby": [
+      0.0,
+      18.0
+    ],
+    "north_hall": [
+      0.0,
+      12.0
+    ],
+    "west_north_gate": [
+      -4.5,
+      14.0
+    ],
+    "east_north_gate": [
+      4.5,
+      14.0
+    ],
+    "west_waiting_approach": [
+      -4.5,
+      8.0
+    ],
+    "east_waiting_approach": [
+      4.5,
+      8.0
+    ],
+    "west_mid_hall": [
+      -4.5,
+      3.0
+    ],
+    "east_mid_hall": [
+      4.5,
+      3.0
+    ],
+    "nurse_station_approach": [
+      0.0,
+      5.0
+    ],
+    "west_south_hall": [
+      -4.5,
+      -8.0
+    ],
+    "east_south_hall": [
+      4.5,
+      -8.0
+    ],
+    "south_equipment_approach": [
+      0.0,
+      -15.0
+    ],
+    "south_room_approach": [
+      0.0,
+      -28.0
+    ]
+  }
+}
