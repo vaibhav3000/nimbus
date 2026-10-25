@@ -580,12 +580,21 @@
       <static>true</static>
       <pose>-11.0309 -3.75145 0 0 -0 1.56614</pose>
     </include>
-    <include>
-      <name>aws_robomaker_hospital_floor_01_ceiling_1</name>
-      <uri>model://aws_robomaker_hospital_floor_01_ceiling</uri>
-      <static>true</static>
+    <!-- Ceiling visual intentionally omitted for an unobstructed interior view.
+         The source collision mesh remains, preserving physical geometry. -->
+    <model name="aws_robomaker_hospital_floor_01_ceiling_1">
       <pose>0.016552 0.050728 0 0 -0 0</pose>
-    </include>
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <mesh>
+              <uri>model://aws_robomaker_hospital_floor_01_ceiling/meshes/aws_robomaker_hospital_floor_01_ceiling_collision.dae</uri>
+            </mesh>
+          </geometry>
+        </collision>
+      </link>
+    </model>
     <include>
       <name>aws_robomaker_hospital_ramp_01_1</name>
       <uri>model://aws_robomaker_hospital_ramp_01</uri>

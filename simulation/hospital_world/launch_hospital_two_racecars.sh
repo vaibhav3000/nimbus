@@ -12,8 +12,13 @@ python3 "$ROOT/tools/generate_hospital_two_racecars.py" \
   --robot-model "$ROBOT_MODEL" --robots 2 --output "$WORLD"
 export IGN_GAZEBO_RESOURCE_PATH="$ROOT/models:$ROOT/models/robots:$ROOT/fuel_models${IGN_GAZEBO_RESOURCE_PATH:+:$IGN_GAZEBO_RESOURCE_PATH}"
 export GZ_SIM_RESOURCE_PATH="$ROOT/models:$ROOT/models/robots:$ROOT/fuel_models${GZ_SIM_RESOURCE_PATH:+:$GZ_SIM_RESOURCE_PATH}"
+# Prevent an unrelated (or stale) Fortress server on the default transport
+# partition from supplying the GUI scene.  Set HOSPITAL_IGN_PARTITION to run a
+# deliberately separate instance.
+export IGN_PARTITION="${HOSPITAL_IGN_PARTITION:-${IGN_PARTITION:-custom_hospital_world}}"
 echo "robot_1: pose (0.0, 12.0, 0), namespace /robot_1"
 echo "robot_2: pose (0.0, 9.5, 0), namespace /robot_2"
+echo "Ignition transport partition: $IGN_PARTITION"
 if [[ "${HEADLESS:-0}" == "1" ]]; then
   # Prevent a stale X11 display from being selected by Ogre's EGL backend.
   unset DISPLAY

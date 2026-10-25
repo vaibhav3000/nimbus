@@ -68,9 +68,11 @@ simulation. Set different values to isolate concurrent simulations.
 From the project root:
 
 ```bash
-# Hospital only
+# Hospital only (default view omits the ceiling visual; ceiling collision remains)
 ./launch_gui.sh
 ./launch_headless.sh
+# Interior two-RACECAR view: hides only the ceiling visual and retains its collision
+./launch_interior_gui.sh
 
 # One robot: robot_1 at (0, 12, 0), namespace /robot_1
 ./launch_hospital_one_racecar.sh
@@ -80,6 +82,26 @@ HEADLESS=1 ./launch_hospital_one_racecar.sh
 ./launch_hospital_two_racecars.sh
 HEADLESS=1 ./launch_hospital_two_racecars.sh
 ```
+
+The launch scripts use the dedicated Ignition transport partition
+`custom_hospital_world` by default, preventing a stale server on the default
+partition from taking over the GUI.  Use the same partition for commands in a
+second terminal:
+
+```bash
+export IGN_PARTITION=custom_hospital_world
+ign model -m robot_1 -p
+ign model -m robot_2 -p
+```
+
+To run an intentionally separate hospital instance, set
+`HOSPITAL_IGN_PARTITION` before launching.
+
+`hospital.sdf` omits the full pale ceiling visual by default while retaining
+the original ceiling collision mesh. `launch_interior_gui.sh` additionally
+uses lower, slightly warm lighting, then generates the same two
+wrapper-compatible RACECAR instances as `launch_hospital_two_racecars.sh`.
+Robot collision behaviour is unchanged.
 
 Extra Fortress options pass through the launchers. For example,
 `HEADLESS=1 ./launch_hospital_two_racecars.sh --iterations 1000` is a bounded

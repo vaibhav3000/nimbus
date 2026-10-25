@@ -5,3 +5,5 @@ __pycache__/
 *.py[cod]
 hospital_one_racecar.sdf
 hospital_two_racecars.sdf
+hospital_interior.sdf
+hospital_interior_two_racecars.sdf

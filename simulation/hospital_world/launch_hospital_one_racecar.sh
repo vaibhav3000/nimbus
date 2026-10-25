@@ -12,7 +12,9 @@ python3 "$ROOT/tools/generate_hospital_two_racecars.py" \
   --robot-model "$ROBOT_MODEL" --robots 1 --output "$WORLD"
 export IGN_GAZEBO_RESOURCE_PATH="$ROOT/models:$ROOT/models/robots:$ROOT/fuel_models${IGN_GAZEBO_RESOURCE_PATH:+:$IGN_GAZEBO_RESOURCE_PATH}"
 export GZ_SIM_RESOURCE_PATH="$ROOT/models:$ROOT/models/robots:$ROOT/fuel_models${GZ_SIM_RESOURCE_PATH:+:$GZ_SIM_RESOURCE_PATH}"
+export IGN_PARTITION="${HOSPITAL_IGN_PARTITION:-${IGN_PARTITION:-custom_hospital_world}}"
 echo "robot_1: pose (0.0, 12.0, 0), namespace /robot_1"
+echo "Ignition transport partition: $IGN_PARTITION"
 if [[ "${HEADLESS:-0}" == "1" ]]; then
   unset DISPLAY
   exec ign gazebo -r -s --headless-rendering "$WORLD" "$@"
