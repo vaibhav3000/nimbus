@@ -1,0 +1,24 @@
+{
+  "version": "robot-deployment-v1",
+  "frame": "world",
+  "units": "m",
+  "note": "Spawn positions were checked with the RACECAR clearance envelope. start_node is set only when a spawn coincides with a physical topology waypoint; a spawn on an edge is represented as such rather than being snapped to an arbitrary node.",
+  "robots": {
+    "robot_1": {
+      "namespace": "/robot_1",
+      "spawn_pose": [0.0, 12.0, 0.0],
+      "start_node": "north_hall",
+      "start_edge": null,
+      "wing": "shared",
+      "association": "exact physical topology waypoint"
+    },
+    "robot_2": {
+      "namespace": "/robot_2",
+      "spawn_pose": [0.0, 9.5, 0.0],
+      "start_node": null,
+      "start_edge": ["north_hall", "nurse_station_approach"],
+      "wing": "shared",
+      "association": "on the validated shared corridor edge, 2.5 m south of north_hall; no arbitrary start node assigned"
+    }
+  }
+}
