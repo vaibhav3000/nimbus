@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Start the hospital with two local wrapper-compatible MIT RACECARs.
+set -euo pipefail
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+ROBOT_MODEL="$ROOT/models/robots/mit_racecar/model.sdf"
+WORLD="$ROOT/hospital_two_racecars.sdf"
+command -v ign >/dev/null || { echo "Gazebo Fortress (ign) is not installed." >&2; exit 127; }
+[[ -f "$ROBOT_MODEL" ]] || { echo "Vendored MIT RACECAR model not found: $ROBOT_MODEL" >&2; exit 1; }
+
+python3 "$ROOT/tools/generate_hospital_two_racecars.py" \
+  --robot-model "$ROBOT_MODEL" --robots 2 --output "$WORLD"
+export IGN_GAZEBO_RESOURCE_PATH="$ROOT/models:$ROOT/models/robots:$ROOT/fuel_models${IGN_GAZEBO_RESOURCE_PATH:+:$IGN_GAZEBO_RESOURCE_PATH}"
+export GZ_SIM_RESOURCE_PATH="$ROOT/models:$ROOT/models/robots:$ROOT/fuel_models${GZ_SIM_RESOURCE_PATH:+:$GZ_SIM_RESOURCE_PATH}"
+echo "robot_1: pose (0.0, 12.0, 0), namespace /robot_1"
+echo "robot_2: pose (0.0, 9.5, 0), namespace /robot_2"
+if [[ "${HEADLESS:-0}" == "1" ]]; then
+  # Prevent a stale X11 display from being selected by Ogre's EGL backend.
+  unset DISPLAY
+  exec ign gazebo -r -s --headless-rendering "$WORLD" "$@"
+else
+  exec ign gazebo -r "$WORLD" "$@"
+fi

@@ -1,0 +1,217 @@
+[
+  {
+    "name": "AdjTable",
+    "version": "4",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "AnesthesiaMachine",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "BMWCart",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "BPCart",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "BedTable",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "BedsideTable",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "BloodPressureMonitor",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "CGMClassic",
+    "version": "4",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "Chair",
+    "version": "3",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "Drawer",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "ElderLadyPatient",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "ElderMalePatient",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "FemaleVisitor",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "FemaleVisitorSit",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "IVStand",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "InstrumentCart1",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "InstrumentCart2",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "KitchenSink",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "MalePatientBed",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "MaleVisitorOnPhone",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "MaleVisitorSit",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "MetalCabinet",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "MopCart3",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "OfficeChairBlack",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "ParkingTrolleyMax",
+    "version": "3",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "ParkingTrolleyMin",
+    "version": "3",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "PatientFSit",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "PatientWheelChair",
+    "version": "4",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "PotatoChipChair",
+    "version": "3",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "Scrubs",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "Shower",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "StorageRack",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "StorageRackCoverOpen",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "StorageRackCovered",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "SurgicalTrolley",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "SurgicalTrolleyMed",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "Toilet",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "TrolleyBed",
+    "version": "3",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "TrolleyBedPatient",
+    "version": "3",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "VendingMachine",
+    "version": "3",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "VisitorKidSit",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "WhiteChipChair",
+    "version": "3",
+    "license": "Creative Commons Attribution 4.0 International"
+  },
+  {
+    "name": "XRayMachine",
+    "version": "2",
+    "license": "Creative Commons Attribution 4.0 International"
+  }
+]

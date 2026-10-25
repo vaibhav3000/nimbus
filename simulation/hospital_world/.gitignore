@@ -1,0 +1,7 @@
+deps
+downloads
+.DS_Store
+__pycache__/
+*.py[cod]
+hospital_one_racecar.sdf
+hospital_two_racecars.sdf
