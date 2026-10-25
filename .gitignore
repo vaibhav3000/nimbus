@@ -32,3 +32,6 @@ tools/
 
 # Backup folders
 Before_confirmation_files/
+
+# Exclude PRD
+prd.pdf
