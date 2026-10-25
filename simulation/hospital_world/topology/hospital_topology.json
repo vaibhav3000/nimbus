@@ -1,70 +1,89 @@
 {
   "version": "topo-v0",
-  "note": "First-floor hospital circulation graph extracted from the Fortress hospital wall collision mesh and placed assets. Edge weights are straight-line world-frame metres; all edges are bidirectional. Room labels are limited to observable elevator, nurse-station, seating, and equipment cues. No ward bed counts, paediatric classifications, or access restrictions are asserted.",
+  "note": "First-floor hospital circulation graph extracted from the Fortress hospital wall collision mesh and placed assets. Edge weights are straight-line world-frame metres; all edges are bidirectional. Room labels are limited to observable elevator, nurse-station, seating, and equipment cues. Groups and wing metadata identify physical circulation sections; logical PRD ward aliases are held separately in scenario_locations.json. No physical ward bed counts or paediatric classifications are asserted.",
   "nodes": {
     "lift_lobby": {
       "kind": "gate",
       "area": "north elevator portal lobby",
-      "speed_cap": 0.35
+      "wing": "shared",
+      "speed_cap": 0.35,
+      "exclusive": true,
+      "reservation_id": "gate:lift_lobby"
     },
     "north_hall": {
       "kind": "corridor",
       "area": "north central corridor",
+      "wing": "shared",
       "speed_cap": 0.45
     },
     "west_north_gate": {
       "kind": "gate",
       "area": "west north room-band doorway",
-      "speed_cap": 0.3
+      "wing": "west",
+      "speed_cap": 0.3,
+      "exclusive": true,
+      "reservation_id": "gate:west_north_gate"
     },
     "east_north_gate": {
       "kind": "gate",
       "area": "east north room-band doorway",
-      "speed_cap": 0.3
+      "wing": "east",
+      "speed_cap": 0.3,
+      "exclusive": true,
+      "reservation_id": "gate:east_north_gate"
     },
     "west_waiting_approach": {
       "kind": "zone",
       "area": "west waiting seating approach",
+      "wing": "west",
       "speed_cap": 0.3
     },
     "east_waiting_approach": {
       "kind": "zone",
       "area": "east waiting seating approach",
+      "wing": "east",
       "speed_cap": 0.3
     },
     "west_mid_hall": {
       "kind": "corridor",
       "area": "west central bypass",
+      "wing": "west",
       "speed_cap": 0.4
     },
     "east_mid_hall": {
       "kind": "corridor",
       "area": "east central bypass",
+      "wing": "east",
       "speed_cap": 0.4
     },
     "nurse_station_approach": {
       "kind": "zone",
       "area": "nurse-station approach",
+      "wing": "shared",
       "speed_cap": 0.25
     },
     "west_south_hall": {
       "kind": "corridor",
       "area": "west south corridor",
+      "wing": "west",
       "speed_cap": 0.4
     },
     "east_south_hall": {
       "kind": "corridor",
       "area": "east south corridor",
+      "wing": "east",
       "speed_cap": 0.4
     },
     "south_equipment_approach": {
       "kind": "zone",
       "area": "south equipment-room approach",
+      "wing": "shared",
       "speed_cap": 0.25
     },
     "south_room_approach": {
       "kind": "zone",
       "area": "south central room approach",
+      "wing": "shared",
       "speed_cap": 0.3
     }
   },
@@ -145,27 +164,23 @@
       13.0
     ]
   ],
-  "clusters": {
-    "north_access": [
-      "lift_lobby",
-      "north_hall",
-      "west_north_gate",
-      "east_north_gate"
-    ],
-    "central_public": [
-      "west_waiting_approach",
+  "groups": {
+    "east": [
+      "east_north_gate",
       "east_waiting_approach",
-      "nurse_station_approach"
-    ],
-    "west_circulation": [
-      "west_mid_hall",
-      "west_south_hall"
-    ],
-    "east_circulation": [
       "east_mid_hall",
       "east_south_hall"
     ],
-    "south_approaches": [
+    "west": [
+      "west_north_gate",
+      "west_waiting_approach",
+      "west_mid_hall",
+      "west_south_hall"
+    ],
+    "shared": [
+      "lift_lobby",
+      "north_hall",
+      "nurse_station_approach",
       "south_equipment_approach",
       "south_room_approach"
     ]

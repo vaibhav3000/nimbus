@@ -1,0 +1,58 @@
+{
+  "version": "scenario-locations-v1",
+  "note": "Logical PRD destinations mapped to physical Gazebo topology nodes. These aliases do not assert the simulated rooms' clinical identity, capacity, or individual bed coordinates.",
+  "locations": {
+    "ward-2b": {
+      "aliases": ["2B", "ward 2b"],
+      "physical_node": "east_waiting_approach",
+      "logical_kind": "ward",
+      "metadata": {
+        "paediatric": true,
+        "prd_scenarios": ["SC-1"]
+      }
+    },
+    "bed-2b-12": {
+      "aliases": ["2B-12", "bed 2b-12"],
+      "physical_node": "east_waiting_approach",
+      "logical_kind": "bed",
+      "logical_parent": "ward-2b",
+      "metadata": {
+        "delivery_destination": true,
+        "prd_scenarios": ["SC-1"]
+      }
+    },
+    "ward-2c": {
+      "aliases": ["2C", "ward 2c"],
+      "physical_node": "west_waiting_approach",
+      "logical_kind": "ward",
+      "metadata": {
+        "isolation": true,
+        "prd_scenarios": ["SC-3"]
+      }
+    },
+    "ward-3": {
+      "aliases": ["3", "ward 3"],
+      "physical_node": "south_room_approach",
+      "logical_kind": "ward",
+      "metadata": {
+        "prd_scenarios": ["T1"]
+      }
+    },
+    "equipment-store": {
+      "aliases": ["equipment store"],
+      "physical_node": "south_equipment_approach",
+      "logical_kind": "store",
+      "metadata": {
+        "shared_pickup": true
+      }
+    },
+    "nurse-station": {
+      "aliases": ["nurse station"],
+      "physical_node": "nurse_station_approach",
+      "logical_kind": "station",
+      "metadata": {
+        "shared_zone": true
+      }
+    }
+  }
+}

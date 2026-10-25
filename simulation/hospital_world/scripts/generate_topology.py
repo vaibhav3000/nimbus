@@ -14,19 +14,19 @@ TOPOLOGY_DIR = ROOT / "topology"
 # These labels are constrained by observed models / floor geometry.  Descriptive
 # labels ending in "approach" are navigation waypoints, not asserted room names.
 NODES = {
-    "lift_lobby": {"kind": "gate", "area": "north elevator portal lobby", "speed_cap": 0.35},
-    "north_hall": {"kind": "corridor", "area": "north central corridor", "speed_cap": 0.45},
-    "west_north_gate": {"kind": "gate", "area": "west north room-band doorway", "speed_cap": 0.30},
-    "east_north_gate": {"kind": "gate", "area": "east north room-band doorway", "speed_cap": 0.30},
-    "west_waiting_approach": {"kind": "zone", "area": "west waiting seating approach", "speed_cap": 0.30},
-    "east_waiting_approach": {"kind": "zone", "area": "east waiting seating approach", "speed_cap": 0.30},
-    "west_mid_hall": {"kind": "corridor", "area": "west central bypass", "speed_cap": 0.40},
-    "east_mid_hall": {"kind": "corridor", "area": "east central bypass", "speed_cap": 0.40},
-    "nurse_station_approach": {"kind": "zone", "area": "nurse-station approach", "speed_cap": 0.25},
-    "west_south_hall": {"kind": "corridor", "area": "west south corridor", "speed_cap": 0.40},
-    "east_south_hall": {"kind": "corridor", "area": "east south corridor", "speed_cap": 0.40},
-    "south_equipment_approach": {"kind": "zone", "area": "south equipment-room approach", "speed_cap": 0.25},
-    "south_room_approach": {"kind": "zone", "area": "south central room approach", "speed_cap": 0.30},
+    "lift_lobby": {"kind": "gate", "area": "north elevator portal lobby", "wing": "shared", "speed_cap": 0.35, "exclusive": True, "reservation_id": "gate:lift_lobby"},
+    "north_hall": {"kind": "corridor", "area": "north central corridor", "wing": "shared", "speed_cap": 0.45},
+    "west_north_gate": {"kind": "gate", "area": "west north room-band doorway", "wing": "west", "speed_cap": 0.30, "exclusive": True, "reservation_id": "gate:west_north_gate"},
+    "east_north_gate": {"kind": "gate", "area": "east north room-band doorway", "wing": "east", "speed_cap": 0.30, "exclusive": True, "reservation_id": "gate:east_north_gate"},
+    "west_waiting_approach": {"kind": "zone", "area": "west waiting seating approach", "wing": "west", "speed_cap": 0.30},
+    "east_waiting_approach": {"kind": "zone", "area": "east waiting seating approach", "wing": "east", "speed_cap": 0.30},
+    "west_mid_hall": {"kind": "corridor", "area": "west central bypass", "wing": "west", "speed_cap": 0.40},
+    "east_mid_hall": {"kind": "corridor", "area": "east central bypass", "wing": "east", "speed_cap": 0.40},
+    "nurse_station_approach": {"kind": "zone", "area": "nurse-station approach", "wing": "shared", "speed_cap": 0.25},
+    "west_south_hall": {"kind": "corridor", "area": "west south corridor", "wing": "west", "speed_cap": 0.40},
+    "east_south_hall": {"kind": "corridor", "area": "east south corridor", "wing": "east", "speed_cap": 0.40},
+    "south_equipment_approach": {"kind": "zone", "area": "south equipment-room approach", "wing": "shared", "speed_cap": 0.25},
+    "south_room_approach": {"kind": "zone", "area": "south central room approach", "wing": "shared", "speed_cap": 0.30},
 }
 
 # x, y world coordinates; all node positions are in accessible circulation area.
@@ -64,12 +64,10 @@ EDGE_PAIRS = (
     ("south_equipment_approach", "south_room_approach"),
 )
 
-CLUSTERS = {
-    "north_access": ["lift_lobby", "north_hall", "west_north_gate", "east_north_gate"],
-    "central_public": ["west_waiting_approach", "east_waiting_approach", "nurse_station_approach"],
-    "west_circulation": ["west_mid_hall", "west_south_hall"],
-    "east_circulation": ["east_mid_hall", "east_south_hall"],
-    "south_approaches": ["south_equipment_approach", "south_room_approach"],
+GROUPS = {
+    "east": ["east_north_gate", "east_waiting_approach", "east_mid_hall", "east_south_hall"],
+    "west": ["west_north_gate", "west_waiting_approach", "west_mid_hall", "west_south_hall"],
+    "shared": ["lift_lobby", "north_hall", "nurse_station_approach", "south_equipment_approach", "south_room_approach"],
 }
 
 
@@ -110,17 +108,18 @@ def main():
         "note": ("First-floor hospital circulation graph extracted from the Fortress hospital wall collision mesh "
                  "and placed assets. Edge weights are straight-line world-frame metres; all edges are bidirectional. "
                  "Room labels are limited to observable elevator, nurse-station, seating, and equipment cues. "
-                 "No ward bed counts, paediatric classifications, or access restrictions are asserted."),
+                 "Groups and wing metadata identify physical circulation sections; logical PRD ward aliases are held separately "
+                 "in scenario_locations.json. No physical ward bed counts or paediatric classifications are asserted."),
         "nodes": NODES,
         "edges": edges,
-        "clusters": CLUSTERS,
+        "groups": GROUPS,
     }
     (TOPOLOGY_DIR / "hospital_topology.json").write_text(json.dumps(topology, indent=2) + "\n")
     (TOPOLOGY_DIR / "topology_waypoints.json").write_text(json.dumps({
         "frame": "world", "units": "m", "waypoints": WAYPOINTS}, indent=2) + "\n")
 
-    colors = {name: color for name, color in zip(CLUSTERS, ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"])}
-    membership = {node: cluster for cluster, nodes in CLUSTERS.items() for node in nodes}
+    colors = {"east": "#d62728", "west": "#2ca02c", "shared": "#1f77b4"}
+    membership = {node: group for group, nodes in GROUPS.items() for node in nodes}
     figure, axis = plt.subplots(figsize=(10, 17))
     for polygon in wall_polygons():
         closed = polygon + [polygon[0]]
@@ -130,8 +129,8 @@ def main():
                   [WAYPOINTS[source][1], WAYPOINTS[destination][1]],
                   color="#202020", linewidth=1.4, zorder=3)
     for node, (x, y) in WAYPOINTS.items():
-        cluster = membership[node]
-        axis.scatter(x, y, s=55, color=colors[cluster], edgecolor="white", linewidth=0.8, zorder=4)
+        group = membership[node]
+        axis.scatter(x, y, s=55, color=colors[group], edgecolor="white", linewidth=0.8, zorder=4)
         axis.annotate(node.replace("_", "\n"), (x, y), xytext=(5, 5), textcoords="offset points",
                       fontsize=6.5, zorder=5)
     for name, color in colors.items():
@@ -143,7 +142,7 @@ def main():
     axis.grid(alpha=0.25)
     axis.legend(loc="lower right", fontsize=8)
     figure.savefig(TOPOLOGY_DIR / "hospital_topology.png", dpi=200, bbox_inches="tight")
-    print(f"Generated {len(NODES)} nodes and {len(edges)} bidirectional edges.")
+    print(f"Generated {len(NODES)} nodes, {len(edges)} bidirectional edges, and {len(GROUPS)} groups.")
 
 
 if __name__ == "__main__":

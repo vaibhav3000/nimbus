@@ -93,6 +93,7 @@ Validate before deployment:
 ./validate_hospital.sh
 ./validate_racecars.sh
 python3 scripts/validate_topology.py
+python3 -m unittest discover -s tests -v
 python3 -m unittest discover -s tests/ground_robot_sdk -v
 ```
 
@@ -149,13 +150,17 @@ export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
 python3 run_robot_control.py --robot-name robot_1 --namespace /robot_1 --port 8081
 ```
 
-Use the high-level facade from an application:
+Use the high-level facade from an application. For a Gazebo world-frame target,
+resolve it through the topology helper first: the SDK's `frame="world"` is the
+robot's startup-local odometry frame rather than Gazebo's global world frame.
 
 ```python
 from ground_robot_sdk import RobotRuntime
+from topology.resolver import resolve_for_robot
 
 with RobotRuntime(robot_name="robot_1", namespace="/robot_1") as robot:
-    task = robot.commands.goto(0.0, 5.0, frame="world", speed=0.35)
+    goal = resolve_for_robot("2B-12", "robot_1")
+    task = robot.commands.goto(*goal["sdk_startup_waypoint"], frame="world", speed=0.30)
     robot.commands.wait(1.0)
     frame = robot.commands.photo()       # latest CameraFrame, never a fabricated image
     notification = robot.commands.beep() # completed notification; the model has no audio actuator
@@ -182,26 +187,36 @@ robot_2 = RobotRuntime(robot_name="robot_2", namespace="/robot_2")
 
 `topology/hospital_topology.json` is the `topo-v0` graph and
 `topology/topology_waypoints.json` maps every node to `[x, y]` metres in the
-Gazebo `world` frame. It has 13 nodes, 15 bidirectional edges, and five
-clusters. Weights are straight-line world-frame metres. The labelled overlay is
+Gazebo `world` frame. It has 13 nodes, 15 bidirectional edges, and three
+physical groups: `east`, `west`, and `shared`. Weights are straight-line
+world-frame metres. The labelled overlay is
 `topology/hospital_topology.png`.
 
 The graph is generated from the first-floor wall collision mesh and placed
-assets. It intentionally does not invent ward bed counts, paediatric status,
-or exclusivity. `speed_cap` and cluster membership are explicit operational
-annotations in `scripts/generate_topology.py`.
+assets. Node `wing` matches its sole group. `lift_lobby`, `west_north_gate`,
+and `east_north_gate` are exclusive scheduler gates with independent
+reservation IDs; this is not physical door actuation. The logical PRD aliases
+for Ward 2B, Bed 2B-12, Ward 2C, Ward 3, the equipment store, and nurse station
+live in `topology/scenario_locations.json` and map to physical nodes without
+renaming those nodes or inventing bed coordinates.
+
+`robot_1` starts exactly at shared `north_hall` (`[0, 12, 0]`). `robot_2`
+starts on the shared `north_hall`–`nurse_station_approach` edge (`[0, 9.5, 0]`),
+so it intentionally has no arbitrary start node. See
+[topology/README.md](topology/README.md) for all node, edge, mapping,
+coordinate-conversion, gate, and route-planning details.
 
 ```bash
 python3 scripts/generate_topology.py
 python3 scripts/validate_topology.py
 ```
 
-Topology validation checks `topo-v0` structure, waypoint identity and units,
-edge costs, clusters, connectivity, and Fortress collision contacts. It tests
-13 0.65 x 0.65 m junction envelopes and 15 full swept 0.65 x 0.35 m RACECAR
-envelopes; only expected floor contact is ignored. The documented two-robot
-spawns `(0, 12)` and `(0, 9.5)` are also collision-free. Revalidate with a
-larger robot footprint or a controller requiring a different turn radius.
+Topology validation checks `topo-v0` structure, groups/wings, PRD mappings,
+exclusive-gate reservation metadata, robot start association, waypoint units,
+edge costs, connectivity, and Fortress collision contacts. It tests 13
+0.65 x 0.65 m junction envelopes, 15 full swept 0.65 x 0.35 m RACECAR
+envelopes, and both spawn envelopes. Revalidate with a larger robot footprint
+or a controller requiring a different turn radius.
 
 ## Project layout
 
@@ -211,7 +226,8 @@ hospital_world/
 ├── models/                      Hospital models and robots/mit_racecar
 ├── fuel_models/                 Offline third-party hospital assets + manifest
 ├── ground_robot_sdk/            Namespaced Python control SDK
-├── topology/                    topo-v0 graph, waypoints, PNG
+├── topology/                    topo-v0 graph, PRD aliases, resolver, PNG
+├── config/robot_deployment.json two-robot spawn/start configuration
 ├── tools/                       deterministic world/model utilities
 ├── scripts/                     topology generation and validation
 ├── tests/ground_robot_sdk/      offline SDK test suite
