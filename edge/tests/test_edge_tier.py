@@ -1,6 +1,7 @@
 """
 Tests for Nimbus Edge Tier & Local Autonomy (Person 2)
 Validates FR-3, FR-5, FR-6, FR-8, FR-9, FR-10, NFR-6.
+Incorporates Person 1's Gazebo hospital topology and waypoints.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -30,7 +31,7 @@ def _make_sample_lease(lease_id="lease-t1-test", version=1, expired=False, forbi
         deadline = now + timedelta(minutes=10)
         expiry = now + timedelta(minutes=12)
 
-    destination = "ward-2C-isolation" if forbidden_step else "2B-12"
+    destination = "west_mid_hall" if forbidden_step else "nurse_station_approach"
 
     return {
         "lease_id": lease_id,
@@ -38,12 +39,16 @@ def _make_sample_lease(lease_id="lease-t1-test", version=1, expired=False, forbi
         "priority": "routine",
         "deadline_ts": deadline.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "expiry_ts": expiry.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "allowed_zones": ["central-supply", "corridor-2B", "2B-12"],
-        "forbidden_zones": ["ward-2C-isolation"],
+        "allowed_zones": [
+            "east_waiting_approach",
+            "east_mid_hall",
+            "nurse_station_approach"
+        ],
+        "forbidden_zones": ["west_mid_hall"],
         "speed_limit": 0.8,
         "assigned_robots": ["R1"],
         "task_sequence": [
-            {"cmd": "go_to", "robot": "R1", "params": {"to": "central-supply"}},
+            {"cmd": "go_to", "robot": "R1", "params": {"to": "east_waiting_approach"}},
             {"cmd": "wait", "robot": "R1", "params": {"seconds": 5}},
             {"cmd": "go_to", "robot": "R1", "params": {"to": destination}},
             {"cmd": "photo", "robot": "R1", "params": {}},
@@ -117,11 +122,11 @@ def test_forbidden_zone_boundary_enforcement(tmp_path):
     res = supervisor.process_lease(forbidden_lease)
 
     assert res["status"] == "FAILED_BOUNDARY"
-    assert "Forbidden zone: ward-2C-isolation" in res["reason"]
+    assert "Forbidden zone: west_mid_hall" in res["reason"]
 
 
 def test_expiry_watchdog_safe_parking(tmp_path):
-    """Verifies that expired lease forces robots to park in safe spot (FR-6)."""
+    """Verifies that expired lease forces robots to park in safe spot (FR-6 / Invariant 4)."""
     db_file = str(tmp_path / "test_edge.db")
     supervisor = EdgeSupervisor(cluster_id="east-wing", db_path=db_file, slm_mode="mock")
 
@@ -131,7 +136,38 @@ def test_expiry_watchdog_safe_parking(tmp_path):
     assert res["status"] == "EXPIRED_PARKED"
     assert "parked in safe spot" in res["reason"]
     assert res["parking"]["action"] == "go_to"
-    assert res["parking"]["params"]["to"] == "safe-parking-bay-1"
+    # Adheres to Person 1's hospital topology: parks in safe bay recess, never in a doorway/gate
+    assert res["parking"]["params"]["to"] in ("east_waiting_approach", "safe-parking-bay-1")
+    assert res["parking"]["params"]["to"] not in supervisor.gates
+    assert "target" in res["parking"]["params"]
+
+
+def test_topology_integration_and_waypoint_tracking(tmp_path):
+    """Verifies Person 1's Gazebo hospital topology and waypoints are integrated in Edge."""
+    db_file = str(tmp_path / "test_edge.db")
+    supervisor_east = EdgeSupervisor(cluster_id="east-wing", db_path=db_file, slm_mode="mock")
+    supervisor_west = EdgeSupervisor(cluster_id="west-wing", db_path=db_file, slm_mode="mock")
+
+    # 1. 13-node topology loaded with correct node classifications
+    assert len(supervisor_east.waypoints) >= 13
+    assert "lift_lobby" in supervisor_east.waypoints
+    assert "nurse_station_approach" in supervisor_east.waypoints
+    assert "east_waiting_approach" in supervisor_east.waypoints
+
+    # 2. Gate/doorway exclusion: gates must not be marked as safe parking
+    assert "lift_lobby" in supervisor_east.gates
+    assert "east_north_gate" in supervisor_east.gates
+    for gate in supervisor_east.gates:
+        assert gate not in supervisor_east.safe_parking_spots
+
+    # 3. Cluster localization
+    assert supervisor_east.home_zone == "east_waiting_approach"
+    assert "R1" in supervisor_east.robots
+    assert supervisor_east.robots["R1"].pose[:2] == [4.5, 8.0]
+
+    assert supervisor_west.home_zone == "west_waiting_approach"
+    assert "R4" in supervisor_west.robots
+    assert supervisor_west.robots["R4"].pose[:2] == [-4.5, 8.0]
 
 
 def test_heartbeat_and_checkin_resilience(tmp_path):

@@ -3,6 +3,7 @@ Nimbus Experiment E1: Edge SLM Benchmarking & Latency Profiler
 Validates NFR-1 (p95 <= 10.0 s, <= 150 output tokens) and FR-3 (Valid tactical decisions).
 Can be executed on local CPU or Lab GPU (RTX 3060 / Jetson AGX Orin).
 Outputs results directly to stdout and saves to benchmarks/e1_results.md.
+Incorporates Person 1's Gazebo hospital topology graph nodes.
 """
 
 from datetime import datetime
@@ -13,8 +14,8 @@ import platform
 import statistics
 import sys
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 
 # Ensure repository root containing 'edge' is on sys.path regardless of execution working directory
 _current = Path(__file__).resolve().parent
@@ -28,7 +29,7 @@ while _current.parent != _current:
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-# Benchmark test scenarios representing hospital dynamic edge events
+# Benchmark test scenarios representing hospital dynamic edge events using Person 1's topology
 BENCHMARK_PROMPTS = [
     {
         "id": "SC-01",
@@ -38,13 +39,13 @@ BENCHMARK_PROMPTS = [
             "version": 1,
             "time_remaining_sec": 450.0,
             "robot_id": "R1",
-            "current_pos": [5.0, 2.0],
-            "current_zone": "corridor-2B",
-            "allowed_zones": ["central-supply", "corridor-2B", "2B-12"],
-            "forbidden_zones": ["ward-2C-isolation"],
-            "event_description": "Corridor clear; ready for next waypoint wp-2B-12.",
-            "allowed_waypoints": ["wp-2B-12"]
-        }
+            "current_pos": [4.5, 3.0],
+            "current_zone": "east_mid_hall",
+            "allowed_zones": ["east_waiting_approach", "east_mid_hall", "nurse_station_approach"],
+            "forbidden_zones": ["west_mid_hall"],
+            "event_description": "Corridor clear; ready for next waypoint nurse_station_approach.",
+            "allowed_waypoints": ["nurse_station_approach"],
+        },
     },
     {
         "id": "SC-02",
@@ -54,29 +55,35 @@ BENCHMARK_PROMPTS = [
             "version": 1,
             "time_remaining_sec": 400.0,
             "robot_id": "R1",
-            "current_pos": [8.5, 4.0],
-            "current_zone": "corridor-2B",
-            "allowed_zones": ["central-supply", "corridor-2B", "2B-12"],
-            "forbidden_zones": ["ward-2C-isolation"],
-            "event_description": "Cleaning cart blocking main corridor; bypass wp-2B-alt available.",
-            "allowed_waypoints": ["wp-2B-main", "wp-2B-alt"]
-        }
+            "current_pos": [4.5, 3.0],
+            "current_zone": "east_mid_hall",
+            "allowed_zones": [
+                "east_waiting_approach",
+                "east_mid_hall",
+                "east_north_gate",
+                "north_hall",
+                "nurse_station_approach",
+            ],
+            "forbidden_zones": ["west_mid_hall"],
+            "event_description": "Cleaning cart blocking east_mid_hall; bypass east_north_gate available.",
+            "allowed_waypoints": ["east_mid_hall", "east_north_gate"],
+        },
     },
     {
         "id": "SC-03",
-        "description": "Instruction ambiguity: multiple pediatric beds",
+        "description": "Instruction ambiguity: multiple equipment racks in approach",
         "context": {
             "lease_id": "lease-bench-03",
             "version": 1,
             "time_remaining_sec": 380.0,
             "robot_id": "R1",
-            "current_pos": [12.0, 4.0],
-            "current_zone": "ward-2B",
-            "allowed_zones": ["corridor-2B", "ward-2B"],
-            "forbidden_zones": ["ward-2C-isolation"],
-            "event_description": "Arrived at Bed 12; two cribs detected (12A, 12B). Unclear which needs pump.",
-            "allowed_waypoints": ["bed-12A", "bed-12B"]
-        }
+            "current_pos": [0.0, -15.0],
+            "current_zone": "south_equipment_approach",
+            "allowed_zones": ["east_south_hall", "south_equipment_approach"],
+            "forbidden_zones": ["west_south_hall"],
+            "event_description": "Arrived at equipment room; two racks detected (Rack-A, Rack-B). Unclear which needs pump.",
+            "allowed_waypoints": ["south_equipment_approach", "south_room_approach"],
+        },
     },
     {
         "id": "SC-04",
@@ -86,13 +93,13 @@ BENCHMARK_PROMPTS = [
             "version": 1,
             "time_remaining_sec": 320.0,
             "robot_id": "R1",
-            "current_pos": [9.0, 3.5],
-            "current_zone": "corridor-2B",
-            "allowed_zones": ["corridor-2B"],
-            "forbidden_zones": ["ward-2C-isolation"],
+            "current_pos": [4.5, -8.0],
+            "current_zone": "east_south_hall",
+            "allowed_zones": ["east_south_hall"],
+            "forbidden_zones": ["west_south_hall"],
             "event_description": "Fire door closed and locked; no alternative corridor inside East wing.",
-            "allowed_waypoints": ["corridor-2B-exit"]
-        }
+            "allowed_waypoints": ["east_waiting_approach"],
+        },
     },
     {
         "id": "SC-05",
@@ -102,14 +109,14 @@ BENCHMARK_PROMPTS = [
             "version": 1,
             "time_remaining_sec": 12.0,
             "robot_id": "R1",
-            "current_pos": [7.0, 2.0],
-            "current_zone": "corridor-2B",
-            "allowed_zones": ["corridor-2B", "2B-12"],
-            "forbidden_zones": ["ward-2C-isolation"],
-            "event_description": "Lease timer expiring in 12 seconds; delivery not complete.",
-            "allowed_waypoints": ["safe-bay-1"]
-        }
-    }
+            "current_pos": [4.5, 3.0],
+            "current_zone": "east_mid_hall",
+            "allowed_zones": ["east_mid_hall", "nurse_station_approach"],
+            "forbidden_zones": ["west_mid_hall"],
+            "event_description": "Lease timer expiring in 12 seconds; heading to safe parking bay.",
+            "allowed_waypoints": ["east_waiting_approach"],
+        },
+    },
 ]
 
 
@@ -125,6 +132,7 @@ def run_benchmark(model_name: str = "qwen2.5:1.5b", trials: int = 3, ollama_url:
     print("=" * 75)
 
     from edge.slm.engine import EdgeSLMEngine
+
     engine = EdgeSLMEngine(model_name=model_name, mode="auto")
     print(f"  SLM Engine Initialized in Mode: {engine.mode}")
 
@@ -159,7 +167,7 @@ def run_benchmark(model_name: str = "qwen2.5:1.5b", trials: int = 3, ollama_url:
                 "decided_by": decided_by,
                 "action": decision.get("action"),
                 "latency_ms": lat_ms,
-                "valid": is_valid_json
+                "valid": is_valid_json,
             })
             print(f"  [{total_calls:02d}] {scenario['id']} Trial {trial}: {lat_ms:6.1f} ms | Decided: {decided_by} | Action: {decision.get('action')}")
 
@@ -204,7 +212,7 @@ def run_benchmark(model_name: str = "qwen2.5:1.5b", trials: int = 3, ollama_url:
 | **Min Latency** | `{min_sec:.3f} s` | N/A | OK |
 | **Median (p50)** | `{p50_sec:.3f} s` | N/A | OK |
 | **Mean** | `{mean_sec:.3f} s` | N/A | OK |
-| **p95 Latency** | **`{p95_sec:.3f} s`** | **$\le 10.0$ s** | **{'PASS' if p95_sec <= 10.0 else 'FAIL'}** |
+| **p95 Latency** | **`{p95_sec:.3f} s`** | **$\\le 10.0$ s** | **{'PASS' if p95_sec <= 10.0 else 'FAIL'}** |
 | **Max Latency** | `{max_sec:.3f} s` | N/A | OK |
 | **JSON Syntax Adherence** | **`{json_rate:.1f}%`** | **100%** | **OK** |
 
@@ -222,5 +230,6 @@ def run_benchmark(model_name: str = "qwen2.5:1.5b", trials: int = 3, ollama_url:
 
 if __name__ == "__main__":
     import sys
+
     model = sys.argv[1] if len(sys.argv) > 1 else "qwen2.5:1.5b"
     run_benchmark(model_name=model, trials=3)

@@ -3,6 +3,7 @@ Nimbus Edge Supervisor Runner (Person 2)
 Runs a continuous Edge Supervisor daemon for a specific cluster (e.g. east-wing or west-wing).
 Sends periodic idle heartbeats (POST /fleet/heartbeat), active lease check-ins (POST /checkins),
 polls cloud outbox for leases, executes sub-tasks locally, and sends OUTPUT_READY escalations.
+Incorporates Person 1's Gazebo hospital topology and waypoints for spatial authority.
 
 Usage:
     python edge/run_supervisor.py --cluster east-wing
@@ -33,10 +34,21 @@ def main():
     parser.add_argument("--db", default=None, help="Path to local SQLite DB (defaults to edge_<cluster>.db)")
     parser.add_argument("--interval", type=float, default=2.0, help="Outbox polling interval in seconds")
     parser.add_argument("--heartbeat-interval", type=float, default=15.0, help="Idle heartbeat interval in seconds")
+    parser.add_argument("--topology", default=None, help="Path to custom hospital_topology.json")
+    parser.add_argument("--waypoints", default=None, help="Path to custom topology_waypoints.json")
     parser.add_argument("--once", action="store_true", help="Poll once and exit")
     args = parser.parse_args()
 
     db_path = args.db or f"edge_{args.cluster.replace('-', '_')}.db"
+
+    supervisor = EdgeSupervisor(
+        cluster_id=args.cluster,
+        cloud_url=args.cloud_url,
+        db_path=db_path,
+        slm_mode="auto",
+        topology_file=args.topology,
+        waypoints_file=args.waypoints,
+    )
 
     print("=" * 65)
     print(f"  NIMBUS EDGE SUPERVISOR DAEMON: [{args.cluster.upper()}]")
@@ -44,16 +56,12 @@ def main():
     print(f"  Cluster ID      : {args.cluster}")
     print(f"  Cloud Endpoint  : {args.cloud_url}")
     print(f"  Local SQLite DB : {db_path}")
+    print(f"  Topology Graph  : {len(supervisor.topology.get('nodes', {}))} nodes, {len(supervisor.waypoints)} waypoints")
+    print(f"  Home Zone       : {supervisor.home_zone}")
+    print(f"  Safe Parking Bay: {supervisor.safe_parking_zone}")
     print(f"  Polling Interval: {args.interval}s")
     print(f"  Heartbeat Rate  : every {args.heartbeat_interval}s while idle")
     print("  Status          : Active & Listening for Leases...\n")
-
-    supervisor = EdgeSupervisor(
-        cluster_id=args.cluster,
-        cloud_url=args.cloud_url,
-        db_path=db_path,
-        slm_mode="auto"
-    )
 
     processed_leases = set()
     last_heartbeat_time = 0.0
