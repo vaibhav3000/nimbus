@@ -100,7 +100,7 @@ def eligible_options(spec: dict, view: FleetView) -> tuple[list[Option], list[Ex
         if needs_stock(spec, pack) and c["stock"].get(spec["item"], 0) < 1:
             excluded.append(Exclusion(cid, f"no {spec['item']} in stock", True))
             continue
-        start = src if src is not None else topo.source_of(c["area"])
+        start = src if src is not None else topo.home_of(cid)
         route = topo.shortest_path(start, dest, allowed=zones - avoid, avoid=avoid)
         if route is None:
             excluded.append(Exclusion(cid, "no route inside the cluster avoiding restricted zones", False))

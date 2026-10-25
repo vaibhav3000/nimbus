@@ -20,8 +20,11 @@ DOWN_S = 120.0     # beyond this the cluster is treated as down
 
 
 class FleetRegistry:
-    def __init__(self, seed: dict, clock: Clock, *, healthy_s: float = HEALTHY_S, down_s: float = DOWN_S):
+    def __init__(self, seed: dict, clock: Clock, *, healthy_s: float = HEALTHY_S, down_s: float = DOWN_S,
+                 zones: set | None = None, stock_store=None):
         self.clock = clock
+        self.zones = zones              # map node ids; a reported zone outside them is ignored (None: accept any)
+        self.stock_store = stock_store  # durable stock (DynamoDB); None keeps counts in memory only
         self.healthy_s = healthy_s
         self.down_s = down_s
         self._lock = threading.RLock()
@@ -34,9 +37,13 @@ class FleetRegistry:
                 "stock": dict(c["stock"]),
                 "last_seen": None,  # datetime | None
             }
+        if self.stock_store is not None:
+            self.stock_store.seed(self.clusters)   # rows that are missing only: a restart keeps real counts
+            self.sync_stock()
 
     @classmethod
     def load(cls, clock: Clock, pack: Pack, **kw) -> "FleetRegistry":
+        kw.setdefault("zones", set(pack.topology_doc["nodes"]))
         return cls(pack.fleet_doc, clock, **kw)
 
     # -- health -------------------------------------------------------------------
@@ -52,10 +59,11 @@ class FleetRegistry:
             digest = digest or {}
             for r in digest.get("robots", []):
                 if r.get("id") in c["robots"]:
-                    c["robots"][r["id"]].update({k: r[k] for k in ("state", "zone", "battery") if k in r})
-            for item, qty in (digest.get("stock") or {}).items():
-                if isinstance(qty, int) and qty >= 0:
-                    c["stock"][item] = qty
+                    known = {k: r[k] for k in ("state", "zone", "battery") if k in r}
+                    if self.zones is not None and known.get("zone") not in self.zones:
+                        known.pop("zone", None)   # not a map node: keep the last zone we could route from
+                    c["robots"][r["id"]].update(known)
+            self._write_stock(cluster_id, digest.get("stock") or {})
             return True
 
     def health(self, cluster_id: str) -> str:
@@ -67,6 +75,36 @@ class FleetRegistry:
             return "healthy" if age <= self.healthy_s else "stale" if age <= self.down_s else "down"
 
     # -- stock ---------------------------------------------------------------------
+
+    def _write_stock(self, cluster_id: str, counts: dict) -> dict:
+        """Absolute counts (a check-in digest or an operator restock): memory, and the durable rows."""
+        stock = self.clusters[cluster_id]["stock"]
+        for item, qty in counts.items():
+            if isinstance(qty, int) and not isinstance(qty, bool) and qty >= 0:
+                if self.stock_store is not None and stock.get(item) != qty:
+                    self.stock_store.set(cluster_id, item, qty)
+                stock[item] = qty
+        return dict(stock)
+
+    def set_stock(self, cluster_id: str, counts: dict) -> dict:
+        with self._lock:
+            return self._write_stock(cluster_id, counts)
+
+    def sync_stock(self) -> None:
+        """Re-read the durable counts (after a lost race, or at startup)."""
+        if self.stock_store is None:
+            return
+        with self._lock:
+            for cid, items in self.stock_store.load().items():
+                if cid in self.clusters:
+                    self.clusters[cid]["stock"].update(items)
+
+    def return_stock(self, cluster_id: str, item: str) -> None:
+        """Give an item back for good (a cancelled task): memory and the durable row."""
+        with self._lock:
+            self.release_stock(cluster_id, item)
+            if self.stock_store is not None:
+                self.stock_store.add(cluster_id, item, 1)
 
     def reserve_stock(self, cluster_id: str, item: str) -> bool:
         with self._lock:

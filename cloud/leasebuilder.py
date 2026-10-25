@@ -40,14 +40,15 @@ def build_lease(task_id: str, spec: dict, proposal: Proposal, result: CheckResul
         for z in route:
             if z not in allowed:
                 allowed.append(z)
-    for z in (spec["destination"], spec.get("source")):
+    destination = topo.canonical_zone(spec["destination"])
+    for z in (destination, topo.canonical_zone(spec["source"]) if spec.get("source") else None):
         if z and z not in allowed:
             allowed.append(z)
     caps = [c for z in allowed if (c := topo.speed_cap(z)) is not None]
     robot = proposal.robot_ids[0]
     item = pack.item(spec["item"]) or {}
     template = pack.doc["task_templates"][item.get("template", pack.doc["default_template"])]
-    vars_ = {"source": result.source_zone, "destination": spec["destination"], "route": result.routes[0], "robot": robot}
+    vars_ = {"source": result.source_zone, "destination": destination, "route": result.routes[0], "robot": robot}
     return {
         "lease_id": f"lease-{task_id}-v{version}",
         "version": version,
