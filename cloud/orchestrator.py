@@ -115,12 +115,15 @@ class Orchestrator:
             from .llm import CassetteLLM
             mode = os.environ.get("NIMBUS_CASSETTE_MODE", "replay")
             llm = CassetteLLM(llm if mode == "record" else None, Path(os.environ["NIMBUS_CASSETTE"]), mode)
+        stock_store = None
         if os.environ.get("NIMBUS_BACKEND", "local") == "aws":
-            from .aws_dynamo import DynamoLeaseRepo
+            from .aws_dynamo import DynamoLeaseRepo, DynamoStockStore
             repo = DynamoLeaseRepo.from_env()
+            stock_store = DynamoStockStore.from_env()
         else:
             repo = MemoryLeaseRepo(Path(data_dir) / "claims.json")
-        return cls(pack=pack, topo=topo, fleet=FleetRegistry.load(clock, pack), policies=PolicyBook(pack), repo=repo,
+        return cls(pack=pack, topo=topo, fleet=FleetRegistry.load(clock, pack, stock_store=stock_store),
+                   policies=PolicyBook(pack), repo=repo,
                    scheduler=Scheduler(pack.ranks), llm=llm, clock=clock,
                    mode=os.environ.get("NIMBUS_MODE", "C1"),
                    allow_unknown=os.environ.get("NIMBUS_ALLOW_UNKNOWN", "1") == "1",
@@ -321,10 +324,12 @@ class Orchestrator:
                     state["feedback"], state["conflict"] = "stock taken concurrently", True
                     continue
                 try:
-                    self.repo.commit(lease, claim_keys_for(lease, self.topo.exclusive_zones()), now=self.clock.now())
+                    self.repo.commit(lease, claim_keys_for(lease, self.topo.exclusive_zones()), now=self.clock.now(),
+                                     stock=(prop.cluster_id, spec["item"]) if uses_stock and self.fleet.stock_store else None)
                 except Conflict as exc:
                     if uses_stock:
                         self.fleet.release_stock(prop.cluster_id, spec["item"])
+                        self.fleet.sync_stock()   # the durable count may be lower than our copy
                     attempts[-1]["conflict"] = exc.reasons
                     state["feedback"], state["conflict"] = "; ".join(exc.reasons), True
                     continue
@@ -458,7 +463,7 @@ class Orchestrator:
         self.finish(task)
         res = task.get("reservation")
         if res and not task.get("stock_released"):
-            self.fleet.release_stock(res["cluster"], res["item"])
+            self.fleet.return_stock(res["cluster"], res["item"])
             task["stock_released"] = True
 
     def drain(self, load_task) -> list:

@@ -29,7 +29,7 @@ class Conflict(Exception):
 
 
 class LeaseRepo(Protocol):
-    def commit(self, lease: dict, claim_keys: list[str], *, now: datetime) -> None: ...
+    def commit(self, lease: dict, claim_keys: list[str], *, now: datetime, stock: tuple | None = None) -> None: ...
     def renew(self, task_id: str, version: int, new_expiry: str, *, now: datetime) -> dict: ...
     def release(self, task_id: str) -> list[str]: ...
     def holder(self, key: str, now: datetime) -> dict | None: ...
@@ -63,7 +63,8 @@ class MemoryLeaseRepo:
             rec = self.leases.get(task_id)
             return dict(rec["lease"]) if rec and rec["state"] == "live" else None
 
-    def commit(self, lease: dict, claim_keys: list[str], *, now: datetime) -> None:
+    def commit(self, lease: dict, claim_keys: list[str], *, now: datetime, stock: tuple | None = None) -> None:
+        # `stock` is ignored here: in memory the fleet registry holds the counts (reserve_stock).
         task_id = _task_of(lease)
         with self._lock:
             rec = self.leases.get(task_id)

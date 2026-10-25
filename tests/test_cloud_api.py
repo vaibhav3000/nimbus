@@ -137,3 +137,26 @@ def test_bad_replan_requests_are_rejected(api):
     task_id = sc1_leased(api)
     assert http_json("POST", api + f"/tasks/{task_id}/replan", {"message_id": "m1"})[0] == 400
     assert http_json("POST", api + "/tasks/task-999999/replan", {"blocked_zones": ["E3"], "message_id": "m2"})[0] == 404
+
+
+# -- operator restock (POST /fleet/stock, added by P3) ---------------------------------------------------
+
+def test_restock_sets_counts_shows_in_the_fleet_and_unblocks_queued_work(api):
+    status, body = http_json("POST", api + "/fleet/stock", {"cluster_id": "east-wing", "stock": {"wheelchair": 0}})
+    assert status == 201 and body["stock"]["wheelchair"] == 0
+    _, req = http_json("POST", api + "/requests", {"text": "Deliver a wheelchair to ward 3, routine.", "message_id": "msg-stock-1"})
+    assert req["status"] == "queued" and "wheelchair" in req["reason"]
+    status, body = http_json("POST", api + "/fleet/stock", {"cluster_id": "east-wing", "stock": {"wheelchair": 1}})
+    assert status == 201 and body["stock"]["wheelchair"] == 1
+    _, fleet = http_json("GET", api + "/fleet")
+    assert next(c for c in fleet["fleet"] if c["cluster_id"] == "east-wing")["stock"]["wheelchair"] == 0   # the drained task took it
+    _, task = http_json("GET", api + f"/tasks/{req['task_id']}")
+    assert task["status"] == "leased"
+
+
+def test_restock_rejects_bad_input(api):
+    assert http_json("POST", api + "/fleet/stock", {"cluster_id": "mars", "stock": {"wheelchair": 1}})[0] == 404
+    assert http_json("POST", api + "/fleet/stock", {"cluster_id": "east-wing", "stock": {"wheelchair": -1}})[0] == 400
+    assert http_json("POST", api + "/fleet/stock", {"cluster_id": "east-wing", "stock": {"wheelchair": 1.5}})[0] == 400
+    assert http_json("POST", api + "/fleet/stock", {"cluster_id": "east-wing", "stock": {"unicorn": 1}})[0] == 400
+    assert http_json("POST", api + "/fleet/stock", {"cluster_id": "east-wing"})[0] == 400

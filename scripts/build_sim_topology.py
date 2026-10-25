@@ -1,9 +1,11 @@
 """Build packs/hospital_sim/topology.json from P1's Gazebo topology plus the
 planning overlay (packs/hospital_sim/overlay.json).
 
-P1's file is read, never edited. The overlay says what each node is for the
-planner (kind, area, aliases...); its fields go on top of P1's. Speed caps and
-edge weights stay P1's. Re-run after P1 updates their map:
+P1's files are read, never edited. The overlay says what each node is for the
+planner (kind, area, label, beds...); its fields go on top of P1's node. Aliases
+are the overlay's plus the ones P1 declares in scenario_locations.json (their
+logical ward and store names; a bed is not a node, so bed aliases are skipped).
+Speed caps and edge weights stay P1's. Re-run after P1 updates their map:
 
     python scripts/build_sim_topology.py
 """
@@ -26,7 +28,14 @@ def build(overlay_path: Path = OVERLAY) -> dict:
     missing = sorted(set(overlay["nodes"]) - set(base["nodes"]))
     if missing:
         raise ValueError(f"overlay names nodes that are not in {overlay['base']}: {missing}")
-    nodes = {nid: {**attrs, **overlay["nodes"].get(nid, {})} for nid, attrs in base["nodes"].items()}
+    p1_aliases = _p1_aliases(overlay, base)
+    nodes = {}
+    for nid, attrs in base["nodes"].items():
+        node = {**attrs, **overlay["nodes"].get(nid, {})}
+        names = _dedupe([*node.get("aliases", []), *p1_aliases.get(nid, [])])
+        if names:
+            node["aliases"] = names
+        nodes[nid] = node
     return {
         "version": overlay["version"],
         "note": NOTE.format(base=overlay["base"]),
@@ -34,6 +43,31 @@ def build(overlay_path: Path = OVERLAY) -> dict:
         "edges": base["edges"],
         "clusters": overlay["clusters"],
     }
+
+
+def _p1_aliases(overlay: dict, base: dict) -> dict:
+    """node id -> the names P1's scenario_locations.json gives it (not beds)."""
+    if "locations" not in overlay:
+        return {}
+    doc = json.loads((ROOT / overlay["locations"]).read_text(encoding="utf-8"))
+    out: dict = {}
+    for stable_id, loc in doc["locations"].items():
+        if loc.get("logical_kind") == "bed":
+            continue
+        node = loc["physical_node"]
+        if node not in base["nodes"]:
+            raise ValueError(f"{overlay['locations']}: {stable_id} names unknown node {node!r}")
+        out.setdefault(node, []).extend([stable_id, *loc.get("aliases", [])])
+    return out
+
+
+def _dedupe(names: list) -> list:
+    seen, out = set(), []
+    for n in names:
+        if n.lower() not in seen:
+            seen.add(n.lower())
+            out.append(n)
+    return out
 
 
 def render(doc: dict) -> str:

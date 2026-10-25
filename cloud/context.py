@@ -98,7 +98,8 @@ class Context:
         lines.append("Fleet:")
         for c in self.fleet:
             robots = ", ".join(
-                f"{r['id']}={'busy' if r['id'] in self.busy_robots else r['state']}" for r in c["robots"])
+                f"{r['id']}={'busy' if r['id'] in self.busy_robots else ('idle' if r['state'] == 'busy' else r['state'])}"
+                for r in c["robots"])
             stock = ", ".join(f"{k}={v}" for k, v in c["stock"].items() if v)
             lines.append(f"  {c['cluster_id']} area={c['area']} health={c['health']} robots[{robots}] stock[{stock}]")
         if self.restrictions:

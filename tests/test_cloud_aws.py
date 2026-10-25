@@ -341,3 +341,94 @@ def test_cassette_key_ignores_the_clock_but_not_the_prompt(tmp_path):
     assert replay.converse(**mk("2026-10-19T17:45:10Z")).tool_calls  # a later run still replays
     with pytest.raises(LLMError):
         replay.converse(**mk("2026-10-19T17:45:10Z", " plus new rule"))
+
+
+# -- durable stock: counts live in DynamoDB, taken inside the lease transaction -----------------------
+
+from cloud.aws_dynamo import DynamoStockStore  # noqa: E402
+from cloud.fleet import FleetRegistry  # noqa: E402
+
+PAED = "Need a paediatric infusion pump at 2B-12, urgent."   # names the variant, so one turn leases
+
+
+def _qty(ddb, cluster, item):
+    client, names = ddb
+    row = client.get_item(TableName=names["state"], Key={"pk": {"S": f"STOCK#{cluster}#{item}"}}, ConsistentRead=True)["Item"]
+    return int(row["qty"]["N"])
+
+
+def _durable(ddb, clock=None):
+    """An orchestrator whose lease repo and fleet stock both live in DynamoDB."""
+    clock = clock or FixedClock()
+    fleet = FleetRegistry.load(clock, Pack.load("hospital"), stock_store=DynamoStockStore(*ddb))
+    return make_orch(clock=clock, repo=DynamoLeaseRepo(*ddb), fleet=fleet)
+
+
+def test_seed_counts_are_written_once_and_a_restart_keeps_the_real_ones(ddb):
+    orch = _durable(ddb)
+    assert _qty(ddb, "east-wing", "infusion_pump_paediatric") == 2
+    task = new_task()
+    out = orch.handle_request(task, PAED)
+    assert out.kind == "leased" and _qty(ddb, "east-wing", "infusion_pump_paediatric") == 1
+    restarted = _durable(ddb)          # a new process: a fresh registry over the same table
+    assert restarted.fleet.clusters["east-wing"]["stock"]["infusion_pump_paediatric"] == 1
+    assert _qty(ddb, "east-wing", "infusion_pump_paediatric") == 1   # seeding did not reset it
+
+
+def test_two_servers_racing_for_the_last_item_one_leases_and_one_queues(ddb):
+    a, b = _durable(ddb), _durable(ddb)
+    a.fleet.set_stock("east-wing", {"infusion_pump_paediatric": 1})
+    b.fleet.sync_stock()               # both now believe there is one left
+    assert b.fleet.clusters["east-wing"]["stock"]["infusion_pump_paediatric"] == 1
+    first = a.handle_request(new_task(1), PAED)
+    second = b.handle_request(new_task(2), PAED)    # its copy is stale: the transaction must refuse
+    assert (first.kind, second.kind) == ("leased", "queued")
+    assert "paediatric" in second.reason and "stock" in second.reason
+    assert _qty(ddb, "east-wing", "infusion_pump_paediatric") == 0            # never negative
+    assert b.repo.holder("robot:R2", b.clock.now()) is None                    # no half-committed claim
+    assert b.fleet.clusters["east-wing"]["stock"]["infusion_pump_paediatric"] == 0   # and the loser re-synced
+
+
+def test_a_restock_unblocks_the_queue(ddb):
+    orch = _durable(ddb)
+    orch.fleet.set_stock("east-wing", {"infusion_pump_paediatric": 0})
+    task = new_task()
+    out = orch.handle_request(task, PAED)
+    assert out.kind == "queued"
+    task.update(status="queued", spec=out.spec)
+    orch.fleet.set_stock("east-wing", {"infusion_pump_paediatric": 1})
+    assert _qty(ddb, "east-wing", "infusion_pump_paediatric") == 1
+    done = orch.drain(lambda tid: task if tid == task["task_id"] else None)
+    assert [t["task_id"] for t, o in done] == [task["task_id"]] and done[0][1].kind == "leased"
+    assert _qty(ddb, "east-wing", "infusion_pump_paediatric") == 0
+
+
+def test_cancel_gives_the_item_back_once_and_a_delivered_item_stays_consumed(ddb):
+    orch = _durable(ddb)
+    cancelled, delivered = new_task(1), new_task(2)
+    for t in (cancelled, delivered):
+        out = orch.handle_request(t, PAED)
+        t.update(lease=out.lease, spec=out.spec, reservation=out.reservation)
+    assert _qty(ddb, "east-wing", "infusion_pump_paediatric") == 0
+    orch.cancel(cancelled)
+    orch.cancel(cancelled)             # idempotent: not returned twice
+    assert _qty(ddb, "east-wing", "infusion_pump_paediatric") == 1
+    orch.finish(delivered)             # delivered: the item is gone for good
+    assert _qty(ddb, "east-wing", "infusion_pump_paediatric") == 1
+
+
+def test_a_checkin_stock_digest_writes_the_durable_rows(ddb):
+    orch = _durable(ddb)
+    orch.fleet.heartbeat("west-wing", {"stock": {"wheelchair": 7}})
+    assert _qty(ddb, "west-wing", "wheelchair") == 7
+    assert _durable(ddb).fleet.clusters["west-wing"]["stock"]["wheelchair"] == 7
+
+
+def test_in_memory_stock_is_unchanged_and_cancel_returns_it():
+    orch = make_orch()
+    task = new_task()
+    out = orch.handle_request(task, PAED)
+    task.update(lease=out.lease, spec=out.spec, reservation=out.reservation)
+    assert orch.fleet.clusters["east-wing"]["stock"]["infusion_pump_paediatric"] == 1
+    orch.cancel(task)
+    assert orch.fleet.clusters["east-wing"]["stock"]["infusion_pump_paediatric"] == 2
