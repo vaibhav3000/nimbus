@@ -2,7 +2,15 @@
 Nimbus Edge Supervisor Daemon (Person 2)
 Supervises local wing cluster, enforces lease boundaries (FR-5, FR-6),
 manages local persistence in SQLite (FR-10), executes sub-tasks on robots,
-and communicates with Cloud over HTTP REST (Milestone 1) and outbox.
+and communicates with Cloud over HTTP REST (Milestone 1 default) and outbox.
+
+Milestone 2 Integration Note (P2 Edge):
+- Default: HTTP REST (GET /outbox, POST /escalations, POST /checkins, POST /fleet/heartbeat).
+- When NIMBUS_TRANSPORT=mqtt is set, edge subscribes to:
+    nimbus/{cluster_id}/lease, nimbus/{cluster_id}/renewal, nimbus/{cluster_id}/probe
+  and publishes escalations and checkins to:
+    nimbus/{cluster_id}/escalation, nimbus/{cluster_id}/checkin
+  See docs/integration.md for full wiring specifications.
 """
 
 from datetime import datetime, timezone

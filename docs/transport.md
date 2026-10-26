@@ -68,3 +68,10 @@ If `paho-mqtt` is not installed or `NIMBUS_MQTT_STANDIN=1` is specified, Nimbus 
 - `NIMBUS_MQTT_PORT`: Broker port. Defaults to `1883`.
 - `NIMBUS_MQTT_STANDIN`: Set to `1` or `true` to force using the in-process stand-in broker regardless of `paho-mqtt` presence.
 - `NIMBUS_IOT_ENDPOINT`: Retained for AWS IoT Core integration in `cloud/aws_store.py` (when `NIMBUS_BACKEND=aws`).
+
+---
+
+## 6. Integration Guide for Edge (P2) and Cloud (P3)
+
+For detailed wiring diagrams, topic subscription patterns, and cost counter hooks, see [docs/integration.md](integration.md).
+

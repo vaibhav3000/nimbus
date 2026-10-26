@@ -7,6 +7,13 @@ UNEXPECTED_EVENT, which is how re-planning is exercised without a real edge.
     python scripts/edge_sim.py --cluster east-wing --block E3 --once
 
 Real edge (Person 2) replaces this; the messages are the contract's.
+
+Milestone 2 Integration Note (P2 Edge & P3 Cloud):
+- Default transport: HTTP REST (GET /outbox, POST /escalations, POST /checkins).
+- MQTT transport (when NIMBUS_TRANSPORT=mqtt):
+    Subscriptions: nimbus/{cluster}/lease, nimbus/{cluster}/renewal, nimbus/{cluster}/probe
+    Publications:  nimbus/{cluster}/escalation, nimbus/{cluster}/checkin
+See docs/integration.md for full wiring specifications.
 """
 
 from __future__ import annotations
@@ -20,6 +27,13 @@ from urllib.error import HTTPError
 
 
 class EdgeSim:
+    # Milestone 2 Canonical MQTT Topic Patterns (contracts/topics.md)
+    TOPIC_LEASE = "nimbus/{cluster}/lease"
+    TOPIC_RENEWAL = "nimbus/{cluster}/renewal"
+    TOPIC_PROBE = "nimbus/{cluster}/probe"
+    TOPIC_ESCALATION = "nimbus/{cluster}/escalation"
+    TOPIC_CHECKIN = "nimbus/{cluster}/checkin"
+
     def __init__(self, api: str, cluster: str, *, complete: bool = False, block: str | None = None,
                  robots: list | None = None):
         self.api, self.cluster = api.rstrip("/"), cluster
