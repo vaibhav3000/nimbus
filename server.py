@@ -13,6 +13,7 @@ import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import threading
 from urllib.parse import urlparse
 from typing import Any, Callable
 
@@ -24,6 +25,8 @@ from mqtt_transport import is_mqtt_enabled, make_mqtt_transport_from_env
 from store import Store
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+_STATE_LOCK = threading.RLock()
 
 
 def make_decision_row(orch: Orchestrator, who: str, inputs: dict, output: dict, lease_version, task_id: str) -> dict:
@@ -48,7 +51,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def publish(self, topic: str, payload: dict) -> None:
         """Publish outgoing messages (outbox mirror + optional MQTT)."""
-        self.store.append_outbox({"topic": topic, "payload": payload})
+        with _STATE_LOCK:
+            self.store.append_outbox({"topic": topic, "payload": payload})
 
     # -- helpers ---------------------------------------------------------
 
@@ -207,14 +211,15 @@ class Handler(BaseHTTPRequestHandler):
         so a delivery that fails validation never burns its id and an honest
         retry still goes through.
         """
-        message_id = body.get("message_id")
-        if not isinstance(message_id, str) or not message_id:
-            self._send_json(400, {"error": "message_id is required"})
-            return True, None
-        if message_id in self.store.seen_message_ids:
-            self._send_json(200, {"duplicate": True})
-            return True, message_id
-        return False, message_id
+        with _STATE_LOCK:
+            message_id = body.get("message_id")
+            if not isinstance(message_id, str) or not message_id:
+                self._send_json(400, {"error": "message_id is required"})
+                return True, None
+            if message_id in self.store.seen_message_ids:
+                self._send_json(200, {"duplicate": True})
+                return True, message_id
+            return False, message_id
 
     def _post_request(self, body: dict):
         text = body.get("text")
@@ -455,67 +460,68 @@ def process_escalation(
     drain_fn: Callable[[], None],
 ) -> tuple[int, dict]:
     """Ingress for edge escalations (PRD Table 2). Used by both HTTP and MQTT paths."""
-    message_id = body.get("message_id")
-    if not isinstance(message_id, str) or not message_id:
-        return 400, {"error": "message_id is required"}
-    if message_id in store.seen_message_ids:
-        return 200, {"duplicate": True}
+    with _STATE_LOCK:
+        message_id = body.get("message_id")
+        if not isinstance(message_id, str) or not message_id:
+            return 400, {"error": "message_id is required"}
+        if message_id in store.seen_message_ids:
+            return 200, {"duplicate": True}
 
-    esc_type = body.get("type")
-    task_id = body.get("task_id")
-    if esc_type not in ("CLARIFY", "UNEXPECTED_EVENT", "OUTPUT_READY"):
-        return 400, {"error": "unknown escalation type"}
+        esc_type = body.get("type")
+        task_id = body.get("task_id")
+        if esc_type not in ("CLARIFY", "UNEXPECTED_EVENT", "OUTPUT_READY"):
+            return 400, {"error": "unknown escalation type"}
 
-    errors = contracts.validate_document("escalation", body)
-    if errors:
-        return 400, {"error": "escalation violates schema", "detail": errors}
+        errors = contracts.validate_document("escalation", body)
+        if errors:
+            return 400, {"error": "escalation violates schema", "detail": errors}
 
-    task = store.get_task(task_id)
-    if task is None:
-        return 404, {"error": f"unknown task {task_id}"}
+        task = store.get_task(task_id)
+        if task is None:
+            return 404, {"error": f"unknown task {task_id}"}
 
-    current = task["lease"]["version"] if task.get("lease") else 0
-    if body["lease_version"] < current:
-        return 409, {"error": "outdated lease_version", "current": current}
+        current = task["lease"]["version"] if task.get("lease") else 0
+        if body["lease_version"] < current:
+            return 409, {"error": "outdated lease_version", "current": current}
 
-    if esc_type == "OUTPUT_READY":
-        task["status"] = "completed"
-        task["result_ref"] = body["payload"]["result_ref"]
-        orch.finish(task)  # robots and zones are free again
-        store.put_task(task)
+        if esc_type == "OUTPUT_READY":
+            task["status"] = "completed"
+            task["result_ref"] = body["payload"]["result_ref"]
+            orch.finish(task)  # robots and zones are free again
+            store.put_task(task)
 
-    store.see_message_id(message_id)  # accepted: record for FR-8 dedup
-    store.append_decision(
-        make_decision_row(
-            orch,
-            "edge",
-            dict(body["payload"]),
-            {"event": esc_type},
-            body["lease_version"],
-            task_id,
+        store.see_message_id(message_id)  # accepted: record for FR-8 dedup
+        store.append_decision(
+            make_decision_row(
+                orch,
+                "edge",
+                dict(body["payload"]),
+                {"event": esc_type},
+                body["lease_version"],
+                task_id,
+            )
         )
-    )
 
-    cost_map = {"sqs_messages": 1, "dynamodb_ops": 1}
-    if esc_type == "OUTPUT_READY":
-        cost_map["s3_ops"] = 1
-    cost.record(**cost_map)
+        cost_map = {"sqs_messages": 1, "dynamodb_ops": 1}
+        if esc_type == "OUTPUT_READY":
+            cost_map["s3_ops"] = 1
+        cost.record(**cost_map)
 
-    replanned = None
-    if esc_type == "UNEXPECTED_EVENT" and task.get("spec") and task.get("lease"):
-        blocked = _blocked_zones(orch.topo, body["payload"])
-        if blocked:
-            outcome = orch.replan(task, blocked_zones=blocked, reason=body["payload"]["what_happened"])
-            apply_fn(task, outcome)
-            replanned = outcome.kind == "leased"
+        replanned = None
+        if esc_type == "UNEXPECTED_EVENT" and task.get("spec") and task.get("lease"):
+            blocked = _blocked_zones(orch.topo, body["payload"])
+            if blocked:
+                outcome = orch.replan(task, blocked_zones=blocked, reason=body["payload"]["what_happened"])
+                apply_fn(task, outcome)
+                replanned = outcome.kind == "leased"
 
-    if esc_type == "OUTPUT_READY":
-        drain_fn()
+        if esc_type == "OUTPUT_READY":
+            drain_fn()
 
-    reply = {"duplicate": False, "accepted": True, "status": task["status"]}
-    if replanned is not None:
-        reply.update(replanned=replanned, lease_version=task["lease"]["version"])
-    return 201, reply
+        reply = {"duplicate": False, "accepted": True, "status": task["status"]}
+        if replanned is not None:
+            reply.update(replanned=replanned, lease_version=task["lease"]["version"])
+        return 201, reply
 
 
 def process_checkin(
@@ -525,58 +531,59 @@ def process_checkin(
     body: dict,
 ) -> tuple[int, dict]:
     """Edge check-in ingress (shape in contracts/topics.md). Used by both HTTP and MQTT paths."""
-    message_id = body.get("message_id")
-    if not isinstance(message_id, str) or not message_id:
-        return 400, {"error": "message_id is required"}
-    if message_id in store.seen_message_ids:
-        return 200, {"duplicate": True}
+    with _STATE_LOCK:
+        message_id = body.get("message_id")
+        if not isinstance(message_id, str) or not message_id:
+            return 400, {"error": "message_id is required"}
+        if message_id in store.seen_message_ids:
+            return 200, {"duplicate": True}
 
-    missing = [
-        k for k in ("cluster_id", "lease_id", "lease_version", "timestamp")
-        if k not in body
-    ]
-    if missing:
-        return 400, {"error": f"check-in missing {missing}"}
+        missing = [
+            k for k in ("cluster_id", "lease_id", "lease_version", "timestamp")
+            if k not in body
+        ]
+        if missing:
+            return 400, {"error": f"check-in missing {missing}"}
 
-    match = re.fullmatch(r"lease-(.+)-v\d+", body["lease_id"])
-    if not match:
-        return 400, {"error": "lease_id must be lease-<task_id>-v<version>"}
+        match = re.fullmatch(r"lease-(.+)-v\d+", body["lease_id"])
+        if not match:
+            return 400, {"error": "lease_id must be lease-<task_id>-v<version>"}
 
-    digest = {k: body[k] for k in ("robots", "stock") if k in body}
-    orch.fleet.heartbeat(body["cluster_id"], digest)  # alive, whatever the lease says
-    try:
-        renewed = orch.renew(match.group(1), body["lease_version"])
-    except StaleVersion as exc:
-        return 409, {"error": "outdated lease_version", "current": exc.current}
+        digest = {k: body[k] for k in ("robots", "stock") if k in body}
+        orch.fleet.heartbeat(body["cluster_id"], digest)  # alive, whatever the lease says
+        try:
+            renewed = orch.renew(match.group(1), body["lease_version"])
+        except StaleVersion as exc:
+            return 409, {"error": "outdated lease_version", "current": exc.current}
 
-    row = make_decision_row(
-        orch,
-        "edge",
-        {
-            "cluster_id": body["cluster_id"],
-            "lease_id": body["lease_id"],
-            "checkin_timestamp": body["timestamp"],
-        },
-        {"event": "checkin"},
-        body["lease_version"],
-        match.group(1),
-    )
-    errors = contracts.validate_document("decision_log_entry", row)
-    if errors:
-        return 400, {"error": "check-in violates decision-log contract", "detail": errors}
+        row = make_decision_row(
+            orch,
+            "edge",
+            {
+                "cluster_id": body["cluster_id"],
+                "lease_id": body["lease_id"],
+                "checkin_timestamp": body["timestamp"],
+            },
+            {"event": "checkin"},
+            body["lease_version"],
+            match.group(1),
+        )
+        errors = contracts.validate_document("decision_log_entry", row)
+        if errors:
+            return 400, {"error": "check-in violates decision-log contract", "detail": errors}
 
-    store.see_message_id(message_id)  # accepted: record for FR-8 dedup
-    store.append_decision(row)
-    cost.record(sqs_messages=1, dynamodb_ops=1)  # queue delivery + log row
-    reply = {"duplicate": False, "accepted": True}
-    if renewed:
-        task = store.get_task(match.group(1))
-        if task and task.get("lease"):
-            task["lease"] = renewed
-            store.put_task(task)
-        cost.record(iot_messages=1, dynamodb_ops=1)  # renewal message + lease write
-        reply["renewed_until"] = renewed["expiry_ts"]
-    return 201, reply
+        store.see_message_id(message_id)  # accepted: record for FR-8 dedup
+        store.append_decision(row)
+        cost.record(sqs_messages=1, dynamodb_ops=1)  # queue delivery + log row
+        reply = {"duplicate": False, "accepted": True}
+        if renewed:
+            task = store.get_task(match.group(1))
+            if task and task.get("lease"):
+                task["lease"] = renewed
+                store.put_task(task)
+            cost.record(iot_messages=1, dynamodb_ops=1)  # renewal message + lease write
+            reply["renewed_until"] = renewed["expiry_ts"]
+        return 201, reply
 
 
 class NimbusServer(ThreadingHTTPServer):
@@ -606,9 +613,10 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
         transport = make_mqtt_transport_from_env()
 
     def publish(topic: str, payload: dict) -> None:
-        store.append_outbox({"topic": topic, "payload": payload})
-        if transport:
-            transport.publish(topic, payload)
+        with _STATE_LOCK:
+            store.append_outbox({"topic": topic, "payload": payload})
+            if transport:
+                transport.publish(topic, payload)
 
     orch = Orchestrator.from_env(data_dir, publish)
     orch.recover(store.all_tasks())

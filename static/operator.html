@@ -1137,12 +1137,15 @@ function setupCommandFloor(canvas) {
     function updateTelemetryHUD() {
       const hudElem = document.getElementById("floor-telemetry");
       if (!hudElem) return;
+      // Build text safely using textContent — r.state/zone/targetZone are untrusted fleet data.
       const parts = [];
       for (const [rId, r] of Object.entries(robotStateData)) {
-        const dest = r.targetZone ? ` &rarr; ${r.targetZone}` : "";
-        parts.push(`${rId}: ${r.state.toUpperCase()} [${r.zone}${dest}, ${Math.round(r.battery * 100)}%]`);
+        const dest = r.targetZone ? ` \u2192 ${r.targetZone}` : "";
+        parts.push(
+          `${rId}: ${String(r.state).toUpperCase()} [${r.zone}${dest}, ${Math.round(r.battery * 100)}%]`
+        );
       }
-      hudElem.innerHTML = parts.join(" &bull; ");
+      hudElem.textContent = parts.join(" \u2022 ");
     }
 
     // Animation Render Loop

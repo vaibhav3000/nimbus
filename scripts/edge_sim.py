@@ -8,12 +8,11 @@ UNEXPECTED_EVENT, which is how re-planning is exercised without a real edge.
 
 Real edge (Person 2) replaces this; the messages are the contract's.
 
-Milestone 2 Integration Note (P2 Edge & P3 Cloud):
-- Default transport: HTTP REST (GET /outbox, POST /escalations, POST /checkins).
-- MQTT transport (when NIMBUS_TRANSPORT=mqtt):
-    Subscriptions: nimbus/{cluster}/lease, nimbus/{cluster}/renewal, nimbus/{cluster}/probe
-    Publications:  nimbus/{cluster}/escalation, nimbus/{cluster}/checkin
-See docs/integration.md for full wiring specifications.
+Transport Note:
+This simulation exercises the cloud via the default HTTP REST endpoints
+(GET /outbox, POST /escalations, POST /checkins). The canonical MQTT topic
+patterns from contracts/topics.md are referenced here for outbox topic
+matching. See docs/integration.md for full specifications.
 """
 
 from __future__ import annotations

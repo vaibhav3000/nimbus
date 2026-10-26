@@ -6,10 +6,10 @@ This document provides contract-stable integration instructions and conventions 
 
 ## 1. Person 2 (Edge Tier) Integration
 
-The Edge Tier connects to the Nimbus Cloud server using either the **Default HTTP Mode** or the **MQTT Transport Mode**. The contract shapes (`contracts/*.schema.json`) and message semantics remain identical across both modes.
+Currently, the Edge Tier communicates with the Nimbus Cloud server using the **Default HTTP Mode** (`/outbox`, `/escalations`, `/checkins`). The **MQTT Transport Mode** specifications below document the canonical topic contracts (`contracts/topics.md`) for when Person 2 adds an MQTT client to the supervisor. The contract shapes (`contracts/*.schema.json`) and message semantics remain identical across both modes.
 
 ### A. Default Mode: HTTP REST + Outbox Polling
-When `NIMBUS_TRANSPORT` is unset or set to `http`, all cloud-edge communication uses the standard Python stdlib HTTP endpoints.
+The existing edge supervisor communicates over the standard Python stdlib HTTP endpoints (Milestone 1 default).
 
 | Direction | Purpose | Endpoint | Method | Payload / Response |
 | :--- | :--- | :--- | :--- | :--- |
@@ -104,10 +104,10 @@ counters = cost.snapshot()
 #### Activating DynamoDB Cost Backend
 By default, counters persist to `data/cost.json` via `LocalFileCostBackend`. To switch to DynamoDB:
 
-1. Set `NIMBUS_COST_BACKEND=dynamodb` (or set `NIMBUS_BACKEND=aws`).
+1. Set `NIMBUS_COST_BACKEND=dynamodb` (or alias `NIMBUS_COST_BACKEND=aws`). Note that `NIMBUS_BACKEND=aws` alone does **not** activate the DynamoDB cost backend to prevent accidental cloud calls during local development.
 2. The server instantiates `DynamoCostBackend.from_env()`.
 3. In DynamoDB, counters are updated atomically using `UpdateExpression="ADD #c :v"` on item `Key={"pk": {"S": "COST#counters"}}` in the DynamoDB state table (`{prefix}-state`).
-4. If DynamoDB is temporarily unreachable or offline during local testing, `DynamoCostBackend` automatically tracks counts in memory with zero crashes.
+4. If DynamoDB is temporarily unreachable or offline during local testing, `DynamoCostBackend` automatically logs a warning and tracks counts in memory with zero crashes.
 
 #### Feeding Real Bedrock Token Usage
 In Milestone 2, Person 3 replaces stand-in heuristic tokens with real Bedrock Converse metrics. Pass usage directly from `LLMResult` into `cost.record`:
@@ -135,6 +135,6 @@ cost.record(
 | `NIMBUS_MQTT_HOST` | hostname / IP | `localhost` | MQTT broker address |
 | `NIMBUS_MQTT_PORT` | port number | `1883` | MQTT broker port |
 | `NIMBUS_MQTT_STANDIN` | `1`, `0` | `0` | Force in-process stand-in broker (no Mosquitto needed) |
-| `NIMBUS_COST_BACKEND` | `local`, `dynamodb`, `aws` | `local` | Explicit cost storage engine selection |
-| `NIMBUS_BACKEND` | `local`, `aws` | `local` | General backend selection (routes store & cost to AWS) |
+| `NIMBUS_COST_BACKEND` | `local`, `dynamodb`, `aws` | `local` | Explicit cost storage engine selection (`dynamodb` or alias `aws`) |
+| `NIMBUS_BACKEND` | `local`, `aws` | `local` | General backend selection (routes tasks/state store to AWS; does not alter cost backend) |
 | `NIMBUS_DDB_PREFIX` | string | `nimbus-ds252` | Table prefix for DynamoDB state and tasks |

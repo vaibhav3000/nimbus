@@ -83,10 +83,12 @@ class StandinMQTTClient:
     def __init__(self, broker: InMemoryBroker | None = None):
         self.broker = broker or _GLOBAL_STANDIN_BROKER
         self._subscriptions: list[tuple[str, Callable[[str, dict], None]]] = []
+        self._subs_lock = threading.Lock()
         self._running = False
 
     def subscribe(self, pattern: str, handler: Callable[[str, dict], None]) -> None:
-        self._subscriptions.append((pattern, handler))
+        with self._subs_lock:
+            self._subscriptions.append((pattern, handler))
         if self._running:
             self._register(pattern, handler)
 
@@ -135,6 +137,7 @@ class PahoMQTTClient:
             self._client = paho_mqtt.Client()
 
         self._handlers: list[tuple[str, Callable[[str, dict], None]]] = []
+        self._handlers_lock = threading.Lock()
         self._client.on_message = self._on_message
 
     def _on_message(self, client, userdata, msg) -> None:
@@ -145,7 +148,10 @@ class PahoMQTTClient:
             logger.warning("Paho MQTT payload parse error on %s: %s", topic, e)
             return
 
-        for pattern, handler in self._handlers:
+        with self._handlers_lock:
+            handlers = list(self._handlers)
+
+        for pattern, handler in handlers:
             if topic_matches(pattern, topic):
                 try:
                     handler(topic, data)
@@ -153,7 +159,8 @@ class PahoMQTTClient:
                     logger.warning("Handler error on %s: %s", topic, ex)
 
     def subscribe(self, pattern: str, handler: Callable[[str, dict], None]) -> None:
-        self._handlers.append((pattern, handler))
+        with self._handlers_lock:
+            self._handlers.append((pattern, handler))
 
     def publish(self, topic: str, payload: dict | str | bytes) -> None:
         if isinstance(payload, dict):

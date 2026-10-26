@@ -1,5 +1,6 @@
 """Unit tests for pluggable cost backends in cost.py."""
 
+from decimal import Decimal
 import json
 from pathlib import Path
 import pytest
@@ -37,9 +38,10 @@ class FakeDynamoClient:
         for clause in clauses:
             n_ref, v_ref = clause.split(" ")
             attr_name = ExpressionAttributeNames[n_ref]
-            delta = int(ExpressionAttributeValues[v_ref]["N"])
-            curr = int(item.get(attr_name, {}).get("N", "0"))
-            item[attr_name] = {"N": str(curr + delta)}
+            delta = Decimal(ExpressionAttributeValues[v_ref]["N"])
+            curr = Decimal(item.get(attr_name, {}).get("N", "0"))
+            res = curr + delta
+            item[attr_name] = {"N": str(int(res)) if res % 1 == 0 else str(res)}
         return {"Attributes": item}
 
     def get_item(self, TableName: str, Key: dict, ConsistentRead: bool = False):
@@ -152,3 +154,47 @@ def test_cost_book_facade_compatibility(tmp_path: Path):
     assert s["apigw_requests"] == 1
     assert s["data_transfer_bytes"] == 512
     assert book.counters["apigw_requests"] == 1
+
+
+def test_dynamo_backend_float_fargate_gbs_roundtrip():
+    """fargate_gbs is a float (e.g. 0.001). DynamoCostBackend must not truncate it via int()."""
+    fake_client = FakeDynamoClient()
+    table_name = "test-nimbus-float"
+
+    # Writer instance records a small float
+    writer = DynamoCostBackend(client=fake_client, table_name=table_name)
+    writer.record(fargate_gbs=0.001)
+
+    # Reader instance reads it back (simulates a second instance / fresh snapshot)
+    reader = DynamoCostBackend(client=fake_client, table_name=table_name)
+    snap = reader.snapshot()
+
+    # Must preserve float precision, not be truncated to 0
+    assert snap["fargate_gbs"] == pytest.approx(0.001, rel=1e-6), (
+        f"Expected ~0.001 but got {snap['fargate_gbs']} — int() truncation bug"
+    )
+
+    # Multiple writes accumulate correctly
+    writer.record(fargate_gbs=0.002)
+    snap2 = reader.snapshot()
+    assert snap2["fargate_gbs"] == pytest.approx(0.003, rel=1e-6)
+
+
+def test_make_cost_backend_nimbus_backend_aws_does_not_activate_dynamo(
+    tmp_path: Path, monkeypatch
+):
+    """NIMBUS_BACKEND=aws must NOT silently switch the cost backend to DynamoDB.
+    Only NIMBUS_COST_BACKEND=dynamodb should do that."""
+    monkeypatch.setenv("NIMBUS_BACKEND", "aws")
+    monkeypatch.delenv("NIMBUS_COST_BACKEND", raising=False)
+    b = make_cost_backend(tmp_path)
+    assert isinstance(b, LocalFileCostBackend), (
+        "NIMBUS_BACKEND=aws alone must not activate DynamoDB cost backend"
+    )
+
+
+def test_make_cost_backend_unknown_value_raises(tmp_path: Path, monkeypatch):
+    """Unknown NIMBUS_COST_BACKEND value must raise ValueError rather than silently falling back."""
+    monkeypatch.setenv("NIMBUS_COST_BACKEND", "unsupported_engine")
+    with pytest.raises(ValueError, match="Unknown NIMBUS_COST_BACKEND"):
+        make_cost_backend(tmp_path)
