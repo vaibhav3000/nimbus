@@ -230,83 +230,87 @@ class Handler(BaseHTTPRequestHandler):
         if dup:
             return
 
-        task_id = self.store.next_task_id()
-        task = {
-            "task_id": task_id,
-            "message_id": message_id,
-            "request_text": text,
-            "status": "received",
-            "question": None,
-            "lease": None,
-            "result_ref": None,
-        }
-        self.store.append_decision(
-            self._row("requester", {"text": text}, {"event": "request_received"}, None, task_id)
-        )
-        self._decide(task, lambda: self.orch.handle_request(
-            task, text, history=self.store.timeline(task_id)), created=True)
+        with _STATE_LOCK:
+            task_id = self.store.next_task_id()
+            task = {
+                "task_id": task_id,
+                "message_id": message_id,
+                "request_text": text,
+                "status": "received",
+                "question": None,
+                "lease": None,
+                "result_ref": None,
+            }
+            self.store.append_decision(
+                self._row("requester", {"text": text}, {"event": "request_received"}, None, task_id)
+            )
+            self._decide(task, lambda: self.orch.handle_request(
+                task, text, history=self.store.timeline(task_id)), created=True)
 
     def _decide(self, task: dict, run, *, created: bool = False) -> bool:
         """Run one orchestrator decision and answer the caller. Returns False
         after sending an error, in which case nothing more may be sent."""
-        try:
-            outcome = run()
-        except InvalidLeaseError as exc:
-            task["status"] = "rejected"
-            task.pop("message_id", None)  # faulted delivery must not burn the id
-            self.store.put_task(task)
-            self._send_json(500, {"error": "orchestrator produced an invalid lease", "detail": exc.errors})
-            return False
-        self._apply(task, outcome)
-        view = {"duplicate": False, "task_id": task["task_id"], "status": task["status"]}
-        if created or task["status"] == "needs_clarification":
-            view["question"] = task.get("question")
-        if not created:
-            view["lease"] = task.get("lease")
-        for key in ("notice", "reason"):
-            if task.get(key):
-                view[key] = task[key]
-        self._send_json(201, view)
-        return True
+        with _STATE_LOCK:
+            try:
+                outcome = run()
+            except InvalidLeaseError as exc:
+                task["status"] = "rejected"
+                task.pop("message_id", None)  # faulted delivery must not burn the id
+                self.store.put_task(task)
+                self._send_json(500, {"error": "orchestrator produced an invalid lease", "detail": exc.errors})
+                return False
+            self._apply(task, outcome)
+            view = {"duplicate": False, "task_id": task["task_id"], "status": task["status"]}
+            if created or task["status"] == "needs_clarification":
+                view["question"] = task.get("question")
+            if not created:
+                view["lease"] = task.get("lease")
+            for key in ("notice", "reason"):
+                if task.get(key):
+                    view[key] = task[key]
+            self._send_json(201, view)
+            return True
 
     def _apply(self, task: dict, outcome) -> None:
         """Persist an orchestrator Outcome: log rows first, then the state they
         explain (FR-20 replay order), then publish and meter."""
-        task_id = task["task_id"]
-        for r in outcome.rows:
-            self.store.append_decision(self._row(r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
-        task["notice"] = outcome.notice
-        if outcome.spec:
-            task["spec"] = outcome.spec
-        if outcome.kind == "clarify":
-            task["status"], task["question"] = "needs_clarification", outcome.question
-        elif outcome.kind == "leased":
-            task["status"], task["question"], task["reason"] = "leased", None, None
-            task["lease"] = outcome.lease
-            if outcome.reservation:
-                task["reservation"], task["stock_released"] = outcome.reservation, False
-        elif outcome.kind == "queued":
-            task["status"], task["reason"] = "queued", outcome.reason
-        elif outcome.kind == "rejected":
-            task["status"], task["reason"] = "rejected", outcome.reason
-        self.store.put_task(task)  # records task["message_id"] as seen
-        for topic, payload in outcome.publish:
-            self.publish(topic, payload)
-        # T_in/T_out from the model's usage (estimates for the offline stand-in);
-        # M: leases published; W: rows + task write; F/K: flat per-decision stand-ins.
-        self.cost.record(
-            input_tokens=outcome.tokens_in,
-            output_tokens=outcome.tokens_out,
-            iot_messages=len(outcome.publish),
-            dynamodb_ops=len(outcome.rows) + 2,
-            fargate_gbs=0.001,
-            cloudwatch_metrics=1,
-        )
+        with _STATE_LOCK:
+            task_id = task["task_id"]
+            for r in outcome.rows:
+                self.store.append_decision(self._row(r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
+            task["notice"] = outcome.notice
+            if outcome.spec:
+                task["spec"] = outcome.spec
+            if outcome.kind == "clarify":
+                task["status"], task["question"] = "needs_clarification", outcome.question
+            elif outcome.kind == "leased":
+                task["status"], task["question"], task["reason"] = "leased", None, None
+                task["lease"] = outcome.lease
+                if outcome.reservation:
+                    task["reservation"], task["stock_released"] = outcome.reservation, False
+            elif outcome.kind == "queued":
+                task["status"], task["reason"] = "queued", outcome.reason
+            elif outcome.kind == "rejected":
+                task["status"], task["reason"] = "rejected", outcome.reason
+            self.store.put_task(task)  # records task["message_id"] as seen
+            for topic, payload in outcome.publish:
+                self.publish(topic, payload)
+            # T_in/T_out from the model's usage (estimates for the offline stand-in);
+            # M: leases published; W: rows + task write; F/K: flat per-decision stand-ins.
+            self.cost.record(
+                input_tokens=outcome.tokens_in,
+                output_tokens=outcome.tokens_out,
+                iot_messages=len(outcome.publish),
+                dynamodb_ops=len(outcome.rows) + 2,
+                fargate_gbs=0.001,
+                cloudwatch_metrics=1,
+            )
 
     def _drain(self) -> None:
         """Capacity freed: lease queued tasks in priority/deadline order."""
-        for task, outcome in self.orch.drain(self.store.get_task):
-            self._apply(task, outcome)
+        with _STATE_LOCK:
+            for task, outcome in self.orch.drain(self.store.get_task):
+                self._apply(task, outcome)
 
     def _post_answer(self, task_id: str, body: dict):
         task = self.store.get_task(task_id)
@@ -324,21 +328,22 @@ class Handler(BaseHTTPRequestHandler):
         if dup:
             return
 
-        task["message_id"] = message_id
-        question = task["question"]
-        self.store.append_decision(
-            self._row(
-                "requester",
-                {"text": text, "question": question},
-                {"event": "clarification_answered"},
-                None,
-                task_id,
+        with _STATE_LOCK:
+            task["message_id"] = message_id
+            question = task["question"]
+            self.store.append_decision(
+                self._row(
+                    "requester",
+                    {"text": text, "question": question},
+                    {"event": "clarification_answered"},
+                    None,
+                    task_id,
+                )
             )
-        )
-        # The model sees the whole exchange: request, its question, the answer.
-        self._decide(task, lambda: self.orch.handle_request(
-            task, task["request_text"], question=question, answer=text,
-            history=self.store.timeline(task_id)))
+            # The model sees the whole exchange: request, its question, the answer.
+            self._decide(task, lambda: self.orch.handle_request(
+                task, task["request_text"], question=question, answer=text,
+                history=self.store.timeline(task_id)))
 
     def _post_escalation(self, body: dict):
         """Ingress for edge escalations (PRD Table 2; Person 3 replaces the
@@ -383,17 +388,18 @@ class Handler(BaseHTTPRequestHandler):
         if errors:
             self._send_json(400, {"error": "control intent violates decision-log contract", "detail": errors})
             return
-        new_status = {"pause": "paused", "cancel": "cancelled"}[action]
-        # Log row first, then the state it explains (FR-20 replay order).
-        self.store.append_decision(row)
-        task["status"] = new_status
-        if action == "cancel":
-            self.orch.cancel(task)  # frees robots and zones, returns the item
-        self.store.put_task(task)
-        self.store.see_message_id(message_id)  # accepted: record for FR-8 dedup
-        self.cost.record(dynamodb_ops=2)  # status write + log row
-        if action == "cancel":
-            self._drain()
+        with _STATE_LOCK:
+            new_status = {"pause": "paused", "cancel": "cancelled"}[action]
+            # Log row first, then the state it explains (FR-20 replay order).
+            self.store.append_decision(row)
+            task["status"] = new_status
+            if action == "cancel":
+                self.orch.cancel(task)  # frees robots and zones, returns the item
+            self.store.put_task(task)
+            self.store.see_message_id(message_id)  # accepted: record for FR-8 dedup
+            self.cost.record(dynamodb_ops=2)  # status write + log row
+            if action == "cancel":
+                self._drain()
         self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
 
     def _post_heartbeat(self, body: dict):
@@ -404,13 +410,14 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(cluster_id, str) or not cluster_id:
             self._send_json(400, {"error": "cluster_id is required"})
             return
-        known = self.orch.fleet.heartbeat(cluster_id, {k: body[k] for k in ("robots", "stock") if k in body})
-        if not known:
-            self._send_json(404, {"error": f"unknown cluster {cluster_id}"})
-            return
-        self.cost.record(iot_messages=1)
+        with _STATE_LOCK:
+            known = self.orch.fleet.heartbeat(cluster_id, {k: body[k] for k in ("robots", "stock") if k in body})
+            if not known:
+                self._send_json(404, {"error": f"unknown cluster {cluster_id}"})
+                return
+            self.cost.record(iot_messages=1)
+            self._drain()  # a cluster coming back may unblock queued work
         self._send_json(201, {"accepted": True, "health": self.orch.fleet.health(cluster_id)})
-        self._drain()  # a cluster coming back may unblock queued work
 
     def _post_replan(self, task_id: str, body: dict):
         """Issue lease v(n+1) avoiding blocked zones: the explicit trigger for
@@ -430,10 +437,11 @@ class Handler(BaseHTTPRequestHandler):
         dup, message_id = self._dedupe(body)
         if dup:
             return
-        reason = str(body.get("reason") or "operator re-plan")
-        outcome = self.orch.replan(task, blocked_zones=blocked, reason=reason)
-        self._apply(task, outcome)
-        self.store.see_message_id(message_id)
+        with _STATE_LOCK:
+            reason = str(body.get("reason") or "operator re-plan")
+            outcome = self.orch.replan(task, blocked_zones=blocked, reason=reason)
+            self._apply(task, outcome)
+            self.store.see_message_id(message_id)
         if outcome.kind != "leased":
             self._send_json(409, {"error": "no admissible re-plan", "detail": outcome.reason})
             return
@@ -622,38 +630,40 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
     orch.recover(store.all_tasks())
 
     def apply_fn(task: dict, outcome) -> None:
-        task_id = task["task_id"]
-        for r in outcome.rows:
-            store.append_decision(make_decision_row(orch, r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
-        task["notice"] = outcome.notice
-        if outcome.spec:
-            task["spec"] = outcome.spec
-        if outcome.kind == "clarify":
-            task["status"], task["question"] = "needs_clarification", outcome.question
-        elif outcome.kind == "leased":
-            task["status"], task["question"], task["reason"] = "leased", None, None
-            task["lease"] = outcome.lease
-            if outcome.reservation:
-                task["reservation"], task["stock_released"] = outcome.reservation, False
-        elif outcome.kind == "queued":
-            task["status"], task["reason"] = "queued", outcome.reason
-        elif outcome.kind == "rejected":
-            task["status"], task["reason"] = "rejected", outcome.reason
-        store.put_task(task)  # records task["message_id"] as seen
-        for topic, payload in outcome.publish:
-            publish(topic, payload)
-        cost.record(
-            input_tokens=outcome.tokens_in,
-            output_tokens=outcome.tokens_out,
-            iot_messages=len(outcome.publish),
-            dynamodb_ops=len(outcome.rows) + 2,
-            fargate_gbs=0.001,
-            cloudwatch_metrics=1,
-        )
+        with _STATE_LOCK:
+            task_id = task["task_id"]
+            for r in outcome.rows:
+                store.append_decision(make_decision_row(orch, r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
+            task["notice"] = outcome.notice
+            if outcome.spec:
+                task["spec"] = outcome.spec
+            if outcome.kind == "clarify":
+                task["status"], task["question"] = "needs_clarification", outcome.question
+            elif outcome.kind == "leased":
+                task["status"], task["question"], task["reason"] = "leased", None, None
+                task["lease"] = outcome.lease
+                if outcome.reservation:
+                    task["reservation"], task["stock_released"] = outcome.reservation, False
+            elif outcome.kind == "queued":
+                task["status"], task["reason"] = "queued", outcome.reason
+            elif outcome.kind == "rejected":
+                task["status"], task["reason"] = "rejected", outcome.reason
+            store.put_task(task)  # records task["message_id"] as seen
+            for topic, payload in outcome.publish:
+                publish(topic, payload)
+            cost.record(
+                input_tokens=outcome.tokens_in,
+                output_tokens=outcome.tokens_out,
+                iot_messages=len(outcome.publish),
+                dynamodb_ops=len(outcome.rows) + 2,
+                fargate_gbs=0.001,
+                cloudwatch_metrics=1,
+            )
 
     def drain_fn() -> None:
-        for task, outcome in orch.drain(store.get_task):
-            apply_fn(task, outcome)
+        with _STATE_LOCK:
+            for task, outcome in orch.drain(store.get_task):
+                apply_fn(task, outcome)
 
     if transport:
         def on_mqtt_escalation(topic: str, data: dict) -> None:
