@@ -35,6 +35,18 @@ The harness provides two execution mechanisms:
 ## 2. Quick Start: Local Fault Proxy
 
 ### A. HTTP Cloud-Edge Link Degradation
+
+**Option 1: One-command in-process proxy via `edge_sim.py` (simplest):**
+```bash
+# In terminal 1, start server:
+python server.py
+
+# In terminal 2, run edge_sim with built-in fault proxy:
+python scripts/edge_sim.py --fault-profile shielded_room --cluster east-wing --complete
+```
+`edge_sim.py` automatically spins up a background `FaultProxy` on port 8001 pointing to `127.0.0.1:8000`, routes all traffic through it, and cleanly shuts it down on exit.
+
+**Option 2: Standalone Fault Proxy:**
 1. Start the Nimbus cloud server on its default port:
    ```bash
    python server.py
@@ -145,11 +157,97 @@ The harness can be configured via environment variables for automated test pipel
 
 ---
 
-## 7. Mapping to PRD Experiments
+## 7. Experiments Guide & Exact Commands (E4–E6)
 
-- **Experiment E4 (Network degradation on T2, T4, T5, T7):**
-  Use `--profile mild_wan` and `--trace traces/iisc_lift.csv` to measure task completion times and recovery latency as link quality degrades.
-- **Experiment E5 (Outage resilience & recovery time, NFR-2):**
-  Use `--profile basement_outage` or `--trace traces/iisc_basement.csv` to cut connectivity for up to 10 minutes. Verify that edge supervisors park robots safely (FR-6) and upload all pending results upon reconnection with zero data loss (FR-10).
-- **Experiment E6 (Re-ordered & repeated messages):**
-  Use jitter and packet loss to induce TCP packet retransmission and out-of-order delivery, verifying that Nimbus deduplication (FR-8) prevents duplicate actions.
+This section provides the exact commands for running experiments **E4**, **E5**, and **E6** defined in PRD Section 7.
+
+### Experiment E4: Latency & Jitter Degradation (Tasks T2, T4, T5, T7)
+
+**Goal:** Evaluate system responsiveness, task handover, timeline tracking, and lease renewal under WAN latency and jitter without triggering spurious lease expirations.
+
+**Exact Commands:**
+1. Start the Nimbus cloud server:
+   ```bash
+   python server.py
+   # Listening on http://127.0.0.1:8000
+   ```
+2. Run the edge simulation with injected WAN latency and jitter:
+   ```bash
+   # Method A: One-liner in-process proxy (60ms latency, 15ms jitter)
+   python scripts/edge_sim.py --fault-profile mild_wan --cluster east-wing --complete
+
+   # Method B: Severe corridor/elevator degradation (250ms latency, 80ms jitter)
+   python scripts/edge_sim.py --fault-profile shielded_room --cluster east-wing --complete
+
+   # Method C: Dynamic 10 Hz trace playback recorded from IISc campus lift
+   python scripts/fault_harness.py --listen 8001 --target 8000 --trace traces/iisc_lift.csv
+   python scripts/edge_sim.py --api http://127.0.0.1:8001 --cluster east-wing --complete
+   ```
+3. **Verification:** Inspect task completion timeline at `GET http://127.0.0.1:8000/tasks/<task_id>/timeline`. Verify that all lease handovers, check-ins, and `OUTPUT_READY` events are recorded successfully with timeline timestamps reflecting injected latency.
+
+---
+
+### Experiment E5: Packet Loss Degradation
+
+**Goal:** Measure system robustness and retry resilience under elevated packet drop rates (1% to 15%) as robots navigate through weak wireless zones.
+
+**Exact Commands:**
+1. Start the Nimbus cloud server:
+   ```bash
+   python server.py
+   ```
+2. Run edge simulation through packet loss:
+   ```bash
+   # Method A: One-liner with severe 15% packet loss
+   python scripts/edge_sim.py --fault-profile severe --cluster east-wing --complete
+
+   # Method B: Standalone proxy with custom 10% packet drop rate
+   python scripts/fault_harness.py --listen 8001 --target 8000 --loss 0.10
+   python scripts/edge_sim.py --api http://127.0.0.1:8001 --cluster east-wing --complete
+   ```
+3. **Verification:** Check `proxy.stats` upon exit to observe packet drops (`packets_dropped`). Confirm that the edge retries HTTP calls and that tasks complete without unhandled crashes.
+
+---
+
+### Experiment E6: Network Partition (Basement Outage) and Reconnection Recovery
+
+**Goal:** Validate store-and-forward outbox buffering (FR-10, NFR-2) when the edge loses cloud connectivity, followed by automatic recovery and zero message loss upon link restoration.
+
+#### A. Interactive Step-by-Step Procedure:
+1. **Start the Nimbus Cloud API:**
+   ```bash
+   python server.py
+   ```
+
+2. **Start Fault Proxy in `basement_outage` mode (100% partition):**
+   ```bash
+   python scripts/fault_harness.py --listen 8001 --target 8000 --profile basement_outage
+   ```
+
+3. **Trigger an Edge Escalation / Action during Outage:**
+   ```bash
+   python scripts/edge_sim.py --api http://127.0.0.1:8001 --cluster east-wing --block E3 --once
+   ```
+   *Expected behavior:* The HTTP connection is dropped/refused by the proxy. `EdgeSim` / `EdgeSupervisor` catches the network disconnection, logs the failure, and buffers the escalation message in the local store-and-forward outbox (`outbox_buffer` / SQLite `outbox` table). The task on the cloud remains in its current state without corruption.
+
+4. **Restore Connectivity (Reconnect Link):**
+   Stop the outage proxy (`Ctrl+C`) and restart in healthy mode (or hot-swap profile):
+   ```bash
+   python scripts/fault_harness.py --listen 8001 --target 8000 --profile healthy
+   ```
+
+5. **Flush & Replay Buffered Messages:**
+   ```bash
+   python scripts/edge_sim.py --api http://127.0.0.1:8001 --cluster east-wing --once
+   ```
+   *Expected behavior:* `EdgeSim.flush()` (or `EdgeSupervisor.flush_pending_escalations()`) re-transmits all buffered outbox messages to `POST /escalations`. All buffered messages receive `200 OK`, the buffer is drained, and the cloud issues lease v2 or completes the task with zero data loss.
+
+#### B. Automated Offline-Quality Smoke Test:
+Run the automated pytest test suite covering partition hold-and-replay:
+```bash
+pytest tests/test_fault_harness.py -k test_offline_quality -v
+```
+This runs both:
+- `test_offline_quality_edge_sim_hold_and_replay_on_reconnect`
+- `test_offline_quality_edge_supervisor_hold_and_replay_on_reconnect`
+which inject `basement_outage`, verify messages are held locally in outbox, reconnect the proxy to `healthy`, and verify 100% successful delivery.

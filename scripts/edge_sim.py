@@ -19,10 +19,18 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
+import sys
 import time
+import urllib.parse
 import uuid
 from urllib import request as urlreq
 from urllib.error import HTTPError
+
+# Ensure repo root is on sys.path for fault_harness import
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 
 class EdgeSim:
@@ -40,6 +48,7 @@ class EdgeSim:
         self.robots = robots
         self.seen: set[str] = set()   # lease ids already answered
         self.log: list[tuple[str, int, dict]] = []
+        self.outbox_buffer: list[dict] = []  # buffered offline messages (FR-10 store-and-forward)
 
     def _call(self, method: str, path: str, body: dict | None = None):
         data = None if body is None else json.dumps(body).encode()
@@ -50,10 +59,28 @@ class EdgeSim:
             resp = urlreq.urlopen(req)
         except HTTPError as err:
             resp = err
+        except (urlreq.URLError, OSError, ConnectionError) as err:
+            self.log.append((f"{method} {path}", 0, {"error": str(err)}))
+            return 0, {"error": str(err)}
         with resp:
             out = json.loads(resp.read().decode() or "{}")
             self.log.append((f"{method} {path}", resp.status, out))
             return resp.status, out
+
+    def flush(self) -> int:
+        """Retry sending buffered offline escalations; returns count successfully delivered."""
+        if not self.outbox_buffer:
+            return 0
+        flushed = 0
+        remaining = []
+        for body in self.outbox_buffer:
+            status, _ = self._call("POST", "/escalations", body)
+            if status in (200, 201, 204):
+                flushed += 1
+            else:
+                remaining.append(body)
+        self.outbox_buffer = remaining
+        return flushed
 
     @staticmethod
     def _mid(kind: str) -> str:
@@ -74,13 +101,22 @@ class EdgeSim:
 
     def escalate(self, kind: str, lease: dict, payload: dict):
         task_id = lease["lease_id"][len("lease-"):lease["lease_id"].rindex("-v")]
-        return self._call("POST", "/escalations", {
+        body = {
             "type": kind, "message_id": self._mid(kind.lower()), "lease_version": lease["version"],
-            "task_id": task_id, "payload": payload})
+            "task_id": task_id, "payload": payload
+        }
+        status, resp = self._call("POST", "/escalations", body)
+        if status not in (200, 201, 204):
+            # Network or server offline: hold message in local buffer for replay (FR-10)
+            self.outbox_buffer.append(body)
+        return status, resp
 
     def step(self) -> int:
         """Process new outbox rows once; returns how many were handled."""
-        _, out = self._call("GET", "/outbox")
+        self.flush()
+        status, out = self._call("GET", "/outbox")
+        if status not in (200, 201, 204) or not isinstance(out, dict):
+            return 0
         handled = 0
         for row in out.get("outbox", []):
             topic, payload = row["topic"], row["payload"]
@@ -109,17 +145,55 @@ def main() -> None:
     ap.add_argument("--block", help="send UNEXPECTED_EVENT blocking this zone for each first-version lease")
     ap.add_argument("--once", action="store_true", help="process the outbox once and exit")
     ap.add_argument("--interval", type=float, default=2.0)
+    ap.add_argument(
+        "--fault-profile",
+        choices=["healthy", "mild_wan", "shielded_room", "severe", "basement_outage"],
+        help="Run through an in-process fault proxy with this degradation profile (E4-E6)",
+    )
+    ap.add_argument(
+        "--fault-port",
+        type=int,
+        default=8001,
+        help="Local port for the fault proxy when --fault-profile is active (default: 8001)",
+    )
     a = ap.parse_args()
-    sim = EdgeSim(a.api, a.cluster, complete=a.complete, block=a.block)
-    sim.heartbeat()
-    while True:
-        n = sim.step()
-        if n:
-            print(f"[{a.cluster}] handled {n} message(s)")
-        if a.once:
-            break
+
+    proxy = None
+    target_api = a.api
+    if a.fault_profile:
+        from scripts.fault_harness import FaultProxy, PRESET_PROFILES
+
+        parsed = urllib.parse.urlparse(a.api)
+        target_host = parsed.hostname or "127.0.0.1"
+        target_port = parsed.port or 8000
+        scheme = parsed.scheme or "http"
+
+        profile = PRESET_PROFILES[a.fault_profile]
+        proxy = FaultProxy(
+            listen_host="127.0.0.1",
+            listen_port=a.fault_port,
+            target_host=target_host,
+            target_port=target_port,
+            profile=profile,
+        )
+        proxy.start()
+        target_api = f"{scheme}://127.0.0.1:{a.fault_port}"
+        print(f"[{a.cluster}] In-process FaultProxy active on {target_api} -> {target_host}:{target_port} (profile: {a.fault_profile})")
+
+    try:
+        sim = EdgeSim(target_api, a.cluster, complete=a.complete, block=a.block)
         sim.heartbeat()
-        time.sleep(a.interval)
+        while True:
+            n = sim.step()
+            if n:
+                print(f"[{a.cluster}] handled {n} message(s)")
+            if a.once:
+                break
+            sim.heartbeat()
+            time.sleep(a.interval)
+    finally:
+        if proxy is not None:
+            proxy.stop()
 
 
 if __name__ == "__main__":

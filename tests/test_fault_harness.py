@@ -4,14 +4,20 @@ from pathlib import Path
 import socket
 import threading
 import time
+import urllib.parse
+import uuid
 import pytest
 
+from conftest import http_json
+from edge.supervisor.supervisor import EdgeSupervisor
+from scripts.edge_sim import EdgeSim
 from scripts.fault_harness import (
     PRESET_PROFILES,
     FaultProfile,
     FaultProxy,
     TraceReplayer,
 )
+from tests.test_cloud_api import sc1_leased
 
 
 def test_fault_profile_defaults_and_presets():
@@ -249,3 +255,155 @@ def test_trace_replayer(tmp_path: Path):
         assert proxy.profile.loss_rate == pytest.approx(0.10, rel=1e-2)
     finally:
         replayer.stop()
+
+
+@pytest.fixture(autouse=True)
+def _patch_mock_robot_compat():
+    """Ensure MockRobot accepts supervisor's topology keyword arguments if present."""
+    from edge.mock import mock_robot
+
+    orig_init = mock_robot.MockRobot.__init__
+
+    def patched_init(self, robot_id="robot-R1", initial_pos=None, current_zone="hallway-central", waypoints=None, **kwargs):
+        orig_init(self, robot_id=robot_id, initial_pos=initial_pos)
+        self.current_zone = current_zone
+        self.waypoints = waypoints or {}
+
+    mock_robot.MockRobot.__init__ = patched_init
+    yield
+    mock_robot.MockRobot.__init__ = orig_init
+
+
+def test_fault_proxy_hot_swap_reconnection():
+    """Verify FaultProxy transitions cleanly from outage (drop) to healthy (forward)."""
+    echo = EchoServer()
+    proxy_port = find_free_port()
+    proxy = FaultProxy(
+        listen_port=proxy_port,
+        target_port=echo.port,
+        profile=PRESET_PROFILES["basement_outage"],
+    )
+    proxy.start()
+
+    try:
+        # Phase 1: During outage, connection is refused / rejected
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+            client.connect(("127.0.0.1", proxy_port))
+            client.settimeout(1.0)
+            data = client.recv(1024)
+            assert data == b""
+
+        # Phase 2: Hot-swap profile to healthy
+        proxy.set_profile(PRESET_PROFILES["healthy"])
+
+        # Phase 3: Now connection succeeds and forwards data
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+            client.connect(("127.0.0.1", proxy_port))
+            client.sendall(b"reconnected-packet")
+            client.settimeout(2.0)
+            resp = client.recv(1024)
+            assert resp == b"reconnected-packet"
+    finally:
+        proxy.stop()
+        echo.stop()
+
+
+def test_offline_quality_edge_sim_hold_and_replay_on_reconnect(api):
+    """Offline-quality check: EdgeSim holds escalations during basement_outage and replays on reconnect."""
+    task_id = sc1_leased(api)
+    parsed = urllib.parse.urlparse(api)
+    proxy_port = find_free_port()
+
+    # Start proxy in basement_outage mode (partition)
+    proxy = FaultProxy(
+        listen_port=proxy_port,
+        target_port=parsed.port or 8000,
+        profile=PRESET_PROFILES["basement_outage"],
+    )
+    proxy.start()
+
+    try:
+        sim = EdgeSim(f"http://127.0.0.1:{proxy_port}", "east-wing")
+        lease = {"lease_id": f"lease-{task_id}-v1", "version": 1}
+        payload = {"result_ref": f"s3://nimbus-outputs/{task_id}/sim-proof.jpg"}
+
+        # Attempt to escalate while disconnected
+        status, _ = sim.escalate("OUTPUT_READY", lease, payload)
+        assert status == 0
+        assert len(sim.outbox_buffer) == 1
+        assert sim.outbox_buffer[0]["type"] == "OUTPUT_READY"
+
+        # Verify task on cloud is still in leased state (not updated yet)
+        _, task = http_json("GET", api + f"/tasks/{task_id}")
+        assert task["status"] == "leased"
+
+        # Reconnect link: switch proxy profile to healthy
+        proxy.set_profile(PRESET_PROFILES["healthy"])
+
+        # Replay buffered offline escalations
+        flushed = sim.flush()
+        assert flushed == 1
+        assert len(sim.outbox_buffer) == 0
+
+        # Verify cloud received the replayed escalation and marked task completed
+        _, updated_task = http_json("GET", api + f"/tasks/{task_id}")
+        assert updated_task["status"] == "completed"
+        assert updated_task["result_ref"] == f"s3://nimbus-outputs/{task_id}/sim-proof.jpg"
+    finally:
+        proxy.stop()
+
+
+def test_offline_quality_edge_supervisor_hold_and_replay_on_reconnect(api, tmp_path: Path):
+    """Offline-quality check: EdgeSupervisor preserves outbox in SQLite across outage and replays (FR-10)."""
+    task_id = sc1_leased(api, suffix="sup")
+    parsed = urllib.parse.urlparse(api)
+    proxy_port = find_free_port()
+
+    proxy = FaultProxy(
+        listen_port=proxy_port,
+        target_port=parsed.port or 8000,
+        profile=PRESET_PROFILES["basement_outage"],
+    )
+    proxy.start()
+
+    try:
+        db_path = str(tmp_path / "supervisor_test.db")
+        supervisor = EdgeSupervisor(
+            cluster_id="east-wing",
+            db_path=db_path,
+            cloud_url=f"http://127.0.0.1:{proxy_port}",
+            slm_mode="mock",
+        )
+        escalation = {
+            "type": "OUTPUT_READY",
+            "message_id": f"esc-outage-{uuid.uuid4().hex[:8]}",
+            "task_id": task_id,
+            "lease_version": 1,
+            "payload": {"result_ref": f"s3://nimbus-outputs/{task_id}/supervisor-proof.jpg"},
+        }
+
+        # Attempt escalation under basement outage: fails and stays in SQLite outbox
+        delivered = supervisor.send_escalation_to_cloud(escalation)
+        assert not delivered
+        pending = supervisor.store.get_pending_outbox()
+        assert len(pending) == 1
+        assert pending[0]["message_id"] == escalation["message_id"]
+
+        # Cloud task should still be 'leased'
+        _, task = http_json("GET", api + f"/tasks/{task_id}")
+        assert task["status"] == "leased"
+
+        # Reconnection: hot-swap profile to healthy
+        proxy.set_profile(PRESET_PROFILES["healthy"])
+
+        # Flush pending outbox
+        flushed = supervisor.flush_pending_escalations()
+        assert flushed == 1
+        assert len(supervisor.store.get_pending_outbox()) == 0
+
+        # Verify cloud task is now completed
+        _, updated_task = http_json("GET", api + f"/tasks/{task_id}")
+        assert updated_task["status"] == "completed"
+        assert updated_task["result_ref"] == f"s3://nimbus-outputs/{task_id}/supervisor-proof.jpg"
+    finally:
+        proxy.stop()
