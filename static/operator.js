@@ -97,9 +97,22 @@ async function refreshFleet() {
   }
 }
 
+async function refreshFault() {
+  try {
+    const { status, data } = await api("GET", "/fault");
+    if (status === 200 && window.NimbusSpatial && window.NimbusSpatial.updateFault) {
+      window.NimbusSpatial.updateFault(data);
+    }
+  } catch (e) {
+    // fault query optional/graceful fallback
+  }
+}
+
 refreshTasks();
 refreshFleet();
+refreshFault();
 setInterval(() => {
   refreshTasks();
   refreshFleet();
+  refreshFault();
 }, 4000);

@@ -407,3 +407,95 @@ def test_offline_quality_edge_supervisor_hold_and_replay_on_reconnect(api, tmp_p
         assert updated_task["result_ref"] == f"s3://nimbus-outputs/{task_id}/supervisor-proof.jpg"
     finally:
         proxy.stop()
+
+
+def test_fault_endpoint_defaults_and_updates(api):
+    """Verify GET and POST /fault endpoints for operator console reflection."""
+    # 1. Default should be healthy and inactive
+    code, initial = http_json("GET", api + "/fault")
+    assert code == 200
+    assert initial["active"] is False
+    assert initial["profile"] == "healthy"
+    assert initial["latency_ms"] == 0.0
+    assert initial["disconnected"] is False
+
+    # 2. Set profile to shielded_room
+    code, resp = http_json("POST", api + "/fault", {"profile": "shielded_room"})
+    assert code == 200
+    assert resp["accepted"] is True
+    assert resp["fault"]["active"] is True
+    assert resp["fault"]["profile"] == "shielded_room"
+    assert resp["fault"]["latency_ms"] == 250.0
+    assert resp["fault"]["loss_rate"] == 0.05
+
+    # 3. GET reflects updated profile
+    _, updated = http_json("GET", api + "/fault")
+    assert updated["active"] is True
+    assert updated["profile"] == "shielded_room"
+    assert updated["latency_ms"] == 250.0
+
+    # 4. Set profile to basement_outage
+    code, outage = http_json("POST", api + "/fault", {"profile": "basement_outage"})
+    assert code == 200
+    assert outage["fault"]["disconnected"] is True
+
+    # 5. Clear back to healthy
+    code, cleared = http_json("POST", api + "/fault", {"profile": "healthy"})
+    assert code == 200
+    assert cleared["fault"]["active"] is False
+    assert cleared["fault"]["profile"] == "healthy"
+
+
+def test_operator_console_serves_fault_hud(api):
+    """Verify operator console HTML and JS serve fault HUD elements and exact labels."""
+    from urllib import request as urlreq
+
+    with urlreq.urlopen(api + "/operator") as resp:
+        html = resp.read().decode("utf-8")
+        assert resp.status == 200
+        # Exact operator labels preserved
+        assert "Nimbus: Operator Console" in html
+        assert "Operator console: intents are recorded, not yet delivered to robots." in html
+        # Spatial View fault badge and styles
+        assert 'id="floor-fault-badge"' in html
+        assert ".hud-tag.fault" in html
+        assert "updateFault" in html
+
+    with urlreq.urlopen(api + "/operator.js") as resp:
+        js = resp.read().decode("utf-8")
+        assert resp.status == 200
+        assert "refreshFault" in js
+        assert "/fault" in js
+
+
+def test_fault_proxy_syncs_with_server(api):
+    """Verify FaultProxy notifies server and updates GET /fault."""
+    parsed = urllib.parse.urlparse(api)
+    proxy_port = find_free_port()
+    proxy = FaultProxy(
+        listen_port=proxy_port,
+        target_port=parsed.port or 8000,
+        profile=PRESET_PROFILES["severe"],
+    )
+    proxy.start()
+
+    try:
+        # Give proxy notification thread a moment
+        time.sleep(0.1)
+        _, fault = http_json("GET", api + "/fault")
+        assert fault["active"] is True
+        assert fault["profile"] == "severe"
+        assert fault["latency_ms"] == 600.0
+        assert fault["loss_rate"] == 0.15
+
+        # Hot-swap profile
+        proxy.set_profile(PRESET_PROFILES["shielded_room"])
+        time.sleep(0.1)
+        _, fault_swapped = http_json("GET", api + "/fault")
+        assert fault_swapped["profile"] == "shielded_room"
+        assert fault_swapped["latency_ms"] == 250.0
+    finally:
+        proxy.stop()
+        time.sleep(0.1)
+        _, fault_stopped = http_json("GET", api + "/fault")
+        assert fault_stopped["active"] is False

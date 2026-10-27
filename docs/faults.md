@@ -251,3 +251,21 @@ This runs both:
 - `test_offline_quality_edge_sim_hold_and_replay_on_reconnect`
 - `test_offline_quality_edge_supervisor_hold_and_replay_on_reconnect`
 which inject `basement_outage`, verify messages are held locally in outbox, reconnect the proxy to `healthy`, and verify 100% successful delivery.
+
+---
+
+## 8. Operator Console Live Fault Indicator (Demo Mode)
+
+During a live evaluation or demo, the operator console at `http://127.0.0.1:8000/operator.html` provides visual confirmation of the link state directly inside the **Command Floor Spatial Grid HUD**:
+
+- **Real-Time Fault Badge:** When `FaultProxy` is running or a profile is set, the HUD header displays the active profile and metrics:
+  - `LINK: MILD_WAN (60ms ± 15ms, 1% loss)` (steel/blue warning tag)
+  - `LINK: SHIELDED_ROOM (250ms ± 80ms, 5% loss)` (amber warning tag)
+  - `LINK: SEVERE (600ms, 15% loss)` (orange alert tag)
+  - `LINK: PARTITIONED (BASEMENT_OUTAGE)` (pulsing red urgent tag)
+- **Zero Distraction When Clean:** When no fault is active, the badge remains hidden (`display: none`), preserving the clean default spatial aesthetic.
+- **Local Diagnostic Endpoint:** `operator.js` polls `GET /fault`, which resolves the active degradation state from:
+  1. Dynamic server state set via local `POST /fault`
+  2. Automatic local state file `data/fault_status.json` (synced automatically by `FaultProxy`)
+  3. `NIMBUS_FAULT_PROFILE` environment variable fallback
+  4. Default baseline (`healthy` / inactive)

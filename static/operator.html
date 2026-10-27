@@ -203,6 +203,35 @@
     font-size: 9px;
     letter-spacing: 0.08em;
   }
+  .hud-tag.fault {
+    background: rgba(196, 85, 74, 0.2);
+    color: var(--status-urgent);
+    border: 1px solid rgba(196, 85, 74, 0.45);
+    padding: 2px 7px;
+    border-radius: 2px;
+    font-weight: 700;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    white-space: nowrap;
+    text-transform: uppercase;
+  }
+  .hud-tag.fault.warning {
+    background: rgba(196, 165, 116, 0.2);
+    color: var(--status-queued);
+    border: 1px solid rgba(196, 165, 116, 0.45);
+  }
+  .hud-tag.fault.partitioned {
+    background: rgba(196, 85, 74, 0.3);
+    color: var(--status-urgent);
+    border: 1px solid rgba(196, 85, 74, 0.8);
+    box-shadow: 0 0 8px rgba(196, 85, 74, 0.4);
+    animation: fault-pulse 2s infinite ease-in-out;
+  }
+  @keyframes fault-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
   .hud-title {
     color: var(--brass);
     font-weight: 600;
@@ -1132,6 +1161,31 @@ function setupCommandFloor(canvas) {
         const badge = document.getElementById("floor-status-badge");
         if (badge) badge.textContent = `TASK FOCUS: ${taskId}`;
       },
+
+      updateFault(fault) {
+        const badge = document.getElementById("floor-fault-badge");
+        if (!badge) return;
+        if (!fault || !fault.active || fault.profile === "healthy") {
+          badge.style.display = "none";
+          return;
+        }
+        badge.style.display = "inline-flex";
+        badge.className = "hud-tag fault";
+        const prof = String(fault.profile || "custom").toUpperCase();
+        if (fault.disconnected) {
+          badge.classList.add("partitioned");
+          badge.textContent = `LINK: PARTITIONED (${prof})`;
+        } else if (fault.loss_rate >= 0.1 || fault.latency_ms >= 500) {
+          badge.classList.add("partitioned");
+          badge.textContent = `LINK: ${prof} (${Math.round(fault.latency_ms)}ms, ${Math.round(fault.loss_rate * 100)}% loss)`;
+        } else if (fault.loss_rate > 0 || fault.latency_ms > 0) {
+          badge.classList.add("warning");
+          const jitter = fault.jitter_ms ? ` \u00B1 ${Math.round(fault.jitter_ms)}ms` : "";
+          badge.textContent = `LINK: ${prof} (${Math.round(fault.latency_ms)}ms${jitter}, ${Math.round(fault.loss_rate * 100)}% loss)`;
+        } else {
+          badge.textContent = `LINK: ${prof}`;
+        }
+      },
     };
 
     function updateTelemetryHUD() {
@@ -1264,6 +1318,7 @@ if (document.readyState === "loading") {
         <div class="floor-hud-header">
           <span class="hud-tag live">SPATIAL GRID</span>
           <span class="hud-title">HOSPITAL BLUEPRINT // EAST WING</span>
+          <span class="hud-tag fault" id="floor-fault-badge" style="display: none;">LINK: HEALTHY</span>
           <span class="hud-status" id="floor-status-badge">FLEET: ACTIVE</span>
         </div>
         <div class="floor-hud-footer">

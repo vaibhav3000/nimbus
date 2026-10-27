@@ -165,6 +165,68 @@ class FaultProxy:
         """Hot-swap the active fault profile while running."""
         with self._lock:
             self.profile = profile
+            self._sync_fault_status()
+
+    def _sync_fault_status(self) -> None:
+        """Write current profile to local data/fault_status.json and notify target if local server."""
+        active = not (self.profile.name == "healthy" and not self.profile.disconnected and self.profile.loss_rate == 0 and self.profile.latency_ms == 0)
+        state = {
+            "active": active,
+            "profile": self.profile.name,
+            "latency_ms": self.profile.latency_ms,
+            "jitter_ms": self.profile.jitter_ms,
+            "loss_rate": self.profile.loss_rate,
+            "disconnected": self.profile.disconnected,
+        }
+        try:
+            import json
+            status_path = Path("data/fault_status.json")
+            status_path.parent.mkdir(parents=True, exist_ok=True)
+            status_path.write_text(json.dumps(state), encoding="utf-8")
+        except Exception:
+            pass
+
+        if self.target_host in ("127.0.0.1", "localhost"):
+            def _post():
+                try:
+                    import json
+                    from urllib import request as urlreq
+                    req = urlreq.Request(
+                        f"http://{self.target_host}:{self.target_port}/fault",
+                        data=json.dumps(state).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urlreq.urlopen(req, timeout=0.5):
+                        pass
+                except Exception:
+                    pass
+            threading.Thread(target=_post, daemon=True).start()
+
+    def _clear_fault_status(self) -> None:
+        """Clear local fault status on proxy shutdown."""
+        try:
+            status_path = Path("data/fault_status.json")
+            if status_path.exists():
+                status_path.unlink()
+        except Exception:
+            pass
+        if self.target_host in ("127.0.0.1", "localhost"):
+            def _clear():
+                try:
+                    import json
+                    from urllib import request as urlreq
+                    req = urlreq.Request(
+                        f"http://{self.target_host}:{self.target_port}/fault",
+                        data=json.dumps({"active": False, "profile": "healthy"}).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urlreq.urlopen(req, timeout=0.5):
+                        pass
+                except Exception:
+                    pass
+            threading.Thread(target=_clear, daemon=True).start()
 
     def start(self) -> None:
         """Start listening on the background daemon thread."""
@@ -185,9 +247,11 @@ class FaultProxy:
                 daemon=True,
             )
             self._worker_thread.start()
+            self._sync_fault_status()
 
     def stop(self) -> None:
         """Stop listening and cleanly terminate active connections."""
+        self._clear_fault_status()
         with self._lock:
             self._running = False
             if self._server_sock:
