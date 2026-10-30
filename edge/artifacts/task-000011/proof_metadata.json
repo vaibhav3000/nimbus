@@ -1,0 +1,13 @@
+{
+  "task_id": "task-000011",
+  "robot_id": "R1",
+  "pose": [
+    4.5,
+    8.0,
+    0.0
+  ],
+  "resolution": "1280x720",
+  "file_size_bytes": 1030,
+  "sha256": "451c3b30eb8f44063e198a45bc74d7b6d82d294516582e4e456d3677b98aebcf",
+  "created_at": "2026-10-25T16:21:53.057708+00:00"
+}

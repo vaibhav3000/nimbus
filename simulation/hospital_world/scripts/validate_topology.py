@@ -185,7 +185,7 @@ def check_deployment(deployment, nodes, waypoints, edge_set):
     if not isinstance(deployment, dict) or deployment.get("version") != "robot-deployment-v1":
         fail("robot deployment must use version robot-deployment-v1")
     robots = deployment.get("robots")
-    if not isinstance(robots, dict) or set(robots) != {"robot_1", "robot_2"}:
+    if not isinstance(robots, dict) or not {"robot_1", "robot_2"}.issubset(robots):
         fail("robot deployment must describe robot_1 and robot_2")
     namespaces = set()
     for robot_id, robot in robots.items():
@@ -326,7 +326,7 @@ def main():
     try:
         topology, waypoints, deployment = load_and_check_schema()
         print(f"PASS schema: {len(topology['nodes'])} nodes, {len(topology['edges'])} bidirectional edges, "
-              f"{len(topology['groups'])} groups, 6 PRD locations, and 2 robot deployments; connected graph.")
+              f"{len(topology['groups'])} groups, 6 PRD locations, and {len(deployment['robots'])} robot deployments; connected graph.")
         if not args.no_physics:
             passed, probes = run_physics_validation(topology, waypoints, deployment)
             if not passed:

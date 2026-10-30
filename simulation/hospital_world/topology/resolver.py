@@ -80,7 +80,8 @@ def resolve_for_robot(identifier: str, robot_id: str) -> dict:
     """Resolve a PRD alias and add the SDK-local goal for a deployed robot."""
     deployment = _read(DEPLOYMENT_PATH)
     try:
-        robot = deployment["robots"][robot_id]
+        lookup_id = f"robot_{robot_id[1:]}" if (robot_id not in deployment["robots"] and robot_id.upper().startswith("R") and robot_id[1:].isdigit()) else robot_id
+        robot = deployment["robots"][lookup_id]
     except KeyError as error:
         raise ValueError(f"unknown deployed robot {robot_id!r}") from error
     result = resolve_destination(identifier)

@@ -1,0 +1,13 @@
+{
+  "task_id": "lease-tac-pass-1792931206",
+  "robot_id": "R1",
+  "pose": [
+    0.0,
+    5.0,
+    0.0
+  ],
+  "resolution": "1280x720",
+  "file_size_bytes": 1044,
+  "sha256": "1881a8b0448e9bf6cb5cda8abef162ae872b95c8a61cfd65aae90b96ce723f2d",
+  "created_at": "2026-10-25T12:26:46.950748+00:00"
+}

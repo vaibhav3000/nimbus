@@ -1,0 +1,13 @@
+{
+  "task_id": "lease-dedup-01",
+  "robot_id": "R1",
+  "pose": [
+    0.0,
+    5.0,
+    0.0
+  ],
+  "resolution": "1280x720",
+  "file_size_bytes": 1033,
+  "sha256": "3cdd2a31f4c68d4a915516b6f0daaaf942c9bcf504ad47ecdaee09e5bdcb158a",
+  "created_at": "2026-10-26T09:30:21.319404+00:00"
+}

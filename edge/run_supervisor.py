@@ -36,10 +36,13 @@ def main():
     parser.add_argument("--heartbeat-interval", type=float, default=15.0, help="Idle heartbeat interval in seconds")
     parser.add_argument("--topology", default=None, help="Path to custom hospital_topology.json")
     parser.add_argument("--waypoints", default=None, help="Path to custom topology_waypoints.json")
+    parser.add_argument("--robot-backend", choices=["mock", "sim"], default="mock", help="Robot backend: mock (in-memory) or sim (Person 1 ground_robot_sdk/Gazebo)")
+    parser.add_argument("--quiet", action="store_true", help="Suppress detailed per-step execution logs")
     parser.add_argument("--once", action="store_true", help="Poll once and exit")
     args = parser.parse_args()
 
     db_path = args.db or f"edge_{args.cluster.replace('-', '_')}.db"
+    verbose_mode = not args.quiet
 
     supervisor = EdgeSupervisor(
         cluster_id=args.cluster,
@@ -48,20 +51,25 @@ def main():
         slm_mode="auto",
         topology_file=args.topology,
         waypoints_file=args.waypoints,
+        verbose=verbose_mode,
+        robot_backend=args.robot_backend,
     )
 
-    print("=" * 65)
+    print("=" * 70)
     print(f"  NIMBUS EDGE SUPERVISOR DAEMON: [{args.cluster.upper()}]")
-    print("=" * 65)
-    print(f"  Cluster ID      : {args.cluster}")
-    print(f"  Cloud Endpoint  : {args.cloud_url}")
-    print(f"  Local SQLite DB : {db_path}")
-    print(f"  Topology Graph  : {len(supervisor.topology.get('nodes', {}))} nodes, {len(supervisor.waypoints)} waypoints")
-    print(f"  Home Zone       : {supervisor.home_zone}")
-    print(f"  Safe Parking Bay: {supervisor.safe_parking_zone}")
-    print(f"  Polling Interval: {args.interval}s")
-    print(f"  Heartbeat Rate  : every {args.heartbeat_interval}s while idle")
-    print("  Status          : Active & Listening for Leases...\n")
+    print("=" * 70)
+    print(f"  Cluster ID       : {args.cluster}")
+    print(f"  Robot Backend    : {args.robot_backend.upper()} ({'ground_robot_sdk / Gazebo' if args.robot_backend == 'sim' else 'in-memory mock'})")
+    print(f"  Cloud Endpoint   : {args.cloud_url}")
+    print(f"  Local SQLite DB  : {db_path}")
+    print(f"  Topology Graph   : {len(supervisor.topology.get('nodes', {}))} nodes, {len(supervisor.waypoints)} waypoints")
+    print(f"  Home Zone        : {supervisor.home_zone}")
+    print(f"  Safe Parking Bay : {supervisor.safe_parking_zone}")
+    print(f"  Edge SLM Mode    : {supervisor.slm.mode} ({supervisor.slm.model_name})")
+    print(f"  Live Trace Mode  : {'ENABLED (Real-Time Subtask Streaming)' if verbose_mode else 'QUIET'}")
+    print(f"  Polling Interval : {args.interval}s")
+    print(f"  Heartbeat Rate   : every {args.heartbeat_interval}s while idle")
+    print("  Status           : Active & Listening for Leases...\n")
 
     processed_leases = set()
     last_heartbeat_time = 0.0
@@ -71,17 +79,16 @@ def main():
             # 1. Flush any pending escalations (store-and-forward FR-10)
             flushed = supervisor.flush_pending_escalations()
             if flushed > 0:
-                print(f"[{args.cluster}] Uploaded {flushed} pending escalation(s) to cloud.")
+                print(f"[{args.cluster}] Uploaded {flushed} pending escalation(s) from local SQLite outbox to cloud.")
 
             now_time = time.time()
 
-            # 2. While idle, send periodic heartbeat to POST /fleet/heartbeat (Item 2)
-            if supervisor.active_lease is None:
-                if now_time - last_heartbeat_time >= args.heartbeat_interval:
-                    ok, hb_data = supervisor.send_heartbeat_to_cloud()
-                    if ok:
-                        print(f"[{args.cluster}] Heartbeat sent -> cluster health: {hb_data.get('health')}")
-                    last_heartbeat_time = now_time
+            # 2. Send periodic heartbeat to POST /fleet/heartbeat
+            if now_time - last_heartbeat_time >= args.heartbeat_interval:
+                ok, hb_data = supervisor.send_heartbeat_to_cloud()
+                if ok:
+                    print(f"[{args.cluster}] Heartbeat sent -> cluster health: {hb_data.get('health', 'healthy')}")
+                last_heartbeat_time = now_time
 
             # 3. Fetch new leases from cloud outbox
             leases = supervisor.fetch_leases_from_cloud()
@@ -97,14 +104,16 @@ def main():
                     # Ignore leases targeted to other clusters
                     continue
 
-                print(f"[{args.cluster}] Ingesting lease: {lid} (v{ver})")
-                result = supervisor.process_lease(lease)
+                result = supervisor.process_lease(lease, verbose=verbose_mode)
                 status = result.get("status")
-                print(f"[{args.cluster}] Mission Result: {status}")
+                print(f"[{args.cluster}] >>> Final Mission Status: {status}")
                 if status == "COMPLETED":
-                    print(f"[{args.cluster}] Proof Ref   : {result.get('result_ref')}")
-                elif status == "REJECTED":
-                    print(f"[{args.cluster}] Reason      : {result.get('reason')}")
+                    print(f"[{args.cluster}]     Result Ref : {result.get('result_ref')}")
+                    if "sha256" in result:
+                        print(f"[{args.cluster}]     SHA-256    : {result.get('sha256')}")
+                elif status in ("REJECTED", "FAILED_BOUNDARY", "DROPPED_STALE"):
+                    print(f"[{args.cluster}]     Reason     : {result.get('reason')}")
+
                 processed_leases.add(key)
                 last_heartbeat_time = time.time()
 
