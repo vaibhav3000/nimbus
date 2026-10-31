@@ -55,13 +55,21 @@ class FaultProfile:
     disconnected: bool = False
     trace_file: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.latency_ms < 0:
+            raise ValueError(f"latency_ms must be non-negative, got {self.latency_ms}")
+        if self.jitter_ms < 0:
+            raise ValueError(f"jitter_ms must be non-negative, got {self.jitter_ms}")
+        if not (0.0 <= self.loss_rate <= 1.0):
+            raise ValueError(f"loss_rate must be between 0.0 and 1.0, got {self.loss_rate}")
+
     def compute_delay_sec(self) -> float:
         """Calculate artificial delay in seconds including random jitter."""
         if self.latency_ms <= 0 and self.jitter_ms <= 0:
             return 0.0
         jitter = random.uniform(-self.jitter_ms, self.jitter_ms) if self.jitter_ms > 0 else 0.0
         delay_ms = max(0.0, self.latency_ms + jitter)
-        return delay_ms / 1000.0
+        return max(0.0, delay_ms / 1000.0)
 
     def should_drop(self) -> bool:
         """Determine if a connection or packet chunk should be dropped."""
@@ -95,24 +103,42 @@ class FaultProfile:
     def from_env(cls) -> "FaultProfile":
         """Load configuration from standard NIMBUS_FAULT_* environment variables."""
         profile_name = os.environ.get("NIMBUS_FAULT_PROFILE", "").lower().strip()
-        if profile_name and profile_name in PRESET_PROFILES:
-            base = PRESET_PROFILES[profile_name]
-            return cls(
-                name=base.name,
-                latency_ms=base.latency_ms,
-                jitter_ms=base.jitter_ms,
-                loss_rate=base.loss_rate,
-                disconnected=base.disconnected,
-            )
+        if profile_name:
+            if profile_name in PRESET_PROFILES:
+                base = PRESET_PROFILES[profile_name]
+                return cls(
+                    name=base.name,
+                    latency_ms=base.latency_ms,
+                    jitter_ms=base.jitter_ms,
+                    loss_rate=base.loss_rate,
+                    disconnected=base.disconnected,
+                )
+            elif profile_name not in ("custom", "healthy", "none", "clear"):
+                raise ValueError(
+                    f"Unknown NIMBUS_FAULT_PROFILE '{profile_name}'. "
+                    f"Must be one of: {list(PRESET_PROFILES.keys())} or 'custom'"
+                )
 
-        latency = float(os.environ.get("NIMBUS_FAULT_LATENCY_MS", "0"))
-        jitter = float(os.environ.get("NIMBUS_FAULT_JITTER_MS", "0"))
-        loss = float(os.environ.get("NIMBUS_FAULT_LOSS_RATE", "0"))
+        try:
+            latency = float(os.environ.get("NIMBUS_FAULT_LATENCY_MS", "0"))
+        except ValueError as e:
+            raise ValueError(f"Invalid NIMBUS_FAULT_LATENCY_MS: {e}") from e
+
+        try:
+            jitter = float(os.environ.get("NIMBUS_FAULT_JITTER_MS", "0"))
+        except ValueError as e:
+            raise ValueError(f"Invalid NIMBUS_FAULT_JITTER_MS: {e}") from e
+
+        try:
+            loss = float(os.environ.get("NIMBUS_FAULT_LOSS_RATE", "0"))
+        except ValueError as e:
+            raise ValueError(f"Invalid NIMBUS_FAULT_LOSS_RATE: {e}") from e
+
         disconnected = os.environ.get("NIMBUS_FAULT_DISCONNECTED", "0").lower() in ("1", "true", "yes")
         trace = os.environ.get("NIMBUS_FAULT_TRACE") or None
 
         return cls(
-            name="env",
+            name=profile_name or "env",
             latency_ms=latency,
             jitter_ms=jitter,
             loss_rate=loss,
@@ -160,6 +186,7 @@ class FaultProxy:
             "packets_dropped": 0,
             "bytes_forwarded": 0,
         }
+        self._last_sync_time = 0.0
 
     def set_profile(self, profile: FaultProfile) -> None:
         """Hot-swap the active fault profile while running."""
@@ -169,15 +196,26 @@ class FaultProxy:
 
     def _sync_fault_status(self) -> None:
         """Write current profile to local data/fault_status.json and notify target if local server."""
-        active = not (self.profile.name == "healthy" and not self.profile.disconnected and self.profile.loss_rate == 0 and self.profile.latency_ms == 0)
-        state = {
-            "active": active,
-            "profile": self.profile.name,
-            "latency_ms": self.profile.latency_ms,
-            "jitter_ms": self.profile.jitter_ms,
-            "loss_rate": self.profile.loss_rate,
-            "disconnected": self.profile.disconnected,
-        }
+        with self._lock:
+            fwd = self.stats.get("packets_forwarded", 0)
+            drop = self.stats.get("packets_dropped", 0)
+            bytes_fwd = self.stats.get("bytes_forwarded", 0)
+            conn_tot = self.stats.get("connections_total", 0)
+            conn_rej = self.stats.get("connections_rejected", 0)
+            active = not (self.profile.name == "healthy" and not self.profile.disconnected and self.profile.loss_rate == 0 and self.profile.latency_ms == 0)
+            state = {
+                "active": active,
+                "profile": self.profile.name,
+                "latency_ms": self.profile.latency_ms,
+                "jitter_ms": self.profile.jitter_ms,
+                "loss_rate": self.profile.loss_rate,
+                "disconnected": self.profile.disconnected,
+                "packets_forwarded": fwd,
+                "packets_dropped": drop,
+                "bytes_forwarded": bytes_fwd,
+                "connections_total": conn_tot,
+                "connections_rejected": conn_rej,
+            }
         try:
             import json
             status_path = Path("data/fault_status.json")
@@ -203,8 +241,15 @@ class FaultProxy:
                     pass
             threading.Thread(target=_post, daemon=True).start()
 
+    def _maybe_sync_stats(self) -> None:
+        """Throttled sync of live packet forwarding and loss counters."""
+        now = time.time()
+        if now - self._last_sync_time >= 0.5:
+            self._last_sync_time = now
+            self._sync_fault_status()
+
     def _clear_fault_status(self) -> None:
-        """Clear local fault status on proxy shutdown."""
+        """Clear local fault status on proxy shutdown synchronously."""
         try:
             status_path = Path("data/fault_status.json")
             if status_path.exists():
@@ -212,21 +257,19 @@ class FaultProxy:
         except Exception:
             pass
         if self.target_host in ("127.0.0.1", "localhost"):
-            def _clear():
-                try:
-                    import json
-                    from urllib import request as urlreq
-                    req = urlreq.Request(
-                        f"http://{self.target_host}:{self.target_port}/fault",
-                        data=json.dumps({"active": False, "profile": "healthy"}).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
-                        method="POST",
-                    )
-                    with urlreq.urlopen(req, timeout=0.5):
-                        pass
-                except Exception:
+            try:
+                import json
+                from urllib import request as urlreq
+                req = urlreq.Request(
+                    f"http://{self.target_host}:{self.target_port}/fault",
+                    data=json.dumps({"active": False, "profile": "healthy"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlreq.urlopen(req, timeout=1.0):
                     pass
-            threading.Thread(target=_clear, daemon=True).start()
+            except Exception:
+                pass
 
     def start(self) -> None:
         """Start listening on the background daemon thread."""
@@ -249,9 +292,20 @@ class FaultProxy:
             self._worker_thread.start()
             self._sync_fault_status()
 
+        import atexit
+        try:
+            atexit.register(self._clear_fault_status)
+        except Exception:
+            pass
+
     def stop(self) -> None:
         """Stop listening and cleanly terminate active connections."""
-        self._clear_fault_status()
+        import atexit
+        try:
+            atexit.unregister(self._clear_fault_status)
+        except Exception:
+            pass
+
         with self._lock:
             self._running = False
             if self._server_sock:
@@ -270,6 +324,7 @@ class FaultProxy:
 
         if self._worker_thread and self._worker_thread.is_alive():
             self._worker_thread.join(timeout=2.0)
+        self._clear_fault_status()
 
     def _accept_loop(self) -> None:
         while self._running:
@@ -305,6 +360,21 @@ class FaultProxy:
             t.start()
 
     def _handle_client(self, client_sock: socket.socket) -> None:
+        with self._lock:
+            profile = self.profile
+
+        # Upfront packet-loss decision: drop/abort whole connection immediately
+        if profile.should_drop():
+            with self._lock:
+                self.stats["packets_dropped"] += 1
+                self.stats["connections_rejected"] += 1
+            self._maybe_sync_stats()
+            try:
+                client_sock.close()
+            except Exception:
+                pass
+            return
+
         target_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         with self._lock:
             self._active_sockets.add(client_sock)
@@ -364,15 +434,24 @@ class FaultProxy:
             except OSError:
                 break
 
-            # Packet loss injection
+            # Packet loss injection: abort the connection rather than dropping arbitrary mid-stream bytes
             if profile.should_drop():
                 with self._lock:
                     self.stats["packets_dropped"] += 1
-                continue
+                self._maybe_sync_stats()
+                try:
+                    src.close()
+                except Exception:
+                    pass
+                try:
+                    dst.close()
+                except Exception:
+                    pass
+                break
 
-            # Latency and jitter injection
-            delay = profile.compute_delay_sec()
-            if delay > 0:
+            # Latency and jitter injection (guaranteed non-negative)
+            delay = max(0.0, profile.compute_delay_sec())
+            if delay > 0.0:
                 time.sleep(delay)
 
             try:
@@ -380,6 +459,7 @@ class FaultProxy:
                 with self._lock:
                     self.stats["packets_forwarded"] += 1
                     self.stats["bytes_forwarded"] += len(data)
+                self._maybe_sync_stats()
             except OSError:
                 break
 
@@ -431,13 +511,13 @@ class TraceReplayer:
             target_elapsed = t_sec
             current_elapsed = time.time() - start_time
             if target_elapsed > current_elapsed:
-                sleep_dur = target_elapsed - current_elapsed
-                if self._stop_event.wait(sleep_dur):
+                sleep_dur = max(0.0, target_elapsed - current_elapsed)
+                if sleep_dur > 0 and self._stop_event.wait(sleep_dur):
                     break
 
             new_profile = FaultProfile(
                 name=f"trace@{t_sec:.1f}s",
-                latency_ms=rtt_ms / 2.0,  # One-way delay estimation
+                latency_ms=max(0.0, rtt_ms / 2.0),  # One-way delay estimation
                 jitter_ms=max(0.0, rtt_ms * 0.1),
                 loss_rate=min(1.0, max(0.0, loss_pct / 100.0)),
                 disconnected=(loss_pct >= 99.0),

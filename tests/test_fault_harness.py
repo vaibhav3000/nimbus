@@ -418,26 +418,40 @@ def test_fault_endpoint_defaults_and_updates(api):
     assert initial["profile"] == "healthy"
     assert initial["latency_ms"] == 0.0
     assert initial["disconnected"] is False
+    assert initial["packets_dropped"] == 0
+    assert initial["packets_forwarded"] == 0
+    assert "healthy" in initial["summary"]
 
-    # 2. Set profile to shielded_room
-    code, resp = http_json("POST", api + "/fault", {"profile": "shielded_room"})
+    # 2. Set profile to shielded_room with packet metrics
+    code, resp = http_json("POST", api + "/fault", {
+        "profile": "shielded_room",
+        "packets_forwarded": 42,
+        "packets_dropped": 3,
+    })
     assert code == 200
     assert resp["accepted"] is True
     assert resp["fault"]["active"] is True
     assert resp["fault"]["profile"] == "shielded_room"
     assert resp["fault"]["latency_ms"] == 250.0
     assert resp["fault"]["loss_rate"] == 0.05
+    assert resp["fault"]["packets_forwarded"] == 42
+    assert resp["fault"]["packets_dropped"] == 3
+    assert "42 fwd" in resp["fault"]["summary"]
+    assert "3 drop" in resp["fault"]["summary"]
 
-    # 3. GET reflects updated profile
+    # 3. GET reflects updated profile and metrics
     _, updated = http_json("GET", api + "/fault")
     assert updated["active"] is True
     assert updated["profile"] == "shielded_room"
     assert updated["latency_ms"] == 250.0
+    assert updated["packets_forwarded"] == 42
+    assert updated["packets_dropped"] == 3
 
     # 4. Set profile to basement_outage
     code, outage = http_json("POST", api + "/fault", {"profile": "basement_outage"})
     assert code == 200
     assert outage["fault"]["disconnected"] is True
+    assert "PARTITIONED" in outage["fault"]["summary"]
 
     # 5. Clear back to healthy
     code, cleared = http_json("POST", api + "/fault", {"profile": "healthy"})
@@ -447,7 +461,7 @@ def test_fault_endpoint_defaults_and_updates(api):
 
 
 def test_operator_console_serves_fault_hud(api):
-    """Verify operator console HTML and JS serve fault HUD elements and exact labels."""
+    """Verify operator console HTML and JS serve fault HUD elements, telemetry summary, and exact labels."""
     from urllib import request as urlreq
 
     with urlreq.urlopen(api + "/operator") as resp:
@@ -456,9 +470,11 @@ def test_operator_console_serves_fault_hud(api):
         # Exact operator labels preserved
         assert "Nimbus: Operator Console" in html
         assert "Operator console: intents are recorded, not yet delivered to robots." in html
-        # Spatial View fault badge and styles
+        # Spatial View fault badge, telemetry summary, and styles
         assert 'id="floor-fault-badge"' in html
+        assert 'id="floor-fault-stats"' in html
         assert ".hud-tag.fault" in html
+        assert ".hud-fault-telemetry" in html
         assert "updateFault" in html
 
     with urlreq.urlopen(api + "/operator.js") as resp:
@@ -469,7 +485,7 @@ def test_operator_console_serves_fault_hud(api):
 
 
 def test_fault_proxy_syncs_with_server(api):
-    """Verify FaultProxy notifies server and updates GET /fault."""
+    """Verify FaultProxy notifies server and updates GET /fault with live packet telemetry."""
     parsed = urllib.parse.urlparse(api)
     proxy_port = find_free_port()
     proxy = FaultProxy(
@@ -487,6 +503,8 @@ def test_fault_proxy_syncs_with_server(api):
         assert fault["profile"] == "severe"
         assert fault["latency_ms"] == 600.0
         assert fault["loss_rate"] == 0.15
+        assert "packets_forwarded" in fault
+        assert "packets_dropped" in fault
 
         # Hot-swap profile
         proxy.set_profile(PRESET_PROFILES["shielded_room"])
@@ -499,3 +517,128 @@ def test_fault_proxy_syncs_with_server(api):
         time.sleep(0.1)
         _, fault_stopped = http_json("GET", api + "/fault")
         assert fault_stopped["active"] is False
+
+
+def test_fault_proxy_packet_loss_aborts_connection():
+    """Verify packet loss in userspace proxy aborts connection rather than corrupting mid-stream bytes."""
+    echo = EchoServer()
+    proxy_port = find_free_port()
+    # 100% loss rate should drop/abort connection
+    proxy = FaultProxy(
+        listen_port=proxy_port,
+        target_port=echo.port,
+        profile=FaultProfile(loss_rate=1.0),
+    )
+    proxy.start()
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+            client.connect(("127.0.0.1", proxy_port))
+            client.settimeout(1.0)
+            data = client.recv(1024)
+            assert data == b""
+            assert proxy.stats["packets_dropped"] >= 1
+    finally:
+        proxy.stop()
+        echo.stop()
+
+
+def test_fault_profile_validation_and_clamping():
+    """Verify FaultProfile rejects invalid parameters and clamps delay to non-negative."""
+    # Clamping & non-negative delay
+    p = FaultProfile(latency_ms=10.0, jitter_ms=50.0)
+    for _ in range(50):
+        d = p.compute_delay_sec()
+        assert d >= 0.0, f"Delay must be non-negative, got {d}"
+
+    # Invalid values raise ValueError
+    with pytest.raises(ValueError, match="latency_ms"):
+        FaultProfile(latency_ms=-1.0)
+
+    with pytest.raises(ValueError, match="jitter_ms"):
+        FaultProfile(jitter_ms=-5.0)
+
+    with pytest.raises(ValueError, match="loss_rate"):
+        FaultProfile(loss_rate=1.5)
+
+    with pytest.raises(ValueError, match="loss_rate"):
+        FaultProfile(loss_rate=-0.1)
+
+
+def test_edge_sim_preserves_message_id_and_timestamp_on_replay(api):
+    """Verify EdgeSim preserves original message_id and timestamp across offline buffering and replay."""
+    task_id = sc1_leased(api, suffix="pres")
+    parsed = urllib.parse.urlparse(api)
+    proxy_port = find_free_port()
+
+    # Start disconnected proxy
+    proxy = FaultProxy(
+        listen_port=proxy_port,
+        target_port=parsed.port or 8000,
+        profile=PRESET_PROFILES["basement_outage"],
+    )
+    proxy.start()
+
+    try:
+        sim = EdgeSim(f"http://127.0.0.1:{proxy_port}", "east-wing")
+        lease = {"lease_id": f"lease-{task_id}-v1", "version": 1}
+
+        # Check-in during outage: fails and gets buffered
+        status_ci, _ = sim.checkin(lease)
+        assert status_ci == 0
+        assert len(sim.outbox_buffer) == 1
+        buffered_ci = sim.outbox_buffer[0]
+        orig_ci_id = buffered_ci["message_id"]
+        orig_ci_ts = buffered_ci["timestamp"]
+        assert orig_ci_id.startswith("sim-ci-")
+        assert orig_ci_ts is not None
+
+        # Escalation during outage: fails and gets buffered
+        status_esc, _ = sim.escalate("OUTPUT_READY", lease, {"result_ref": f"s3://outputs/{task_id}/pic.jpg"})
+        assert status_esc == 0
+        assert len(sim.outbox_buffer) == 2
+        buffered_esc = sim.outbox_buffer[1]
+        orig_esc_id = buffered_esc["message_id"]
+        assert orig_esc_id.startswith("sim-output_ready-")
+
+        # Now reconnect
+        proxy.set_profile(PRESET_PROFILES["healthy"])
+
+        # Flush buffered messages
+        flushed = sim.flush()
+        assert flushed == 2
+        assert len(sim.outbox_buffer) == 0
+
+        # Verify buffered items did not mutate IDs
+        assert buffered_ci["message_id"] == orig_ci_id
+        assert buffered_ci["timestamp"] == orig_ci_ts
+        assert buffered_esc["message_id"] == orig_esc_id
+
+        # Verify task completed on cloud
+        _, task = http_json("GET", api + f"/tasks/{task_id}")
+        assert task["status"] == "completed"
+    finally:
+        proxy.stop()
+
+
+def test_fault_endpoint_rejects_unknown_profiles_and_bad_values(api):
+    """Verify POST /fault rejects unknown profiles and invalid numeric values with 400."""
+    # Unknown profile
+    code, resp = http_json("POST", api + "/fault", {"profile": "totally_bogus_profile"})
+    assert code == 400
+    assert "unknown fault profile" in resp["error"]
+
+    # Negative latency
+    code, resp = http_json("POST", api + "/fault", {"profile": "custom", "latency_ms": -50.0})
+    assert code == 400
+    assert "latency_ms must be non-negative" in resp["error"]
+
+    # Loss rate > 1.0
+    code, resp = http_json("POST", api + "/fault", {"profile": "custom", "loss_rate": 1.5})
+    assert code == 400
+    assert "loss_rate must be between 0.0 and 1.0" in resp["error"]
+
+    # Negative counters
+    code, resp = http_json("POST", api + "/fault", {"profile": "healthy", "packets_dropped": -1})
+    assert code == 400
+    assert "non-negative" in resp["error"]

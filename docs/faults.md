@@ -191,6 +191,11 @@ This section provides the exact commands for running experiments **E4**, **E5**,
 
 **Goal:** Measure system robustness and retry resilience under elevated packet drop rates (1% to 15%) as robots navigate through weak wireless zones.
 
+**Packet-Loss Semantics in Userspace TCP Proxy:**
+- A userspace streaming proxy operates above the OS TCP stack and therefore must not drop arbitrary mid-stream bytes, which would puncture holes in the TCP byte stream and corrupt HTTP headers or JSON syntax.
+- Instead, `FaultProxy` implements realistic connection-level loss semantics: when `profile.should_drop()` triggers (either upon connection ingress or during a transfer), the proxy immediately aborts and closes the entire connection on both ends.
+- This increments `packets_dropped`, records a connection rejection/abort, and forces the edge client to exercise honest transport reconnection, retry policies, and store-and-forward outbox buffering without synthetic payload corruption.
+
 **Exact Commands:**
 1. Start the Nimbus cloud server:
    ```bash
@@ -263,7 +268,8 @@ During a live evaluation or demo, the operator console at `http://127.0.0.1:8000
   - `LINK: SHIELDED_ROOM (250ms ± 80ms, 5% loss)` (amber warning tag)
   - `LINK: SEVERE (600ms, 15% loss)` (orange alert tag)
   - `LINK: PARTITIONED (BASEMENT_OUTAGE)` (pulsing red urgent tag)
-- **Zero Distraction When Clean:** When no fault is active, the badge remains hidden (`display: none`), preserving the clean default spatial aesthetic.
+- **Live Telemetry Numbers:** View real-time degradation metrics directly in the Command Floor HUD footer (`FAULT TELEMETRY: 250ms lat • 5% loss • 42 fwd • 3 drop`) or via `curl http://127.0.0.1:8000/fault` to inspect latency, loss rate, packets forwarded, and packets dropped during a demo.
+- **Zero Distraction When Clean:** When no fault is active, both the badge and telemetry line remain hidden (`display: none`), preserving the clean default spatial aesthetic.
 - **Local Diagnostic Endpoint:** `operator.js` polls `GET /fault`, which resolves the active degradation state from:
   1. Dynamic server state set via local `POST /fault`
   2. Automatic local state file `data/fault_status.json` (synced automatically by `FaultProxy`)

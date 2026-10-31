@@ -262,6 +262,22 @@
     font-size: 10.5px;
     letter-spacing: 0.02em;
   }
+  .hud-telemetry-col {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .hud-fault-telemetry {
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--status-queued);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 500;
+  }
+  .hud-fault-telemetry.partitioned {
+    color: var(--status-urgent);
+  }
   .hud-controls {
     pointer-events: auto;
     display: flex;
@@ -1164,26 +1180,51 @@ function setupCommandFloor(canvas) {
 
       updateFault(fault) {
         const badge = document.getElementById("floor-fault-badge");
-        if (!badge) return;
+        const statsElem = document.getElementById("floor-fault-stats");
         if (!fault || !fault.active || fault.profile === "healthy") {
-          badge.style.display = "none";
+          if (badge) badge.style.display = "none";
+          if (statsElem) statsElem.style.display = "none";
           return;
         }
-        badge.style.display = "inline-flex";
-        badge.className = "hud-tag fault";
+
         const prof = String(fault.profile || "custom").toUpperCase();
-        if (fault.disconnected) {
-          badge.classList.add("partitioned");
-          badge.textContent = `LINK: PARTITIONED (${prof})`;
-        } else if (fault.loss_rate >= 0.1 || fault.latency_ms >= 500) {
-          badge.classList.add("partitioned");
-          badge.textContent = `LINK: ${prof} (${Math.round(fault.latency_ms)}ms, ${Math.round(fault.loss_rate * 100)}% loss)`;
-        } else if (fault.loss_rate > 0 || fault.latency_ms > 0) {
-          badge.classList.add("warning");
-          const jitter = fault.jitter_ms ? ` \u00B1 ${Math.round(fault.jitter_ms)}ms` : "";
-          badge.textContent = `LINK: ${prof} (${Math.round(fault.latency_ms)}ms${jitter}, ${Math.round(fault.loss_rate * 100)}% loss)`;
-        } else {
-          badge.textContent = `LINK: ${prof}`;
+        const lat = Math.round(fault.latency_ms || 0);
+        const loss = Math.round((fault.loss_rate || 0) * 100);
+        const fwd = Number(fault.packets_forwarded || 0);
+        const drop = Number(fault.packets_dropped || 0);
+
+        // 1. Update header badge (preserve existing behavior)
+        if (badge) {
+          badge.style.display = "inline-flex";
+          badge.className = "hud-tag fault";
+          if (fault.disconnected) {
+            badge.classList.add("partitioned");
+            badge.textContent = `LINK: PARTITIONED (${prof})`;
+          } else if (fault.loss_rate >= 0.1 || fault.latency_ms >= 500) {
+            badge.classList.add("partitioned");
+            badge.textContent = `LINK: ${prof} (${lat}ms, ${loss}% loss)`;
+          } else if (fault.loss_rate > 0 || fault.latency_ms > 0) {
+            badge.classList.add("warning");
+            const jitter = fault.jitter_ms ? ` \u00B1 ${Math.round(fault.jitter_ms)}ms` : "";
+            badge.textContent = `LINK: ${prof} (${lat}ms${jitter}, ${loss}% loss)`;
+          } else {
+            badge.textContent = `LINK: ${prof}`;
+          }
+        }
+
+        // 2. Update telemetry summary line
+        if (statsElem) {
+          statsElem.style.display = "block";
+          statsElem.className = "hud-fault-telemetry";
+          if (fault.disconnected) {
+            statsElem.classList.add("partitioned");
+            statsElem.textContent = `FAULT TELEMETRY: PARTITIONED \u2022 100% loss \u2022 ${fwd} fwd \u2022 ${drop} drop`;
+          } else {
+            if (fault.loss_rate >= 0.1 || fault.latency_ms >= 500) {
+              statsElem.classList.add("partitioned");
+            }
+            statsElem.textContent = `FAULT TELEMETRY: ${lat}ms lat \u2022 ${loss}% loss \u2022 ${fwd} fwd \u2022 ${drop} drop`;
+          }
         }
       },
     };
@@ -1322,7 +1363,10 @@ if (document.readyState === "loading") {
           <span class="hud-status" id="floor-status-badge">FLEET: ACTIVE</span>
         </div>
         <div class="floor-hud-footer">
-          <div class="hud-coords" id="floor-telemetry">R1: IDLE [E-STORE] &bull; R2: IDLE [E-STORE] &bull; R3: IDLE [E-STORE]</div>
+          <div class="hud-telemetry-col">
+            <div class="hud-coords" id="floor-telemetry">R1: IDLE [E-STORE] &bull; R2: IDLE [E-STORE] &bull; R3: IDLE [E-STORE]</div>
+            <div class="hud-fault-telemetry" id="floor-fault-stats" style="display: none;"></div>
+          </div>
           <div class="hud-controls">
             <button type="button" class="hud-btn" id="floor-reset-btn">Reset View</button>
             <button type="button" class="hud-btn" id="floor-orbit-btn">Orbit: On</button>

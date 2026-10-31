@@ -454,52 +454,73 @@ class Handler(BaseHTTPRequestHandler):
     def _fault_view(self) -> dict:
         """Returns active network fault state for operator UI / diagnostics."""
         with _STATE_LOCK:
+            state = None
             # 1. Server in-memory state (set via POST /fault or tests)
             if getattr(self.server, "fault_state", None):
                 state = dict(self.server.fault_state)
                 state.setdefault("active", True)
-                return state
 
             # 2. Check data_dir / fault_status.json
-            data_dir = getattr(self, "data_dir", None) or Path("data")
-            status_file = data_dir / "fault_status.json"
-            if not status_file.exists():
-                status_file = Path("data/fault_status.json")
-            if status_file.exists():
-                try:
-                    data = json.loads(status_file.read_text(encoding="utf-8"))
-                    if isinstance(data, dict):
-                        return data
-                except Exception:
-                    pass
+            if state is None:
+                data_dir = getattr(self, "data_dir", None) or Path("data")
+                status_file = data_dir / "fault_status.json"
+                if not status_file.exists():
+                    status_file = Path("data/fault_status.json")
+                if status_file.exists():
+                    try:
+                        data = json.loads(status_file.read_text(encoding="utf-8"))
+                        if isinstance(data, dict):
+                            state = dict(data)
+                    except Exception:
+                        pass
 
             # 3. Environment variable fallback (NIMBUS_FAULT_PROFILE)
-            env_profile = os.environ.get("NIMBUS_FAULT_PROFILE", "").lower().strip()
-            if env_profile:
-                try:
-                    from scripts.fault_harness import PRESET_PROFILES
-                    if env_profile in PRESET_PROFILES:
-                        p = PRESET_PROFILES[env_profile]
-                        return {
-                            "active": env_profile != "healthy",
-                            "profile": p.name,
-                            "latency_ms": p.latency_ms,
-                            "jitter_ms": p.jitter_ms,
-                            "loss_rate": p.loss_rate,
-                            "disconnected": p.disconnected,
-                        }
-                except Exception:
-                    pass
+            if state is None:
+                env_profile = os.environ.get("NIMBUS_FAULT_PROFILE", "").lower().strip()
+                if env_profile:
+                    try:
+                        from scripts.fault_harness import PRESET_PROFILES
+                        if env_profile in PRESET_PROFILES:
+                            p = PRESET_PROFILES[env_profile]
+                            state = {
+                                "active": env_profile != "healthy",
+                                "profile": p.name,
+                                "latency_ms": p.latency_ms,
+                                "jitter_ms": p.jitter_ms,
+                                "loss_rate": p.loss_rate,
+                                "disconnected": p.disconnected,
+                            }
+                    except Exception:
+                        pass
 
             # 4. Default: healthy / no fault active
-            return {
-                "active": False,
-                "profile": "healthy",
-                "latency_ms": 0.0,
-                "jitter_ms": 0.0,
-                "loss_rate": 0.0,
-                "disconnected": False,
-            }
+            if state is None:
+                state = {
+                    "active": False,
+                    "profile": "healthy",
+                    "latency_ms": 0.0,
+                    "jitter_ms": 0.0,
+                    "loss_rate": 0.0,
+                    "disconnected": False,
+                }
+
+            # Normalize telemetry metrics
+            state.setdefault("packets_dropped", 0)
+            state.setdefault("packets_forwarded", 0)
+            state.setdefault("bytes_forwarded", 0)
+
+            lat = float(state.get("latency_ms", 0.0))
+            loss_pct = round(float(state.get("loss_rate", 0.0)) * 100, 1)
+            fwd = int(state.get("packets_forwarded", 0))
+            drop = int(state.get("packets_dropped", 0))
+            if state.get("disconnected"):
+                state["summary"] = f"PARTITIONED (100% loss) | pkts: {fwd} fwd / {drop} drop"
+            elif state.get("active"):
+                state["summary"] = f"{lat:.1f}ms latency, {loss_pct}% loss | pkts: {fwd} fwd / {drop} drop"
+            else:
+                state["summary"] = "healthy (0ms, 0% loss)"
+
+            return state
 
     def _post_fault(self, body: dict) -> None:
         """Set or clear active network fault state (local-only endpoint)."""
@@ -510,6 +531,18 @@ class Handler(BaseHTTPRequestHandler):
             profile_name = str(body.get("profile", "custom")).lower().strip()
             data_dir = getattr(self, "data_dir", None) or Path("data")
             status_file = data_dir / "fault_status.json"
+
+            # 1. Validate counters if provided
+            prev = getattr(self.server, "fault_state", {}) or {}
+            try:
+                fwd = int(body.get("packets_forwarded", prev.get("packets_forwarded", 0)))
+                drop = int(body.get("packets_dropped", prev.get("packets_dropped", 0)))
+                bytes_fwd = int(body.get("bytes_forwarded", prev.get("bytes_forwarded", 0)))
+                if fwd < 0 or drop < 0 or bytes_fwd < 0:
+                    raise ValueError("packet and byte counters must be non-negative")
+            except (ValueError, TypeError) as exc:
+                self._send_json(400, {"error": f"invalid packet/byte counter: {exc}"})
+                return
 
             if profile_name in ("none", "healthy", "clear") or body.get("active") is False:
                 self.server.fault_state = None
@@ -527,25 +560,54 @@ class Handler(BaseHTTPRequestHandler):
                 p = PRESET_PROFILES.get(profile_name)
             except Exception:
                 p = None
+                PRESET_PROFILES = {}
 
-            if p is not None:
-                state = {
-                    "active": profile_name != "healthy",
-                    "profile": p.name,
-                    "latency_ms": float(body.get("latency_ms", p.latency_ms)),
-                    "jitter_ms": float(body.get("jitter_ms", p.jitter_ms)),
-                    "loss_rate": float(body.get("loss_rate", p.loss_rate)),
-                    "disconnected": bool(body.get("disconnected", p.disconnected)),
-                }
+            if p is None and profile_name not in ("custom",):
+                valid = list(PRESET_PROFILES.keys()) if PRESET_PROFILES else ["healthy", "mild_wan", "shielded_room", "severe", "basement_outage"]
+                self._send_json(400, {"error": f"unknown fault profile: '{profile_name}'. Expected one of {valid} or 'custom'"})
+                return
+
+            try:
+                def_lat = p.latency_ms if p else 0.0
+                def_jit = p.jitter_ms if p else 0.0
+                def_loss = p.loss_rate if p else 0.0
+                def_disc = p.disconnected if p else False
+
+                lat = float(body.get("latency_ms", def_lat))
+                jit = float(body.get("jitter_ms", def_jit))
+                loss = float(body.get("loss_rate", def_loss))
+                disc = bool(body.get("disconnected", def_disc))
+
+                if lat < 0:
+                    raise ValueError("latency_ms must be non-negative")
+                if jit < 0:
+                    raise ValueError("jitter_ms must be non-negative")
+                if not (0.0 <= loss <= 1.0):
+                    raise ValueError("loss_rate must be between 0.0 and 1.0")
+            except (ValueError, TypeError) as exc:
+                self._send_json(400, {"error": f"invalid fault parameter: {exc}"})
+                return
+
+            state = {
+                "active": profile_name != "healthy",
+                "profile": p.name if p else profile_name,
+                "latency_ms": lat,
+                "jitter_ms": jit,
+                "loss_rate": loss,
+                "disconnected": disc,
+                "packets_forwarded": fwd,
+                "packets_dropped": drop,
+                "bytes_forwarded": bytes_fwd,
+            }
+
+            lat = state["latency_ms"]
+            loss_pct = round(state["loss_rate"] * 100, 1)
+            if state["disconnected"]:
+                state["summary"] = f"PARTITIONED (100% loss) | pkts: {fwd} fwd / {drop} drop"
+            elif state["active"]:
+                state["summary"] = f"{lat:.1f}ms latency, {loss_pct}% loss | pkts: {fwd} fwd / {drop} drop"
             else:
-                state = {
-                    "active": True,
-                    "profile": profile_name,
-                    "latency_ms": float(body.get("latency_ms", 0.0)),
-                    "jitter_ms": float(body.get("jitter_ms", 0.0)),
-                    "loss_rate": float(body.get("loss_rate", 0.0)),
-                    "disconnected": bool(body.get("disconnected", False)),
-                }
+                state["summary"] = "healthy (0ms, 0% loss)"
 
             self.server.fault_state = state
             try:

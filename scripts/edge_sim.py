@@ -68,13 +68,15 @@ class EdgeSim:
             return resp.status, out
 
     def flush(self) -> int:
-        """Retry sending buffered offline escalations; returns count successfully delivered."""
+        """Retry sending buffered offline escalations and check-ins; returns count successfully delivered."""
         if not self.outbox_buffer:
             return 0
         flushed = 0
         remaining = []
         for body in self.outbox_buffer:
-            status, _ = self._call("POST", "/escalations", body)
+            # Preserve original message_id and timestamp across replays without regenerating
+            endpoint = "/escalations" if "type" in body else "/checkins"
+            status, _ = self._call("POST", endpoint, body)
             if status in (200, 201, 204):
                 flushed += 1
             else:
@@ -93,21 +95,33 @@ class EdgeSim:
         return self._call("POST", "/fleet/heartbeat", body)
 
     def checkin(self, lease: dict):
-        body = {"cluster_id": self.cluster, "lease_id": lease["lease_id"], "lease_version": lease["version"],
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "message_id": self._mid("ci")}
+        body = {
+            "cluster_id": self.cluster,
+            "lease_id": lease["lease_id"],
+            "lease_version": lease["version"],
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "message_id": self._mid("ci"),
+        }
         if self.robots:
             body["robots"] = self.robots
-        return self._call("POST", "/checkins", body)
+        status, resp = self._call("POST", "/checkins", body)
+        if status not in (200, 201, 204):
+            # Network or server offline: hold check-in in local buffer for replay, preserving message_id and timestamp
+            self.outbox_buffer.append(body)
+        return status, resp
 
     def escalate(self, kind: str, lease: dict, payload: dict):
         task_id = lease["lease_id"][len("lease-"):lease["lease_id"].rindex("-v")]
         body = {
-            "type": kind, "message_id": self._mid(kind.lower()), "lease_version": lease["version"],
-            "task_id": task_id, "payload": payload
+            "type": kind,
+            "message_id": self._mid(kind.lower()),
+            "lease_version": lease["version"],
+            "task_id": task_id,
+            "payload": payload,
         }
         status, resp = self._call("POST", "/escalations", body)
         if status not in (200, 201, 204):
-            # Network or server offline: hold message in local buffer for replay (FR-10)
+            # Network or server offline: hold message in local buffer for replay (FR-10), preserving message_id
             self.outbox_buffer.append(body)
         return status, resp
 
