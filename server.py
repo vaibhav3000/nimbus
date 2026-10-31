@@ -9,6 +9,7 @@ touching these routes. Endpoints are the public seam; see SPEC-P4.md.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -57,7 +58,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- helpers ---------------------------------------------------------
 
     def _send_json(self, status: int, body: dict) -> None:
-        data = json.dumps(body).encode("utf-8")
+        data = json.dumps(body, allow_nan=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
@@ -504,15 +505,33 @@ class Handler(BaseHTTPRequestHandler):
                     "disconnected": False,
                 }
 
-            # Normalize telemetry metrics
-            state.setdefault("packets_dropped", 0)
-            state.setdefault("packets_forwarded", 0)
-            state.setdefault("bytes_forwarded", 0)
+            # Normalize telemetry metrics & strictly ensure finite numbers
+            def _clean_float(val, default=0.0):
+                if isinstance(val, (int, float)) and not isinstance(val, bool):
+                    f = float(val)
+                    if math.isfinite(f):
+                        return max(0.0, f)
+                return default
 
-            lat = float(state.get("latency_ms", 0.0))
-            loss_pct = round(float(state.get("loss_rate", 0.0)) * 100, 1)
-            fwd = int(state.get("packets_forwarded", 0))
-            drop = int(state.get("packets_dropped", 0))
+            def _clean_int(val, default=0):
+                if isinstance(val, int) and not isinstance(val, bool):
+                    return max(0, min(val, 2_147_483_647))
+                return default
+
+            state["latency_ms"] = _clean_float(state.get("latency_ms"), 0.0)
+            state["jitter_ms"] = _clean_float(state.get("jitter_ms"), 0.0)
+            state["loss_rate"] = max(0.0, min(1.0, _clean_float(state.get("loss_rate"), 0.0)))
+            state["packets_dropped"] = _clean_int(state.get("packets_dropped"), 0)
+            state["packets_forwarded"] = _clean_int(state.get("packets_forwarded"), 0)
+            state["bytes_forwarded"] = _clean_int(state.get("bytes_forwarded"), 0)
+            state["disconnected"] = bool(state.get("disconnected", False))
+            state["active"] = bool(state.get("active", False))
+            state["profile"] = str(state.get("profile", "healthy"))
+
+            lat = state["latency_ms"]
+            loss_pct = round(state["loss_rate"] * 100, 1)
+            fwd = state["packets_forwarded"]
+            drop = state["packets_dropped"]
             if state.get("disconnected"):
                 state["summary"] = f"PARTITIONED (100% loss) | pkts: {fwd} fwd / {drop} drop"
             elif state.get("active"):
@@ -528,22 +547,65 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "body must be a json object"})
             return
         with _STATE_LOCK:
-            profile_name = str(body.get("profile", "custom")).lower().strip()
             data_dir = getattr(self, "data_dir", None) or Path("data")
             status_file = data_dir / "fault_status.json"
+            MAX_INT = 2_147_483_647
 
-            # 1. Validate counters if provided
-            prev = getattr(self.server, "fault_state", {}) or {}
-            try:
-                fwd = int(body.get("packets_forwarded", prev.get("packets_forwarded", 0)))
-                drop = int(body.get("packets_dropped", prev.get("packets_dropped", 0)))
-                bytes_fwd = int(body.get("bytes_forwarded", prev.get("bytes_forwarded", 0)))
-                if fwd < 0 or drop < 0 or bytes_fwd < 0:
-                    raise ValueError("packet and byte counters must be non-negative")
-            except (ValueError, TypeError) as exc:
-                self._send_json(400, {"error": f"invalid packet/byte counter: {exc}"})
+            # 1. Strict validation of body field types
+            if "profile" in body:
+                if not isinstance(body["profile"], str):
+                    self._send_json(400, {"error": "profile must be a string"})
+                    return
+                profile_name = body["profile"].lower().strip()
+            else:
+                profile_name = "custom"
+
+            if "active" in body and not isinstance(body["active"], bool):
+                self._send_json(400, {"error": "active must be a boolean"})
                 return
 
+            if "disconnected" in body and not isinstance(body["disconnected"], bool):
+                self._send_json(400, {"error": "disconnected must be a boolean"})
+                return
+
+            # Integer counters: reject bools, non-ints, non-finite, and negatives; cap large integers
+            for k in ("packets_forwarded", "packets_dropped", "bytes_forwarded"):
+                if k in body:
+                    val = body[k]
+                    if isinstance(val, bool) or not isinstance(val, int):
+                        self._send_json(400, {"error": f"{k} must be an integer (no bools or strings allowed)"})
+                        return
+                    if val < 0:
+                        self._send_json(400, {"error": f"{k} must be non-negative"})
+                        return
+
+            # Float parameters: reject bools, non-numbers, non-finite (NaN/Inf), and out-of-range
+            for k in ("latency_ms", "jitter_ms"):
+                if k in body:
+                    val = body[k]
+                    if isinstance(val, bool) or not isinstance(val, (int, float)):
+                        self._send_json(400, {"error": f"{k} must be a number (no bools or strings allowed)"})
+                        return
+                    if not math.isfinite(val):
+                        self._send_json(400, {"error": f"{k} must be a finite number (NaN and Infinity not allowed)"})
+                        return
+                    if val < 0:
+                        self._send_json(400, {"error": f"{k} must be non-negative"})
+                        return
+
+            if "loss_rate" in body:
+                val = body["loss_rate"]
+                if isinstance(val, bool) or not isinstance(val, (int, float)):
+                    self._send_json(400, {"error": "loss_rate must be a number (no bools or strings allowed)"})
+                    return
+                if not math.isfinite(val):
+                    self._send_json(400, {"error": "loss_rate must be a finite number (NaN and Infinity not allowed)"})
+                    return
+                if not (0.0 <= val <= 1.0):
+                    self._send_json(400, {"error": "loss_rate must be between 0.0 and 1.0"})
+                    return
+
+            # 2. Handle clear / healthy profile
             if profile_name in ("none", "healthy", "clear") or body.get("active") is False:
                 self.server.fault_state = None
                 for p in (status_file, Path("data/fault_status.json")):
@@ -555,6 +617,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(200, {"accepted": True, "fault": self._fault_view()})
                 return
 
+            # 3. Preset profile resolution
             try:
                 from scripts.fault_harness import PRESET_PROFILES
                 p = PRESET_PROFILES.get(profile_name)
@@ -567,26 +630,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": f"unknown fault profile: '{profile_name}'. Expected one of {valid} or 'custom'"})
                 return
 
-            try:
-                def_lat = p.latency_ms if p else 0.0
-                def_jit = p.jitter_ms if p else 0.0
-                def_loss = p.loss_rate if p else 0.0
-                def_disc = p.disconnected if p else False
+            def_lat = p.latency_ms if p else 0.0
+            def_jit = p.jitter_ms if p else 0.0
+            def_loss = p.loss_rate if p else 0.0
+            def_disc = p.disconnected if p else False
 
-                lat = float(body.get("latency_ms", def_lat))
-                jit = float(body.get("jitter_ms", def_jit))
-                loss = float(body.get("loss_rate", def_loss))
-                disc = bool(body.get("disconnected", def_disc))
+            lat = float(body.get("latency_ms", def_lat))
+            jit = float(body.get("jitter_ms", def_jit))
+            loss = float(body.get("loss_rate", def_loss))
+            disc = bool(body.get("disconnected", def_disc))
 
-                if lat < 0:
-                    raise ValueError("latency_ms must be non-negative")
-                if jit < 0:
-                    raise ValueError("jitter_ms must be non-negative")
-                if not (0.0 <= loss <= 1.0):
-                    raise ValueError("loss_rate must be between 0.0 and 1.0")
-            except (ValueError, TypeError) as exc:
-                self._send_json(400, {"error": f"invalid fault parameter: {exc}"})
-                return
+            prev = getattr(self.server, "fault_state", {}) or {}
+            fwd = min(MAX_INT, int(body.get("packets_forwarded", prev.get("packets_forwarded", 0))))
+            drop = min(MAX_INT, int(body.get("packets_dropped", prev.get("packets_dropped", 0))))
+            bytes_fwd = min(MAX_INT, int(body.get("bytes_forwarded", prev.get("bytes_forwarded", 0))))
 
             state = {
                 "active": profile_name != "healthy",
@@ -600,7 +657,6 @@ class Handler(BaseHTTPRequestHandler):
                 "bytes_forwarded": bytes_fwd,
             }
 
-            lat = state["latency_ms"]
             loss_pct = round(state["loss_rate"] * 100, 1)
             if state["disconnected"]:
                 state["summary"] = f"PARTITIONED (100% loss) | pkts: {fwd} fwd / {drop} drop"
@@ -612,7 +668,7 @@ class Handler(BaseHTTPRequestHandler):
             self.server.fault_state = state
             try:
                 data_dir.mkdir(parents=True, exist_ok=True)
-                status_file.write_text(json.dumps(state), encoding="utf-8")
+                status_file.write_text(json.dumps(state, allow_nan=False), encoding="utf-8")
             except Exception:
                 pass
 

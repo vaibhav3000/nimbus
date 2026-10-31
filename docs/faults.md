@@ -193,8 +193,8 @@ This section provides the exact commands for running experiments **E4**, **E5**,
 
 **Packet-Loss Semantics in Userspace TCP Proxy:**
 - A userspace streaming proxy operates above the OS TCP stack and therefore must not drop arbitrary mid-stream bytes, which would puncture holes in the TCP byte stream and corrupt HTTP headers or JSON syntax.
-- Instead, `FaultProxy` implements realistic connection-level loss semantics: when `profile.should_drop()` triggers (either upon connection ingress or during a transfer), the proxy immediately aborts and closes the entire connection on both ends.
-- This increments `packets_dropped`, records a connection rejection/abort, and forces the edge client to exercise honest transport reconnection, retry policies, and store-and-forward outbox buffering without synthetic payload corruption.
+- Instead, `FaultProxy` implements connection-level loss semantics evaluated once per connection upon ingress. If `profile.should_drop()` evaluates to true, the connection is aborted immediately (`shutdown()`/`close()`), incrementing `packets_dropped` and `connections_rejected`.
+- Evaluating loss once per connection ensures the observed loss rate strictly matches the configured `loss_rate` (avoiding compound multi-chunk probabilities), while forcing the edge client to exercise honest transport reconnection, retry policies, and store-and-forward outbox buffering without synthetic payload corruption.
 
 **Exact Commands:**
 1. Start the Nimbus cloud server:

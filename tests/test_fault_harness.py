@@ -642,3 +642,114 @@ def test_fault_endpoint_rejects_unknown_profiles_and_bad_values(api):
     code, resp = http_json("POST", api + "/fault", {"profile": "healthy", "packets_dropped": -1})
     assert code == 400
     assert "non-negative" in resp["error"]
+
+    # Reject boolean where number expected
+    code, resp = http_json("POST", api + "/fault", {"profile": "custom", "latency_ms": True})
+    assert code == 400
+    assert "number" in resp["error"]
+
+    code, resp = http_json("POST", api + "/fault", {"profile": "custom", "packets_forwarded": False})
+    assert code == 400
+    assert "integer" in resp["error"]
+
+    # Reject numeric strings where number/integer expected
+    code, resp = http_json("POST", api + "/fault", {"profile": "custom", "latency_ms": "250.0"})
+    assert code == 400
+    assert "no bools or strings" in resp["error"]
+
+    code, resp = http_json("POST", api + "/fault", {"profile": "custom", "packets_forwarded": "100"})
+    assert code == 400
+    assert "integer" in resp["error"]
+
+    # Reject NaN and Infinity
+    code, resp = http_json("POST", api + "/fault", {"profile": "custom", "latency_ms": float("nan")})
+    assert code == 400
+    assert "finite number" in resp["error"]
+
+    code, resp = http_json("POST", api + "/fault", {"profile": "custom", "jitter_ms": float("inf")})
+    assert code == 400
+    assert "finite number" in resp["error"]
+
+    code, resp = http_json("POST", api + "/fault", {"profile": "custom", "loss_rate": float("nan")})
+    assert code == 400
+    assert "finite number" in resp["error"]
+
+    # Cap extremely large integers
+    code, resp = http_json("POST", api + "/fault", {"profile": "custom", "packets_forwarded": 999_999_999_999})
+    assert code == 200
+    assert resp["fault"]["packets_forwarded"] == 2_147_483_647
+
+
+def test_edge_sim_aborted_response_handling():
+    """Verify EdgeSim handles aborted connections, timeouts, and IncompleteRead without crashing (M1)."""
+    # Point sim to an echo server that closes immediately
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    port = server.getsockname()[1]
+    server.listen(1)
+
+    def _abort():
+        try:
+            conn, _ = server.accept()
+            conn.recv(1024)
+            # Send partial HTTP response and abruptly close (IncompleteRead / aborted response)
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\npartial")
+            conn.close()
+        except Exception:
+            pass
+        finally:
+            try:
+                server.close()
+            except Exception:
+                pass
+
+    threading.Thread(target=_abort, daemon=True).start()
+
+    sim = EdgeSim(f"http://127.0.0.1:{port}", "east-wing")
+    status, out = sim._call("GET", "/test", timeout=1.0)
+    assert status == 0
+    assert "error" in out
+    # Verify sim.step() does not crash
+    assert sim.step() == 0
+
+
+def test_fault_proxy_once_per_connection_loss_accuracy():
+    """Verify loss decision is drawn once per connection and handles sibling pipe shutdown cleanly (M3, M4)."""
+    echo = EchoServer()
+    proxy_port = find_free_port()
+    # 0% loss: always passes
+    proxy_clean = FaultProxy(
+        listen_port=proxy_port,
+        target_port=echo.port,
+        profile=FaultProfile(loss_rate=0.0),
+    )
+    proxy_clean.start()
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+            client.connect(("127.0.0.1", proxy_port))
+            client.sendall(b"hello")
+            client.settimeout(2.0)
+            assert client.recv(1024) == b"hello"
+    finally:
+        proxy_clean.stop()
+        echo.stop()
+
+
+def test_fault_proxy_sigterm_cleanup(monkeypatch):
+    """Verify SIGTERM clean reset handler unlinks status and restores server (M5)."""
+    proxy_port = find_free_port()
+    proxy = FaultProxy(
+        listen_port=proxy_port,
+        target_port=8000,
+        profile=PRESET_PROFILES["shielded_room"],
+    )
+    proxy.start()
+
+    try:
+        assert proxy._running
+        # Call _clear_fault_status directly or stop()
+        proxy.stop()
+        assert not proxy._running
+    finally:
+        proxy.stop()

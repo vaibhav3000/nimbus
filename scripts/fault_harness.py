@@ -34,6 +34,7 @@ import os
 from pathlib import Path
 import random
 import select
+import signal
 import socket
 import subprocess
 import sys
@@ -154,6 +155,20 @@ PRESET_PROFILES: dict[str, FaultProfile] = {
     "severe": FaultProfile(name="severe", latency_ms=600.0, jitter_ms=200.0, loss_rate=0.15),
     "basement_outage": FaultProfile(name="basement_outage", latency_ms=0.0, jitter_ms=0.0, loss_rate=1.0, disconnected=True),
 }
+
+
+def _safe_close(sock: socket.socket | None) -> None:
+    """Safely shut down and close a socket, ignoring errors if already closed."""
+    if sock is None:
+        return
+    try:
+        sock.shutdown(socket.SHUT_RDWR)
+    except (OSError, Exception):
+        pass
+    try:
+        sock.close()
+    except (OSError, Exception):
+        pass
 
 
 class FaultProxy:
@@ -298,6 +313,18 @@ class FaultProxy:
         except Exception:
             pass
 
+        if threading.current_thread() is threading.main_thread():
+            def _sigterm_reset(signum, frame):
+                self._clear_fault_status()
+                sys.exit(128 + signum)
+
+            try:
+                sig = getattr(signal, "SIGTERM", None)
+                if sig is not None:
+                    self._prev_sigterm = signal.signal(sig, _sigterm_reset)
+            except (ValueError, OSError):
+                pass
+
     def stop(self) -> None:
         """Stop listening and cleanly terminate active connections."""
         import atexit
@@ -306,20 +333,22 @@ class FaultProxy:
         except Exception:
             pass
 
+        if hasattr(self, "_prev_sigterm"):
+            try:
+                sig = getattr(signal, "SIGTERM", None)
+                if sig is not None:
+                    signal.signal(sig, self._prev_sigterm)
+            except (ValueError, OSError):
+                pass
+
         with self._lock:
             self._running = False
             if self._server_sock:
-                try:
-                    self._server_sock.close()
-                except Exception:
-                    pass
+                _safe_close(self._server_sock)
                 self._server_sock = None
 
             for s in list(self._active_sockets):
-                try:
-                    s.close()
-                except Exception:
-                    pass
+                _safe_close(s)
             self._active_sockets.clear()
 
         if self._worker_thread and self._worker_thread.is_alive():
@@ -344,10 +373,7 @@ class FaultProxy:
             if current_profile.disconnected:
                 with self._lock:
                     self.stats["connections_rejected"] += 1
-                try:
-                    client_sock.close()
-                except Exception:
-                    pass
+                _safe_close(client_sock)
                 continue
 
             # Spawn handler thread for bidirectional pipe
@@ -363,16 +389,13 @@ class FaultProxy:
         with self._lock:
             profile = self.profile
 
-        # Upfront packet-loss decision: drop/abort whole connection immediately
+        # Upfront packet-loss decision: draw once per connection (M3)
         if profile.should_drop():
             with self._lock:
                 self.stats["packets_dropped"] += 1
                 self.stats["connections_rejected"] += 1
             self._maybe_sync_stats()
-            try:
-                client_sock.close()
-            except Exception:
-                pass
+            _safe_close(client_sock)
             return
 
         target_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -382,11 +405,11 @@ class FaultProxy:
 
         try:
             target_sock.connect((self.target_host, self.target_port))
-        except Exception as exc:
+        except Exception:
             with self._lock:
                 self.stats["connections_rejected"] += 1
-            client_sock.close()
-            target_sock.close()
+            _safe_close(client_sock)
+            _safe_close(target_sock)
             with self._lock:
                 self._active_sockets.discard(client_sock)
                 self._active_sockets.discard(target_sock)
@@ -409,59 +432,50 @@ class FaultProxy:
         t2.join()
 
         for s in (client_sock, target_sock):
-            try:
-                s.close()
-            except Exception:
-                pass
+            _safe_close(s)
             with self._lock:
                 self._active_sockets.discard(s)
 
     def _pipe(self, src: socket.socket, dst: socket.socket, direction: str) -> None:
-        src.settimeout(1.0)
-        while self._running:
-            with self._lock:
-                profile = self.profile
+        try:
+            src.settimeout(1.0)
+            while self._running:
+                with self._lock:
+                    profile = self.profile
 
-            if profile.disconnected:
-                break
-
-            try:
-                data = src.recv(65536)
-                if not data:
+                if profile.disconnected:
                     break
-            except socket.timeout:
-                continue
-            except OSError:
-                break
 
-            # Packet loss injection: abort the connection rather than dropping arbitrary mid-stream bytes
-            if profile.should_drop():
-                with self._lock:
-                    self.stats["packets_dropped"] += 1
-                self._maybe_sync_stats()
                 try:
-                    src.close()
-                except Exception:
-                    pass
+                    data = src.recv(65536)
+                    if not data:
+                        break
+                except socket.timeout:
+                    continue
+                except OSError:
+                    break
+
+                # Latency and jitter injection (guaranteed non-negative)
+                delay = max(0.0, profile.compute_delay_sec())
+                if delay > 0.0:
+                    time.sleep(delay)
+
                 try:
-                    dst.close()
-                except Exception:
-                    pass
-                break
-
-            # Latency and jitter injection (guaranteed non-negative)
-            delay = max(0.0, profile.compute_delay_sec())
-            if delay > 0.0:
-                time.sleep(delay)
-
-            try:
-                dst.sendall(data)
-                with self._lock:
-                    self.stats["packets_forwarded"] += 1
-                    self.stats["bytes_forwarded"] += len(data)
-                self._maybe_sync_stats()
-            except OSError:
-                break
+                    dst.sendall(data)
+                    with self._lock:
+                        self.stats["packets_forwarded"] += 1
+                        self.stats["bytes_forwarded"] += len(data)
+                    self._maybe_sync_stats()
+                except OSError:
+                    break
+        except OSError:
+            # Handle sibling thread or OS closing socket concurrently (e.g. EBADF, WSAENOTSOCK, WSAECONNABORTED)
+            pass
+        except Exception:
+            pass
+        finally:
+            _safe_close(src)
+            _safe_close(dst)
 
 
 class TraceReplayer:
@@ -636,6 +650,18 @@ def main(argv: list[str] | None = None) -> int:
         replayer.start()
 
     print("Press Ctrl+C to stop.")
+    def _sig_handler(signum, frame):
+        print(f"\nReceived signal {signum}, stopping Fault Proxy...")
+        raise KeyboardInterrupt()
+
+    for sig_name in ("SIGINT", "SIGTERM"):
+        sig = getattr(signal, sig_name, None)
+        if sig is not None:
+            try:
+                signal.signal(sig, _sig_handler)
+            except (ValueError, OSError):
+                pass
+
     try:
         while True:
             time.sleep(1.0)

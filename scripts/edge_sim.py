@@ -18,6 +18,7 @@ matching. See docs/integration.md for full specifications.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 from pathlib import Path
 import sys
@@ -50,22 +51,32 @@ class EdgeSim:
         self.log: list[tuple[str, int, dict]] = []
         self.outbox_buffer: list[dict] = []  # buffered offline messages (FR-10 store-and-forward)
 
-    def _call(self, method: str, path: str, body: dict | None = None):
+    def _call(self, method: str, path: str, body: dict | None = None, timeout: float = 5.0):
         data = None if body is None else json.dumps(body).encode()
         req = urlreq.Request(self.api + path, data=data, method=method)
         if data:
             req.add_header("Content-Type", "application/json")
         try:
-            resp = urlreq.urlopen(req)
+            with urlreq.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read().decode("utf-8")
+                out = json.loads(raw or "{}")
+                status = resp.status
         except HTTPError as err:
-            resp = err
-        except (urlreq.URLError, OSError, ConnectionError) as err:
+            status = getattr(err, "status", getattr(err, "code", 500))
+            try:
+                raw = err.read().decode("utf-8")
+                out = json.loads(raw or "{}")
+            except Exception:
+                out = {"error": str(err)}
+        except (urlreq.URLError, OSError, ConnectionError, http.client.HTTPException, http.client.IncompleteRead) as err:
             self.log.append((f"{method} {path}", 0, {"error": str(err)}))
             return 0, {"error": str(err)}
-        with resp:
-            out = json.loads(resp.read().decode() or "{}")
-            self.log.append((f"{method} {path}", resp.status, out))
-            return resp.status, out
+        except (json.JSONDecodeError, UnicodeDecodeError) as err:
+            self.log.append((f"{method} {path}", 0, {"error": str(err)}))
+            return 0, {"error": str(err)}
+
+        self.log.append((f"{method} {path}", status, out))
+        return status, out
 
     def flush(self) -> int:
         """Retry sending buffered offline escalations and check-ins; returns count successfully delivered."""
@@ -127,28 +138,38 @@ class EdgeSim:
 
     def step(self) -> int:
         """Process new outbox rows once; returns how many were handled."""
-        self.flush()
-        status, out = self._call("GET", "/outbox")
-        if status not in (200, 201, 204) or not isinstance(out, dict):
+        try:
+            self.flush()
+            status, out = self._call("GET", "/outbox")
+            if status not in (200, 201, 204) or not isinstance(out, dict):
+                return 0
+            handled = 0
+            for row in out.get("outbox", []):
+                try:
+                    topic, payload = row.get("topic"), row.get("payload")
+                    if not topic or not isinstance(payload, dict):
+                        continue
+                    if topic == f"nimbus/{self.cluster}/probe":
+                        self.heartbeat(); handled += 1
+                    elif topic == f"nimbus/{self.cluster}/lease" and payload.get("lease_id") not in self.seen:
+                        self.seen.add(payload["lease_id"])
+                        handled += 1
+                        self.checkin(payload)
+                        if self.block and payload.get("version") == 1:
+                            self.escalate("UNEXPECTED_EVENT", payload, {
+                                "what_happened": f"corridor {self.block} blocked by a cart", "where": self.block,
+                                "robots_saw": [f"{payload.get('assigned_robots', ['R1'])[0]}: {self.block} blocked"],
+                                "segments": [{"segment_id": self.block, "state": "blocked"}]})
+                        elif self.complete:
+                            lid = payload["lease_id"]
+                            task = lid[len("lease-"):lid.rindex("-v")]
+                            self.escalate("OUTPUT_READY", payload, {"result_ref": f"s3://nimbus-outputs/{task}/delivery-proof.jpg"})
+                except Exception as exc:
+                    self.log.append(("step_row_error", 0, {"error": str(exc)}))
+            return handled
+        except Exception as exc:
+            self.log.append(("step_error", 0, {"error": str(exc)}))
             return 0
-        handled = 0
-        for row in out.get("outbox", []):
-            topic, payload = row["topic"], row["payload"]
-            if topic == f"nimbus/{self.cluster}/probe":
-                self.heartbeat(); handled += 1
-            elif topic == f"nimbus/{self.cluster}/lease" and payload["lease_id"] not in self.seen:
-                self.seen.add(payload["lease_id"])
-                handled += 1
-                self.checkin(payload)
-                if self.block and payload["version"] == 1:
-                    self.escalate("UNEXPECTED_EVENT", payload, {
-                        "what_happened": f"corridor {self.block} blocked by a cart", "where": self.block,
-                        "robots_saw": [f"{payload['assigned_robots'][0]}: {self.block} blocked"],
-                        "segments": [{"segment_id": self.block, "state": "blocked"}]})
-                elif self.complete:
-                    task = payload["lease_id"][len("lease-"):payload["lease_id"].rindex("-v")]
-                    self.escalate("OUTPUT_READY", payload, {"result_ref": f"s3://nimbus-outputs/{task}/delivery-proof.jpg"})
-        return handled
 
 
 def main() -> None:
@@ -196,14 +217,23 @@ def main() -> None:
 
     try:
         sim = EdgeSim(target_api, a.cluster, complete=a.complete, block=a.block)
-        sim.heartbeat()
+        try:
+            sim.heartbeat()
+        except Exception:
+            pass
         while True:
-            n = sim.step()
-            if n:
-                print(f"[{a.cluster}] handled {n} message(s)")
+            try:
+                n = sim.step()
+                if n:
+                    print(f"[{a.cluster}] handled {n} message(s)")
+            except Exception as exc:
+                print(f"[{a.cluster}] step warning: {exc}")
             if a.once:
                 break
-            sim.heartbeat()
+            try:
+                sim.heartbeat()
+            except Exception:
+                pass
             time.sleep(a.interval)
     finally:
         if proxy is not None:
