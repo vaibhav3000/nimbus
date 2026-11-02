@@ -277,7 +277,7 @@ def test_bedrock_adapter_sends_a_converse_request_and_parses_tool_use():
     assert [t["toolSpec"]["name"] for t in req["toolConfig"]["tools"]] == ["submit_task_spec", "ask_clarification"]
     assert req["toolConfig"]["toolChoice"] == {"any": {}}
     assert req["inferenceConfig"]["temperature"] == 0.0
-    assert res.tool_calls == [{"name": "ask_clarification", "input": {"question": "q?", "possible_readings": ["a"]}}]
+    assert res.tool_calls == [{"id": "t1", "name": "ask_clarification", "input": {"question": "q?", "possible_readings": ["a"]}}]
     assert (res.input_tokens, res.output_tokens, res.estimated) == (321, 45, False)
     assert res.text == "thinking"
 
