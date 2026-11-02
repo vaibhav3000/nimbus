@@ -4,236 +4,1226 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nimbus: Operator Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, system-ui, sans-serif;
-    color: #172428;
-    background-color: #eef1f1;
-    line-height: 1.4;
+    --bg-ground: #0e1116;
+    --bg-surface: #11141a;
+    --line: #2a3140;
+    --line-active: #c4a574;
+    --text: #e7e4dc;
+    --muted: #8b918a;
+    --brass: #c4a574;
+    --brass-hover: #d4b584;
+    --status-completed: #3d9a6a;
+    --status-queued: #c4a574;
+    --status-urgent: #c4554a;
+    --status-leased: #7f93b0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    background-color: var(--bg-ground);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     padding: 0;
-    background: #eef1f1;
-    color: #172428;
+    background-color: var(--bg-ground);
+    color: var(--text);
   }
+
   header {
-    background: #09282b;
-    color: #f7f9f9;
-    padding: 10px 18px;
-    border-bottom: 2px solid #051618;
+    background: #11141a;
+    border-bottom: 1px solid var(--line);
+    padding: 18px 36px;
   }
   header h1 {
-    font-size: 16px;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
     margin: 0;
-    font-weight: 700;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
+    color: var(--text);
   }
   header p {
-    margin: 3px 0 0;
+    margin: 4px 0 0;
     font-size: 12px;
-    color: #c0d3d5;
+    color: var(--muted);
   }
+
   main {
     display: grid;
-    grid-template-columns: minmax(420px, 1.25fr) minmax(360px, 1fr);
-    gap: 14px;
-    padding: 14px 18px;
-    max-width: 1300px;
+    grid-template-columns: minmax(360px, 1.15fr) minmax(460px, 1.4fr) minmax(320px, 0.95fr);
+    gap: 24px;
+    padding: 24px 32px 40px;
+    max-width: 1720px;
     margin: 0 auto;
   }
-  .card {
-    background: #ffffff;
-    border: 1px solid #cfd7d8;
-    border-radius: 2px;
-    padding: 12px 14px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+
+  @media (max-width: 1300px) {
+    main {
+      grid-template-columns: 1fr 1fr;
+    }
+    #command-floor-section {
+      grid-column: span 2;
+      order: -1;
+    }
   }
+
+  @media (max-width: 768px) {
+    main {
+      grid-template-columns: 1fr;
+    }
+    #command-floor-section {
+      grid-column: span 1;
+      order: 0;
+    }
+  }
+
+  .card {
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+
   h3 {
-    margin: 0 0 10px;
-    font-size: 13px;
+    margin: 0 0 12px;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #0f4044;
-    border-bottom: 1px solid #e1e7e8;
-    padding-bottom: 6px;
+    letter-spacing: 0.08em;
+    color: var(--muted);
   }
   h4 {
-    margin: 14px 0 6px;
-    font-size: 12px;
+    margin: 22px 0 10px;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
-    color: #3b4e52;
+    letter-spacing: 0.08em;
+    color: var(--brass);
   }
+
+  /* Three Canvases in a row */
+  .spatial-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .spatial-col {
+    display: flex;
+    flex-direction: column;
+  }
+  .canvas-container {
+    width: 100%;
+    height: 140px;
+    background: #11141a;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+  .canvas-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .canvas-container canvas.ready {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .canvas-container, .floor-container {
+      display: none !important;
+    }
+  }
+  .schematic-caption {
+    margin: 8px 0 0;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  /* Live Spatial Command Floor */
+  .floor-container {
+    width: 100%;
+    height: 420px;
+    background: #0e1116;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .floor-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+    opacity: 0;
+    transition: opacity 250ms ease;
+    cursor: grab;
+  }
+  .floor-container canvas:active {
+    cursor: grabbing;
+  }
+  .floor-container canvas.ready {
+    opacity: 1;
+  }
+  .floor-hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 12px 14px;
+  }
+  .floor-hud-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+  }
+  .hud-tag.live {
+    background: rgba(61, 154, 106, 0.2);
+    color: var(--status-completed);
+    border: 1px solid rgba(61, 154, 106, 0.4);
+    padding: 2px 7px;
+    border-radius: 2px;
+    font-weight: 700;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+  }
+  .hud-title {
+    color: var(--brass);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+  .hud-status {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .floor-hud-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    color: var(--text);
+    background: rgba(17, 20, 26, 0.88);
+    backdrop-filter: blur(4px);
+    padding: 8px 12px;
+    border-radius: 3px;
+    border: 1px solid rgba(42, 49, 64, 0.75);
+  }
+  .hud-coords {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    font-size: 10.5px;
+    letter-spacing: 0.02em;
+  }
+  .hud-controls {
+    pointer-events: auto;
+    display: flex;
+    gap: 8px;
+  }
+  .hud-btn {
+    background: #171b22;
+    color: var(--brass);
+    border: 1px solid var(--line);
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 9px;
+    border-radius: 2px;
+    cursor: pointer;
+    margin: 0;
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+  .hud-btn:hover {
+    border-color: var(--brass);
+    background-color: #1d232c;
+  }
+
+  /* Dense Plain Table */
   table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+    background: #11141a;
   }
   thead th {
-    background: #e8eded;
-    color: #1c3538;
-    font-weight: 700;
+    background-color: #171b22;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 600;
+    font-size: 10px;
     text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.08em;
     text-align: left;
-    padding: 6px 8px;
-    border-bottom: 2px solid #b8c4c7;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
   }
   tbody td {
     text-align: left;
-    padding: 6px 8px;
-    border-bottom: 1px solid #e5eaeb;
+    padding: 8px 10px;
+    border-bottom: 1px solid #1a202c;
+    color: var(--text);
     font-variant-numeric: tabular-nums;
   }
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
   tbody td:first-child {
-    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     font-size: 11px;
     font-weight: 600;
-    color: #0f4044;
+    color: var(--text);
   }
   tbody tr {
     cursor: pointer;
+    transition: background-color 150ms ease;
   }
   tbody tr:hover {
-    background: #eaf0f0;
+    background-color: rgba(255, 255, 255, 0.03);
   }
   tbody tr.active {
-    background: #d9e5e7;
-    font-weight: 600;
+    background-color: #181d26 !important;
+  }
+  tbody tr.active td {
+    border-bottom-color: var(--brass) !important;
+  }
+  tbody tr.active td:first-child {
+    color: var(--brass) !important;
+  }
+
+  /* Status Chips */
+  @keyframes state-mark {
+    0% { opacity: 0.5; transform: scale(0.97); }
+    100% { opacity: 1; transform: scale(1); }
   }
   .chip {
     display: inline-block;
-    font-size: 11px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.06em;
     padding: 2px 7px;
     border-radius: 2px;
-    border: 1px solid #b8c4c7;
-    background: #e8eded;
-    color: #233438;
-    line-height: 1.2;
-  }
-  .chip.paused {
-    background: #fef3d6;
-    color: #784803;
-    border-color: #d8a832;
-  }
-  .chip.cancelled, .chip.rejected {
-    background: #fbebee;
-    color: #7f1d1d;
-    border-color: #e8b0b8;
-  }
-  .chip.leased {
-    background: #e6f4ea;
-    color: #14532d;
-    border-color: #a3d9b0;
+    border: 1px solid transparent;
+    margin-left: 6px;
+    vertical-align: middle;
+    line-height: 1.4;
+    transition: all 150ms ease;
+    animation: state-mark 150ms ease forwards;
   }
   .chip.completed {
-    background: #e8f1f5;
-    color: #1e425e;
-    border-color: #a8c5db;
+    background: rgba(61, 154, 106, 0.15);
+    color: var(--status-completed);
+    border-color: rgba(61, 154, 106, 0.4);
   }
-  .chip.queued {
-    background: #f5f2ea;
-    color: #534731;
-    border-color: #dcd4c0;
+  .chip.queued, .chip.needs_clarification, .chip.clarify {
+    background: rgba(196, 165, 116, 0.15);
+    color: var(--status-queued);
+    border-color: rgba(196, 165, 116, 0.4);
   }
-  .chip.clarify, .chip.clarification {
-    background: #fef3d6;
-    color: #784803;
-    border-color: #e4c16a;
+  .chip.urgent, .chip.rejected, .chip.cancelled {
+    background: rgba(196, 85, 74, 0.15);
+    color: var(--status-urgent);
+    border-color: rgba(196, 85, 74, 0.4);
   }
+  .chip.leased {
+    background: rgba(127, 147, 176, 0.15);
+    color: var(--status-leased);
+    border-color: rgba(127, 147, 176, 0.4);
+  }
+  .chip.paused {
+    background: rgba(139, 145, 138, 0.15);
+    color: var(--muted);
+    border-color: rgba(139, 145, 138, 0.4);
+  }
+
   .muted {
-    color: #55666b;
+    color: var(--muted);
     font-size: 12px;
   }
   p.muted {
-    margin: 6px 0;
-    line-height: 1.4;
+    margin: 8px 0;
+    line-height: 1.5;
   }
+
+  /* Plain Timeline */
   ol.timeline {
     list-style: none;
     padding: 0;
-    margin: 8px 0;
-    border: 1px solid #cfd7d8;
-    background: #ffffff;
-    border-radius: 2px;
+    margin: 14px 0;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #11141a;
+    overflow: hidden;
   }
   ol.timeline li {
     display: flex;
     align-items: baseline;
-    gap: 10px;
-    padding: 5px 8px;
-    border-bottom: 1px solid #e7ecee;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #1c222d;
     font-size: 12px;
-    line-height: 1.35;
+    color: var(--text);
+    transition: background-color 150ms ease;
   }
   ol.timeline li:last-child {
     border-bottom: none;
   }
+  ol.timeline li:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
   ol.timeline li strong {
-    min-width: 80px;
-    width: 80px;
+    min-width: 90px;
+    width: 90px;
     flex-shrink: 0;
-    font-family: ui-monospace, "SF Mono", Consolas, monospace;
-    text-transform: uppercase;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-    color: #0f4044;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--status-leased);
   }
   ol.timeline li span.muted {
     margin-left: auto;
-    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    flex-shrink: 0;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     font-size: 11px;
-    color: #63757a;
-    white-space: nowrap;
+    color: var(--muted);
   }
+
+  /* Compact Controls */
   button {
-    font: inherit;
-    font-size: 12px;
-    font-weight: 600;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 11px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
-    padding: 5px 12px;
-    border-radius: 2px;
-    border: 1px solid #b8c4c7;
+    letter-spacing: 0.06em;
+    padding: 6px 14px;
+    border-radius: 3px;
     cursor: pointer;
-    margin-right: 6px;
-    background: #e8eded;
-    color: #1a2c30;
+    margin-right: 8px;
+    transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
   }
-  button:hover:not(:disabled) {
-    background: #dce3e4;
+  button:active:not(:disabled) {
+    transform: scale(0.97);
   }
   #pause-btn {
-    background: #fef7e6;
-    color: #7a4608;
-    border-color: #caa26c;
+    background-color: #171b22;
+    color: var(--brass);
+    border: 1px solid var(--line);
   }
   #pause-btn:hover:not(:disabled) {
-    background: #f9eccf;
+    border-color: var(--brass);
+    background-color: #1d232c;
   }
   #cancel-btn {
-    background: #fbebee;
-    color: #7f1d1d;
-    border-color: #d89aa1;
+    background-color: #171b22;
+    color: var(--status-urgent);
+    border: 1px solid var(--line);
   }
   #cancel-btn:hover:not(:disabled) {
-    background: #f5d4d7;
+    border-color: var(--status-urgent);
+    background-color: #24191a;
   }
   button:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
+    opacity: 0.4;
+    cursor: default;
   }
 </style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Scene 1: Wire Sphere from portfolio-template (Stijn Timmerman, MIT)
+function setupSphere(canvas) {
+  if (reduceMotion || !canvas) return;
+  try {
+    const parent = canvas.parentElement;
+    const w = parent ? parent.clientWidth : 200;
+    const h = parent ? parent.clientHeight : 140;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x11141a);
+    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 100);
+    camera.position.set(0, 0, 10);
+
+    const shape = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(2.2, 1),
+      new THREE.MeshBasicMaterial({ color: 0xc4a574, wireframe: true, transparent: true, opacity: 0.85 })
+    );
+    scene.add(shape);
+
+    const count = 400;
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count * 3; i++) pos[i] = (Math.random() - 0.5) * 20;
+    const dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const dust = new THREE.Points(
+      dustGeo,
+      new THREE.PointsMaterial({ size: 0.1, color: 0x7f93b0, transparent: true, opacity: 0.7 })
+    );
+    scene.add(dust);
+
+    let animId;
+    const clock = new THREE.Clock();
+    function animate() {
+      animId = requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+      shape.rotation.x = t * 0.2;
+      shape.rotation.y = t * 0.25;
+      dust.rotation.y = t * 0.03;
+      renderer.render(scene, camera);
+    }
+    animate();
+    canvas.classList.add("ready");
+
+    window.addEventListener("resize", () => {
+      const nw = parent ? parent.clientWidth : 200;
+      const nh = parent ? parent.clientHeight : 140;
+      camera.aspect = nw / nh;
+      camera.updateProjectionMatrix();
+      renderer.setSize(nw, nh);
+    });
+  } catch (e) {
+    canvas.style.display = "none";
+  }
+}
+
+// Scene 2: Organic Shader Blob from WebGLBlobs (Codrops, MIT)
+function setupBlob(canvas) {
+  if (reduceMotion || !canvas) return;
+  try {
+    const parent = canvas.parentElement;
+    const w = parent ? parent.clientWidth : 200;
+    const h = parent ? parent.clientHeight : 140;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x11141a);
+    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 100);
+    camera.position.set(0, 0, 7.5);
+
+    const vertexShader = `
+      varying vec2 vUv;
+      varying float vDistort;
+      uniform float uTime;
+      uniform float uSpeed;
+      uniform float uNoiseStrength;
+      uniform float uNoiseDensity;
+      uniform float uFreq;
+      uniform float uAmp;
+      uniform float uOffset;
+
+      vec3 mod289_1(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 mod289_1(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 permute_1(vec4 x) { return mod289_1(((x*34.0)+1.0)*x); }
+      vec4 taylorInvSqrt_1(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+      vec3 fade_1(vec3 t) { return t*t*t*(t*(t*6.0-15.0)+10.0); }
+
+      float pnoise(vec3 P, vec3 rep) {
+        vec3 Pi0 = mod(floor(P), rep);
+        vec3 Pi1 = mod(Pi0 + vec3(1.0), rep);
+        Pi0 = mod289_1(Pi0);
+        Pi1 = mod289_1(Pi1);
+        vec3 Pf0 = fract(P);
+        vec3 Pf1 = Pf0 - vec3(1.0);
+        vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+        vec4 iy = vec4(Pi0.yy, Pi1.yy);
+        vec4 iz0 = Pi0.zzzz;
+        vec4 iz1 = Pi1.zzzz;
+        vec4 ixy = permute_1(permute_1(ix) + iy);
+        vec4 ixy0 = permute_1(ixy + iz0);
+        vec4 ixy1 = permute_1(ixy + iz1);
+        vec4 gx0 = ixy0 * (1.0 / 7.0);
+        vec4 gy0 = fract(floor(gx0) * (1.0 / 7.0)) - 0.5;
+        gx0 = fract(gx0);
+        vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+        vec4 sz0 = step(gz0, vec4(0.0));
+        gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+        gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+        vec4 gx1 = ixy1 * (1.0 / 7.0);
+        vec4 gy1 = fract(floor(gx1) * (1.0 / 7.0)) - 0.5;
+        gx1 = fract(gx1);
+        vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+        vec4 sz1 = step(gz1, vec4(0.0));
+        gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+        gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+        vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+        vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+        vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+        vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+        vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+        vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+        vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+        vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+        vec4 norm0 = taylorInvSqrt_1(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
+        g000 *= norm0.x; g010 *= norm0.y; g100 *= norm0.z; g110 *= norm0.w;
+        vec4 norm1 = taylorInvSqrt_1(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
+        g001 *= norm1.x; g011 *= norm1.y; g101 *= norm1.z; g111 *= norm1.w;
+        float n000 = dot(g000, Pf0);
+        float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+        float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+        float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+        float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+        float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+        float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+        float n111 = dot(g111, Pf1);
+        vec3 fade_xyz = fade_1(Pf0);
+        vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
+        vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+        return 2.2 * mix(n_yz.x, n_yz.y, fade_xyz.x);
+      }
+
+      mat3 rotation3dY(float angle) {
+        float s = sin(angle);
+        float c = cos(angle);
+        return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
+      }
+      vec3 rotateY(vec3 v, float angle) { return rotation3dY(angle) * v; }
+
+      float map(float value, float inMin, float inMax, float outMin, float outMax) {
+        return outMin + (outMax - outMin) * (value - inMin) / (inMax - inMin);
+      }
+
+      void main() {
+        vUv = uv;
+        float t = uTime * uSpeed;
+        float distortion = pnoise((normal + t) * uNoiseDensity, vec3(10.0)) * uNoiseStrength;
+        vec3 pos = position + (normal * distortion);
+        float angle = sin(uv.y * uFreq + t) * uAmp;
+        pos = rotateY(pos, angle);
+        pos *= map(sin(uTime + uOffset), -1.0, 1.0, 1.0, 1.15);
+        vDistort = distortion;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+      }
+    `;
+
+    const fragmentShader = `
+      varying vec2 vUv;
+      varying float vDistort;
+      uniform float uTime;
+      uniform float uHue;
+      uniform float uAlpha;
+
+      vec3 cosPalette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
+        return a + b * cos(6.28318 * (c * t + d));
+      }
+
+      void main() {
+        float distort = vDistort * 2.0;
+        vec3 a = vec3(0.5, 0.45, 0.35);
+        vec3 b = vec3(0.4, 0.3, 0.2);
+        vec3 c = vec3(1.0, 1.0, 1.0);
+        vec3 d = vec3(0.08, 0.12, 0.2);
+        vec3 color = cosPalette(uHue + distort, a, b, c, d);
+        gl_FragColor = vec4(color, uAlpha);
+      }
+    `;
+
+    const material = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
+      uniforms: {
+        uTime: { value: 0 },
+        uSpeed: { value: 0.5 },
+        uNoiseDensity: { value: 1.2 },
+        uNoiseStrength: { value: 0.3 },
+        uFreq: { value: 2.5 },
+        uAmp: { value: 0.5 },
+        uHue: { value: 0.09 },
+        uOffset: { value: 0.0 },
+        uAlpha: { value: 0.9 },
+      },
+      transparent: true,
+      wireframe: false,
+    });
+
+    const blobMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(2.0, 24), material);
+    scene.add(blobMesh);
+
+    const clock = new THREE.Clock();
+    let animId;
+    function animate() {
+      animId = requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      material.uniforms.uTime.value += delta;
+      blobMesh.rotation.y += delta * 0.15;
+      renderer.render(scene, camera);
+    }
+    animate();
+    canvas.classList.add("ready");
+
+    window.addEventListener("resize", () => {
+      const nw = parent ? parent.clientWidth : 200;
+      const nh = parent ? parent.clientHeight : 140;
+      camera.aspect = nw / nh;
+      camera.updateProjectionMatrix();
+      renderer.setSize(nw, nh);
+    });
+  } catch (e) {
+    canvas.style.display = "none";
+  }
+}
+
+// Scene 3: Slow Rotating Wire Primitive from Three.js examples (mrdoob, MIT)
+function setupWire(canvas) {
+  if (reduceMotion || !canvas) return;
+  try {
+    const parent = canvas.parentElement;
+    const w = parent ? parent.clientWidth : 200;
+    const h = parent ? parent.clientHeight : 140;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x11141a);
+    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 100);
+    camera.position.set(0, 0, 7);
+
+    // Torus Knot outer wireframe
+    const geometry = new THREE.TorusKnotGeometry(1.6, 0.42, 80, 14);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x7f93b0,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.75,
+    });
+    const knot = new THREE.Mesh(geometry, material);
+    scene.add(knot);
+
+    // Inner brass core
+    const coreGeo = new THREE.OctahedronGeometry(0.8, 1);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xc4a574,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    scene.add(core);
+
+    const clock = new THREE.Clock();
+    let animId;
+    function animate() {
+      animId = requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+      knot.rotation.x = t * 0.18;
+      knot.rotation.y = t * 0.22;
+      core.rotation.y = -t * 0.3;
+      core.rotation.z = t * 0.15;
+      renderer.render(scene, camera);
+    }
+    animate();
+    canvas.classList.add("ready");
+
+    window.addEventListener("resize", () => {
+      const nw = parent ? parent.clientWidth : 200;
+      const nh = parent ? parent.clientHeight : 140;
+      camera.aspect = nw / nh;
+      camera.updateProjectionMatrix();
+      renderer.setSize(nw, nh);
+    });
+  } catch (e) {
+    canvas.style.display = "none";
+  }
+}
+
+// =========================================================================
+// Scene 4: Spatial Command-Floor View (Hospital Topology & Live Fleet Map)
+// =========================================================================
+
+// Topology node layout coordinates (derived from packs/hospital/topology.json)
+const TOPOLOGY_NODES = {
+  "E-STORE": { x: -8, z: -4, kind: "store", label: "E-STORE" },
+  "E1":      { x: -4, z: -4, kind: "corridor", label: "E1" },
+  "E2":      { x: 0,  z: -4, kind: "corridor", label: "E2" },
+  "E3":      { x: 4,  z: -4, kind: "corridor", label: "E3" },
+  "E4":      { x: 8,  z: -4, kind: "corridor", label: "E4" },
+  "2A":      { x: -4, z: 2,  kind: "ward", label: "Ward 2A" },
+  "2B":      { x: 4,  z: 2,  kind: "ward", label: "Ward 2B" },
+  "ward-3":  { x: 8,  z: 2,  kind: "ward", label: "Ward 3" },
+  "W0":      { x: 0,  z: -0.5, kind: "gate", label: "Gate W0" },
+  "W1":      { x: 0,  z: 3.5,  kind: "gate", label: "Gate W1" },
+  "W-STORE": { x: -8, z: 7.5, kind: "store", label: "W-STORE" },
+  "W2":      { x: -4, z: 7.5, kind: "corridor", label: "W2" },
+  "W3":      { x: 4,  z: 7.5, kind: "corridor", label: "W3" },
+  "2C":      { x: -4, z: 12,  kind: "ward", label: "Ward 2C" },
+  "3A":      { x: 0,  z: 12,  kind: "ward", label: "Ward 3A" },
+  "ward-5":  { x: 8,  z: 12,  kind: "ward", label: "Ward 5" },
+};
+
+const TOPOLOGY_EDGES = [
+  ["E-STORE", "E1"], ["E1", "E2"], ["E2", "E3"], ["E3", "E4"],
+  ["E1", "2A"], ["E3", "2B"], ["E4", "ward-3"],
+  ["E2", "W0"], ["W0", "W1"], ["W1", "W2"],
+  ["W-STORE", "W2"], ["W2", "W3"], ["W2", "2C"], ["W1", "3A"], ["W3", "ward-5"],
+];
+
+function createTextSprite(text, color = "#c4a574", bgColor = "rgba(14, 17, 22, 0.85)") {
+  const c = document.createElement("canvas");
+  c.width = 192;
+  c.height = 48;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = bgColor;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(4, 4, 184, 40, 5);
+  else ctx.rect(4, 4, 184, 40);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.font = "bold 20px monospace";
+  ctx.fillStyle = color;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 96, 24);
+
+  const texture = new THREE.CanvasTexture(c);
+  texture.minFilter = THREE.LinearFilter;
+  const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.scale.set(1.9, 0.48, 1);
+  return sprite;
+}
+
+function setupCommandFloor(canvas) {
+  if (reduceMotion || !canvas) return;
+
+  try {
+    const parent = canvas.parentElement;
+    const getW = () => (parent ? parent.clientWidth : 500);
+    const getH = () => (parent ? parent.clientHeight : 420);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setSize(getW(), getH());
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.95;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0e1116);
+    scene.fog = new THREE.FogExp2(0x0e1116, 0.015);
+
+    const camera = new THREE.PerspectiveCamera(46, getW() / getH(), 0.1, 150);
+    const defaultCamPos = { x: 0, y: 22, z: 24 };
+    const defaultTarget = { x: 0, y: 0, z: 3 };
+    camera.position.set(defaultCamPos.x, defaultCamPos.y, defaultCamPos.z);
+    camera.lookAt(defaultTarget.x, defaultTarget.y, defaultTarget.z);
+
+    // Ambient & Directional Lighting
+    const ambient = new THREE.AmbientLight(0x7f93b0, 0.85);
+    scene.add(ambient);
+
+    const dirLight = new THREE.DirectionalLight(0xc4a574, 1.2);
+    dirLight.position.set(12, 24, 10);
+    scene.add(dirLight);
+
+    // Floor holographic grid
+    const grid = new THREE.GridHelper(36, 36, 0xc4a574, 0x1f2735);
+    grid.position.y = 0;
+    scene.add(grid);
+
+    // Subtle drifting ambient particles
+    const dustCount = 240;
+    const dustPos = new Float32Array(dustCount * 3);
+    for (let i = 0; i < dustCount * 3; i += 3) {
+      dustPos[i] = (Math.random() - 0.5) * 36;
+      dustPos[i + 1] = Math.random() * 8 + 0.2;
+      dustPos[i + 2] = (Math.random() - 0.5) * 36;
+    }
+    const dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
+    const dustMat = new THREE.PointsMaterial({ size: 0.1, color: 0x7f93b0, transparent: true, opacity: 0.6 });
+    const dustPoints = new THREE.Points(dustGeo, dustMat);
+    scene.add(dustPoints);
+
+    // Corridor Transit Lines
+    const edgeGroup = new THREE.Group();
+    scene.add(edgeGroup);
+    const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x243346, transparent: true, opacity: 0.85 });
+    for (const [aName, bName] of TOPOLOGY_EDGES) {
+      const a = TOPOLOGY_NODES[aName];
+      const b = TOPOLOGY_NODES[bName];
+      if (a && b) {
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(a.x, 0.05, a.z),
+          new THREE.Vector3(b.x, 0.05, b.z),
+        ]);
+        edgeGroup.add(new THREE.Line(lineGeo, edgeMaterial));
+      }
+    }
+
+    // Active Mission Highlight Path
+    const activePathMat = new THREE.LineBasicMaterial({ color: 0xc4a574, linewidth: 2, transparent: true, opacity: 0.95 });
+    const activePathGeo = new THREE.BufferGeometry();
+    const activePathLine = new THREE.Line(activePathGeo, activePathMat);
+    activePathLine.visible = false;
+    scene.add(activePathLine);
+
+    // Topology Zones
+    const zoneMeshMap = {};
+    for (const [id, node] of Object.entries(TOPOLOGY_NODES)) {
+      const group = new THREE.Group();
+      group.position.set(node.x, 0, node.z);
+
+      let padGeo, padMat;
+      if (node.kind === "store") {
+        padGeo = new THREE.CylinderGeometry(1.3, 1.3, 0.12, 8);
+        padMat = new THREE.MeshStandardMaterial({ color: 0xc4a574, metalness: 0.4, roughness: 0.3, transparent: true, opacity: 0.8 });
+      } else if (node.kind === "ward") {
+        padGeo = new THREE.BoxGeometry(2.4, 0.12, 1.8);
+        padMat = new THREE.MeshStandardMaterial({ color: 0x223042, metalness: 0.5, roughness: 0.4, transparent: true, opacity: 0.85 });
+      } else if (node.kind === "gate") {
+        padGeo = new THREE.BoxGeometry(1.0, 0.12, 1.4);
+        padMat = new THREE.MeshStandardMaterial({ color: 0x3d1a18, metalness: 0.2, roughness: 0.5, transparent: true, opacity: 0.85 });
+        // Gate boundary posts
+        const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.4), new THREE.MeshBasicMaterial({ color: 0xc4554a }));
+        const p2 = p1.clone();
+        p1.position.set(0.45, 0.7, 0);
+        p2.position.set(-0.45, 0.7, 0);
+        group.add(p1, p2);
+      } else {
+        padGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.06, 12);
+        padMat = new THREE.MeshStandardMaterial({ color: 0x1a2330, metalness: 0.2, roughness: 0.6 });
+      }
+
+      const pad = new THREE.Mesh(padGeo, padMat);
+      pad.position.y = 0.06;
+      group.add(pad);
+
+      // Floor boundary wire
+      const edgeWire = new THREE.LineSegments(
+        new THREE.EdgesGeometry(padGeo),
+        new THREE.LineBasicMaterial({ color: node.kind === "store" ? 0xd4b584 : (node.kind === "gate" ? 0xc4554a : 0x7f93b0), transparent: true, opacity: 0.7 })
+      );
+      edgeWire.position.y = 0.06;
+      group.add(edgeWire);
+
+      // Floating holographic label
+      if (node.kind !== "corridor" || id === "E2") {
+        const label = createTextSprite(node.label, node.kind === "store" ? "#c4a574" : (node.kind === "gate" ? "#c4554a" : "#7f93b0"));
+        label.position.set(0, 1.4, 0);
+        group.add(label);
+      }
+
+      scene.add(group);
+      zoneMeshMap[id] = group;
+    }
+
+    // =========================================================================
+    // MOCK DATA LOCATION & TELEMETRY ADAPTER (EASILY SWAPPABLE FOR REAL P1/P2 API)
+    // =========================================================================
+    // Live positions / states for robots. Swap or override via window.NimbusSpatial.
+    const robotStateData = {
+      "R1": { id: "R1", zone: "E-STORE", battery: 0.95, state: "idle", cluster: "east-wing", targetZone: null },
+      "R2": { id: "R2", zone: "E-STORE", battery: 0.88, state: "idle", cluster: "east-wing", targetZone: null },
+      "R3": { id: "R3", zone: "E-STORE", battery: 0.72, state: "idle", cluster: "east-wing", targetZone: null },
+      "R4": { id: "R4", zone: "W-STORE", battery: 1.0,  state: "idle", cluster: "west-wing", targetZone: null },
+    };
+
+    const robotMeshes = {};
+    const stateColors = {
+      idle: 0x3d9a6a,     // Green
+      busy: 0xc4a574,     // Brass
+      leased: 0x7f93b0,   // Steel blue
+      charging: 0x7f93b0, // Steel blue
+      alert: 0xc4554a,    // Urgent red
+    };
+
+    for (const [rId, rData] of Object.entries(robotStateData)) {
+      const rGroup = new THREE.Group();
+      const node = TOPOLOGY_NODES[rData.zone] || TOPOLOGY_NODES["E-STORE"];
+      rGroup.position.set(node.x, 0, node.z);
+
+      // AGV Chassis Base
+      const chassis = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.65, 0.75, 0.28, 16),
+        new THREE.MeshStandardMaterial({ color: 0x181e26, metalness: 0.7, roughness: 0.3 })
+      );
+      chassis.position.y = 0.14;
+      rGroup.add(chassis);
+
+      // Rotating Brass Ring
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.62, 0.05, 8, 24),
+        new THREE.MeshBasicMaterial({ color: 0xc4a574, wireframe: true, transparent: true, opacity: 0.9 })
+      );
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 0.28;
+      rGroup.add(ring);
+
+      // Glowing Center Core
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.24, 12, 12),
+        new THREE.MeshBasicMaterial({ color: stateColors[rData.state] || 0x3d9a6a })
+      );
+      core.position.y = 0.36;
+      rGroup.add(core);
+
+      // Vertical holographic beacon cylinder
+      const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.06, 0.18, 1.8, 12, 1, true),
+        new THREE.MeshBasicMaterial({ color: stateColors[rData.state] || 0x3d9a6a, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })
+      );
+      beam.position.y = 1.15;
+      rGroup.add(beam);
+
+      // Floor Pulse Ring (animated)
+      const pulse = new THREE.Mesh(
+        new THREE.RingGeometry(0.7, 0.85, 24),
+        new THREE.MeshBasicMaterial({ color: stateColors[rData.state] || 0x3d9a6a, transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+      );
+      pulse.rotation.x = -Math.PI / 2;
+      pulse.position.y = 0.08;
+      rGroup.add(pulse);
+
+      // Overhead ID Sprite
+      const sprite = createTextSprite(rId, "#e7e4dc", "rgba(23, 27, 34, 0.9)");
+      sprite.position.set(0, 2.3, 0);
+      rGroup.add(sprite);
+
+      scene.add(rGroup);
+      robotMeshes[rId] = { group: rGroup, ring, core, beam, pulse, data: rData, pulseScale: 1.0 };
+    }
+
+    // Camera Orbit & Mouse Parallax Controls
+    let isDragging = false;
+    let prevMouse = { x: 0, y: 0 };
+    let cameraAngle = { theta: 0, phi: 0.65, radius: 32 };
+    let autoOrbit = true;
+
+    canvas.addEventListener("pointerdown", (e) => {
+      isDragging = true;
+      prevMouse = { x: e.clientX, y: e.clientY };
+    });
+
+    window.addEventListener("pointerup", () => { isDragging = false; });
+    window.addEventListener("pointermove", (e) => {
+      if (!isDragging) return;
+      const dx = (e.clientX - prevMouse.x) * 0.006;
+      const dy = (e.clientY - prevMouse.y) * 0.006;
+      cameraAngle.theta -= dx;
+      cameraAngle.phi = Math.max(0.2, Math.min(Math.PI / 2 - 0.05, cameraAngle.phi + dy));
+      prevMouse = { x: e.clientX, y: e.clientY };
+    });
+
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      cameraAngle.radius = Math.max(12, Math.min(50, cameraAngle.radius + e.deltaY * 0.03));
+    }, { passive: false });
+
+    function updateCamera() {
+      const cx = defaultTarget.x + cameraAngle.radius * Math.sin(cameraAngle.phi) * Math.sin(cameraAngle.theta);
+      const cy = defaultTarget.y + cameraAngle.radius * Math.cos(cameraAngle.phi);
+      const cz = defaultTarget.z + cameraAngle.radius * Math.sin(cameraAngle.phi) * Math.cos(cameraAngle.theta);
+      camera.position.set(cx, cy, cz);
+      camera.lookAt(defaultTarget.x, defaultTarget.y, defaultTarget.z);
+    }
+
+    // HUD Button Handlers
+    const resetBtn = document.getElementById("floor-reset-btn");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", () => {
+        cameraAngle.theta = 0;
+        cameraAngle.phi = 0.65;
+        cameraAngle.radius = 32;
+        autoOrbit = false;
+        const orbitBtn = document.getElementById("floor-orbit-btn");
+        if (orbitBtn) orbitBtn.textContent = "Orbit: Off";
+        updateCamera();
+      });
+    }
+
+    const orbitBtn = document.getElementById("floor-orbit-btn");
+    if (orbitBtn) {
+      orbitBtn.addEventListener("click", () => {
+        autoOrbit = !autoOrbit;
+        orbitBtn.textContent = autoOrbit ? "Orbit: On" : "Orbit: Off";
+      });
+    }
+
+    // Public Spatial API hooked by operator.js
+    window.NimbusSpatial = {
+      // Swappable telemetry hook: call with real API data whenever available
+      updateFleet(fleetArray) {
+        if (!Array.isArray(fleetArray)) return;
+        for (const cluster of fleetArray) {
+          if (!cluster || !Array.isArray(cluster.robots)) continue;
+          for (const r of cluster.robots) {
+            if (robotStateData[r.id]) {
+              robotStateData[r.id].state = r.state || robotStateData[r.id].state;
+              if (r.zone) robotStateData[r.id].zone = r.zone;
+              if (typeof r.battery === "number") robotStateData[r.id].battery = r.battery;
+            }
+          }
+        }
+        updateTelemetryHUD();
+      },
+
+      onTasksUpdate(tasks) {
+        if (!Array.isArray(tasks)) return;
+        for (const t of tasks) {
+          if (t.status === "leased" && t.lease) {
+            const assigned = t.lease.assigned_robots || [];
+            const destZone = (t.lease.allowed_zones && t.lease.allowed_zones[0]) || null;
+            for (const rid of assigned) {
+              if (robotStateData[rid]) {
+                robotStateData[rid].state = "leased";
+                if (destZone) {
+                  // Resolve zone prefix if bed index is present (e.g. "2B-12" -> "2B")
+                  const cleanZone = destZone.split("-")[0];
+                  if (TOPOLOGY_NODES[cleanZone]) robotStateData[rid].targetZone = cleanZone;
+                }
+              }
+            }
+          }
+        }
+        updateTelemetryHUD();
+      },
+
+      onTaskSelect(taskId) {
+        // Highlight destination if task has lease
+        const rows = document.getElementById("task-rows");
+        const badge = document.getElementById("floor-status-badge");
+        if (badge) badge.textContent = `TASK FOCUS: ${taskId}`;
+      },
+    };
+
+    function updateTelemetryHUD() {
+      const hudElem = document.getElementById("floor-telemetry");
+      if (!hudElem) return;
+      // Build text safely using textContent — r.state/zone/targetZone are untrusted fleet data.
+      const parts = [];
+      for (const [rId, r] of Object.entries(robotStateData)) {
+        const dest = r.targetZone ? ` \u2192 ${r.targetZone}` : "";
+        parts.push(
+          `${rId}: ${String(r.state).toUpperCase()} [${r.zone}${dest}, ${Math.round(r.battery * 100)}%]`
+        );
+      }
+      hudElem.textContent = parts.join(" \u2022 ");
+    }
+
+    // Animation Render Loop
+    const clock = new THREE.Clock();
+    let animId;
+
+    function animate() {
+      animId = requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      const elapsed = clock.getElapsedTime();
+
+      // Gentle auto-orbit rotation
+      if (autoOrbit && !isDragging) {
+        cameraAngle.theta += delta * 0.06;
+      }
+      updateCamera();
+
+      // Ambient particle motion
+      dustPoints.rotation.y = elapsed * 0.015;
+
+      // Robot animations and position interpolation
+      for (const [rId, rObj] of Object.entries(robotMeshes)) {
+        const rData = rObj.data;
+        const targetNode = (rData.targetZone && TOPOLOGY_NODES[rData.targetZone]) ||
+                           (TOPOLOGY_NODES[rData.zone] || TOPOLOGY_NODES["E-STORE"]);
+
+        // Smooth position lerp
+        rObj.group.position.x += (targetNode.x - rObj.group.position.x) * 0.04;
+        rObj.group.position.z += (targetNode.z - rObj.group.position.z) * 0.04;
+
+        // Spinning ring
+        rObj.ring.rotation.z = elapsed * (rData.state === "leased" ? 2.5 : 1.0);
+
+        // State color refresh
+        const cVal = stateColors[rData.state] || 0x3d9a6a;
+        rObj.core.material.color.setHex(cVal);
+        rObj.beam.material.color.setHex(cVal);
+        rObj.pulse.material.color.setHex(cVal);
+
+        // Ground pulse wave animation
+        rObj.pulseScale += delta * 0.9;
+        if (rObj.pulseScale > 2.4) rObj.pulseScale = 0.8;
+        rObj.pulse.scale.set(rObj.pulseScale, rObj.pulseScale, 1);
+        rObj.pulse.material.opacity = Math.max(0, 0.8 - (rObj.pulseScale - 0.8) / 1.6);
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+    canvas.classList.add("ready");
+
+    window.addEventListener("resize", () => {
+      const nw = getW();
+      const nh = getH();
+      camera.aspect = nw / nh;
+      camera.updateProjectionMatrix();
+      renderer.setSize(nw, nh);
+    });
+
+  } catch (err) {
+    canvas.style.display = "none";
+  }
+}
+
+function initAll() {
+  setupSphere(document.getElementById("canvas-sphere"));
+  setupBlob(document.getElementById("canvas-blob"));
+  setupWire(document.getElementById("canvas-wire"));
+  setupCommandFloor(document.getElementById("canvas-command-floor"));
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initAll);
+} else {
+  initAll();
+}
+</script>
 </head>
 <body>
 <header>
@@ -241,13 +1231,53 @@
   <p>Operator console: intents are recorded, not yet delivered to robots.</p>
 </header>
 <main>
-  <section class="card">
+  <section class="card" id="tasks-panel">
+    <div class="spatial-grid">
+      <div class="spatial-col">
+        <div class="canvas-container">
+          <canvas id="canvas-sphere"></canvas>
+        </div>
+      </div>
+      <div class="spatial-col">
+        <div class="canvas-container">
+          <canvas id="canvas-blob"></canvas>
+        </div>
+      </div>
+      <div class="spatial-col">
+        <div class="canvas-container">
+          <canvas id="canvas-wire"></canvas>
+        </div>
+      </div>
+    </div>
     <h3>Tasks</h3>
     <table>
       <thead><tr><th>task</th><th>status</th><th>priority</th><th>lease v</th><th>cluster</th></tr></thead>
       <tbody id="task-rows"></tbody>
     </table>
   </section>
+
+  <section class="card" id="command-floor-section">
+    <h3>Command Floor: Live Spatial Grid</h3>
+    <div class="floor-container">
+      <canvas id="canvas-command-floor"></canvas>
+      <div class="floor-hud">
+        <div class="floor-hud-header">
+          <span class="hud-tag live">SPATIAL GRID</span>
+          <span class="hud-title">HOSPITAL BLUEPRINT // EAST WING</span>
+          <span class="hud-status" id="floor-status-badge">FLEET: ACTIVE</span>
+        </div>
+        <div class="floor-hud-footer">
+          <div class="hud-coords" id="floor-telemetry">R1: IDLE [E-STORE] &bull; R2: IDLE [E-STORE] &bull; R3: IDLE [E-STORE]</div>
+          <div class="hud-controls">
+            <button type="button" class="hud-btn" id="floor-reset-btn">Reset View</button>
+            <button type="button" class="hud-btn" id="floor-orbit-btn">Orbit: On</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="schematic-caption">Spatial map derived from topology. Real-time telemetry linked to fleet heartbeat.</p>
+  </section>
+
   <section class="card">
     <h3>Stock by cluster</h3>
     <table>

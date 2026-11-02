@@ -36,6 +36,9 @@ async function refreshTasks() {
     tr.onclick = () => selectTask(t.task_id);
     rows.appendChild(tr);
   }
+  if (window.NimbusSpatial && window.NimbusSpatial.onTasksUpdate) {
+    window.NimbusSpatial.onTasksUpdate(data.tasks);
+  }
 }
 
 async function refreshStock() {
@@ -50,6 +53,9 @@ async function refreshStock() {
 
 async function selectTask(taskId) {
   selectedTaskId = taskId;
+  if (window.NimbusSpatial && window.NimbusSpatial.onTaskSelect) {
+    window.NimbusSpatial.onTaskSelect(taskId);
+  }
   await Promise.all([renderDetail(), refreshTasks()]);
 }
 
@@ -91,4 +97,20 @@ async function control(action) {
   await refreshTasks();
 }
 
+async function refreshFleet() {
+  try {
+    const { status, data } = await api("GET", "/fleet");
+    if (status === 200 && window.NimbusSpatial && window.NimbusSpatial.updateFleet) {
+      window.NimbusSpatial.updateFleet(data.fleet);
+    }
+  } catch (e) {
+    // fleet query optional/graceful fallback
+  }
+}
+
 refreshTasks();
+refreshFleet();
+setInterval(() => {
+  refreshTasks();
+  refreshFleet();
+}, 4000);
