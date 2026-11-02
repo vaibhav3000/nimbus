@@ -29,6 +29,7 @@ class FleetView:
     allow_unknown: bool = True
     task_id: str | None = None
     extra_forbidden: dict = field(default_factory=dict)  # zone -> reason (e.g. a blocked passage)
+    mapstate: object = None                              # MapState: zones the edge reported shut (FR-17)
 
     def robot_free(self, robot_id: str) -> bool:
         held = self.repo.holder(f"robot:{robot_id}", self.clock.now())
@@ -50,6 +51,10 @@ class FleetView:
             if priority not in r["exempt_priorities"]:
                 out[zone] = {"policy": r["policy"], "effect": r["effect"], "origin": "policy",
                              "reason": f"{r['policy']} ({r['kind']})"}
+        if self.mapstate is not None:   # a physical closure binds every priority class
+            for zone, c in self.mapstate.closed(self.clock.now()).items():
+                why = f"{c['state']} (reported by {c['source']})"
+                out[zone] = {"policy": why, "effect": "forbid", "origin": "event", "reason": why}
         for zone, why in self.extra_forbidden.items():
             out[zone] = {"policy": why, "effect": "forbid", "origin": "event", "reason": why}
         return out

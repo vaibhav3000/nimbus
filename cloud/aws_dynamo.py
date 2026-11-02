@@ -199,6 +199,19 @@ class DynamoLeaseRepo:
             labels.append(STOCK_LABEL)
         self._transact(ops, labels)
 
+    def live_leases(self) -> list[dict]:
+        out: list[dict] = []
+        kw = {"TableName": self.t["state"], "ConsistentRead": True,
+              "FilterExpression": "begins_with(pk, :p) AND #s = :live",
+              "ExpressionAttributeNames": {"#s": "state"},
+              "ExpressionAttributeValues": {":p": _s("TASK#"), ":live": _s("live")}}
+        while True:
+            page = self.c.scan(**kw)
+            out += [json.loads(it["lease"]["S"]) for it in page.get("Items", [])]
+            if "LastEvaluatedKey" not in page:
+                return out
+            kw["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
     def renew(self, task_id: str, version: int, new_expiry: str, *, now: datetime) -> dict:
         cur = self._get(f"TASK#{task_id}")
         if not cur or cur["state"]["S"] != "live":

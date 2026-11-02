@@ -34,6 +34,7 @@ class LeaseRepo(Protocol):
     def release(self, task_id: str) -> list[str]: ...
     def holder(self, key: str, now: datetime) -> dict | None: ...
     def current(self, task_id: str) -> dict | None: ...
+    def live_leases(self) -> list[dict]: ...
 
 
 class MemoryLeaseRepo:
@@ -62,6 +63,10 @@ class MemoryLeaseRepo:
         with self._lock:
             rec = self.leases.get(task_id)
             return dict(rec["lease"]) if rec and rec["state"] == "live" else None
+
+    def live_leases(self) -> list[dict]:
+        with self._lock:
+            return [dict(r["lease"]) for r in self.leases.values() if r["state"] == "live"]
 
     def commit(self, lease: dict, claim_keys: list[str], *, now: datetime, stock: tuple | None = None) -> None:
         # `stock` is ignored here: in memory the fleet registry holds the counts (reserve_stock).

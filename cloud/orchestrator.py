@@ -34,6 +34,7 @@ from .checker import Proposal, check
 from .clock import Clock, iso, parse_iso
 from .context import Context
 from .fleet import FleetRegistry
+from .mapstate import MapState
 from .leases import Conflict, MemoryLeaseRepo, claim_keys_for
 from .llm import CircuitBreakerLLM, LLMError, RuleBasedLLM
 from .pack import Pack
@@ -97,6 +98,7 @@ class Orchestrator:
         self.pack, self.topo, self.fleet, self.policies, self.repo = pack, topo, fleet, policies, repo
         self.scheduler, self.llm, self.clock = scheduler, llm, clock
         self.tools = ToolRegistry(pack)
+        self.mapstate = MapState(topo)
         self.mode, self.allow_unknown = mode, allow_unknown
         self.publish = publish or (lambda topic, payload: None)
         self.probe_timeout_s = probe_timeout_s
@@ -135,7 +137,7 @@ class Orchestrator:
 
     def view(self, task_id: str | None = None, extra_forbidden: dict | None = None) -> FleetView:
         return FleetView(self.topo, self.fleet, self.repo, self.policies, self.clock, self.pack,
-                         self.allow_unknown, task_id, extra_forbidden or {})
+                         self.allow_unknown, task_id, extra_forbidden or {}, self.mapstate)
 
     def health_check(self) -> list[str]:
         """Quick pre-delegation check: probe clusters that were alive and went
