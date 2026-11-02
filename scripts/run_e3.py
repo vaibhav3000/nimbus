@@ -71,8 +71,15 @@ class Tally:
 
 
 def new_orch(config: str, workdir: Path, clock: FixedClock) -> Orchestrator:
-    os.environ["NIMBUS_MODE"] = config
-    orch = Orchestrator.from_env(workdir, clock=clock)
+    previous = os.environ.get("NIMBUS_MODE")
+    os.environ["NIMBUS_MODE"] = config          # read once, at construction; restored so nothing else in the process is affected
+    try:
+        orch = Orchestrator.from_env(workdir, clock=clock)
+    finally:
+        if previous is None:
+            os.environ.pop("NIMBUS_MODE", None)
+        else:
+            os.environ["NIMBUS_MODE"] = previous
     for cid in orch.fleet.clusters:
         orch.fleet.heartbeat(cid, {})
     return orch
