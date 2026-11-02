@@ -11,7 +11,7 @@ from cloud.llm import RuleBasedLLM
 from cloud.pack import Pack
 from cloud.topology import Topology
 
-pack = Pack.load()
+pack = Pack.load("hospital")
 topo = Topology(pack)
 FLEET_LINE = re.compile(r"^\s+(\S+) area=(\S+) health=(\S+) robots\[(.*?)\] stock\[(.*?)\]", re.M)
 

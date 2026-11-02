@@ -30,6 +30,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+os.environ.setdefault("NIMBUS_PACK", "hospital")   # the task texts below name the hand-made map's wards; MS3 ports them to hospital_sim
 
 from cloud.clock import FixedClock  # noqa: E402
 from cloud.orchestrator import Orchestrator  # noqa: E402

@@ -15,6 +15,13 @@ import server
 
 
 @pytest.fixture(autouse=True)
+def _pin_hospital_pack(monkeypatch):
+    """The shipped default is P1's Gazebo map (hospital_sim). Most tests were written against the hand-made
+    map, so they pin it; tests of the Gazebo map set NIMBUS_PACK themselves (it overrides this)."""
+    monkeypatch.setenv("NIMBUS_PACK", "hospital")
+
+
+@pytest.fixture(autouse=True)
 def _aws_backend(monkeypatch):
     """NIMBUS_BACKEND=aws runs the whole suite against the DynamoDB adapters
     on moto (an emulator: no account, no network, no cost)."""

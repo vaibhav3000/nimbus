@@ -18,8 +18,8 @@ python edge/run_supervisor.py --cluster east-wing             # or P2's real edg
 ```
 - URL: http://127.0.0.1:8000 (requester app), http://127.0.0.1:8000/operator (console, includes stock by cluster).
 - Change the port with `PORT=8010`, the data folder with `DATA_DIR=/tmp/nimbus`.
-- Plan on P1's Gazebo map instead of the built-in hospital: `NIMBUS_PACK=hospital_sim python server.py`
-  (rebuild its topology after P1 updates their map: `python scripts/build_sim_topology.py`).
+- The default map is P1's Gazebo topology (pack `hospital_sim`; rebuild it after P1 updates their map: `python scripts/build_sim_topology.py`).
+  The older hand-made map is `NIMBUS_PACK=hospital`.
 - Set stock: `curl -X POST localhost:8000/fleet/stock -H 'Content-Type: application/json' -d '{"cluster_id":"east-wing","stock":{"wheelchair":5}}'`
 
 ## Evaluation configurations (C1 / C2 / C3)
@@ -35,7 +35,8 @@ E3 uses the offline stand-in model by default (token counts and latency are esti
 
 ## MS2 behaviour to try (offline)
 ```bash
-NIMBUS_PACK=hospital_sim python server.py            # plan on P1's Gazebo map (default pack is the hand-made v0 map)
+python server.py                                     # plans on P1's Gazebo map (hospital_sim is now the default)
+NIMBUS_PACK=hospital python server.py                # the older hand-made map (wards 2A, 2B, 2C, 3A, ward-5)
 python scripts/edge_sim.py --cluster east-wing --block east_mid_hall --robot-zone east_waiting_approach   # SC-2 corridor
 python scripts/edge_sim.py --cluster west-wing --close west_north_gate --robot-zone north_hall            # SC-2 gate
 curl -X POST localhost:8000/requests -H 'Content-Type: application/json' \

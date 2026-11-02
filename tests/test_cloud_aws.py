@@ -19,7 +19,7 @@ from cloud.llm import BedrockLLM, CassetteLLM, LLMError, LLMResult  # noqa: E402
 from cloud.pack import Pack  # noqa: E402
 from cloud.tools import ToolRegistry  # noqa: E402
 
-REGISTRY = ToolRegistry(Pack.load())
+REGISTRY = ToolRegistry(Pack.load("hospital"))
 from cloud_helpers import make_orch, new_task  # noqa: E402
 from test_cloud_units import lease  # noqa: E402
 
