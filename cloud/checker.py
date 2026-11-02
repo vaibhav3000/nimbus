@@ -93,7 +93,7 @@ def check(spec: dict, proposal: Proposal, view: FleetView, *, holds_stock: bool 
             violate("policy", f"{bound} is {r['effect']} by {r['reason']}",
                     kind="hold" if r["effect"] == "hold" else "veto", policy=r["policy"])
         else:
-            start = src if src is not None else topo.source_of(cluster["area"])
+            start = src if src is not None else topo.home_of(proposal.cluster_id)
             routes = topo.routes(start, dest, allowed=zones - set(restricted), avoid=set(restricted))
             approach: list = []
             if routes and src is not None and not unknown:
@@ -107,7 +107,7 @@ def check(spec: dict, proposal: Proposal, view: FleetView, *, holds_stock: bool 
                 res.checks.append("reachability")
                 res.checks += sorted({f"policy:{r['policy']}" for r in restricted.values() if r["origin"] == "policy"})
                 res.routes = routes
-                res.source_zone = src_zone or start
+                res.source_zone = topo.canonical_zone(src_zone) if src_zone else start
             else:
                 violate("reachability", f"no route {start}->{dest} avoiding restricted zones")
 

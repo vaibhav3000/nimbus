@@ -1,6 +1,10 @@
 """
 Nimbus — Milestone 1 Demonstration (Person 2: Edge Tier)
-Executes Task T1 (Routine Hospital Delivery: Central Supply -> Ward 2B Bed 12)
+Executes Task T1 (Routine Hospital Delivery: East Waiting Approach -> Nurse Station Approach)
+Uses Person 1's Gazebo hospital topology nodes:
+  - Allowed zones: east_waiting_approach, east_mid_hall, nurse_station_approach
+  - Forbidden zones: west_mid_hall
+  - Assigned robot: R1 in cluster east-wing
 Demonstrates:
   1. Lease Ingestion & Draft 2020-12 Schema Validation (FR-5, FR-8)
   2. Sub-task Execution on Robot Navigation Stack (FR-3)
@@ -43,9 +47,12 @@ def run_demo():
     )
     print("    - Local SQLite store: 'edge_local_store.db'")
     print(f"    - Edge SLM mode: {supervisor.slm.mode} (Model: {supervisor.slm.model_name})")
+    print(f"    - Topology Graph: {len(supervisor.topology.get('nodes', {}))} nodes, {len(supervisor.waypoints)} waypoints")
+    print(f"    - Cluster Home Zone: {supervisor.home_zone}")
+    print(f"    - Designated Safe Parking: {supervisor.safe_parking_zone}")
     print("    - Supervised robots: ['R1']")
 
-    # 2. Formulate Task T1 Lease (matching contracts/lease.schema.json)
+    # 2. Formulate Task T1 Lease using Person 1's topology node IDs
     now = datetime.now(timezone.utc)
     deadline = now + timedelta(minutes=10)
     expiry = now + timedelta(minutes=12)
@@ -57,14 +64,18 @@ def run_demo():
         "priority": "routine",
         "deadline_ts": deadline.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "expiry_ts": expiry.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "allowed_zones": ["central-supply", "corridor-2B", "2B-12"],
-        "forbidden_zones": ["ward-2C-isolation"],
+        "allowed_zones": [
+            "east_waiting_approach",
+            "east_mid_hall",
+            "nurse_station_approach"
+        ],
+        "forbidden_zones": ["west_mid_hall"],
         "speed_limit": 0.8,
         "assigned_robots": ["R1"],
         "task_sequence": [
-            {"cmd": "go_to", "robot": "R1", "params": {"to": "central-supply"}},
+            {"cmd": "go_to", "robot": "R1", "params": {"to": "east_waiting_approach"}},
             {"cmd": "wait", "robot": "R1", "params": {"seconds": 5}},
-            {"cmd": "go_to", "robot": "R1", "params": {"to": "2B-12"}},
+            {"cmd": "go_to", "robot": "R1", "params": {"to": "nurse_station_approach"}},
             {"cmd": "photo", "robot": "R1", "params": {}},
             {"cmd": "beep", "robot": "R1", "params": {}}
         ],
@@ -75,6 +86,7 @@ def run_demo():
     print("\n[2] Ingesting Cloud Lease for Task T1 (Routine Equipment Delivery):")
     print(f"    - Lease ID    : {lease_t1['lease_id']} (v{lease_t1['version']})")
     print(f"    - Priority    : {lease_t1['priority']}")
+    print(f"    - Cluster ID  : {lease_t1['cluster_id']}")
     print(f"    - Allowed     : {lease_t1['allowed_zones']}")
     print(f"    - Forbidden   : {lease_t1['forbidden_zones']}")
     print(f"    - Sub-tasks   : {len(lease_t1['task_sequence'])} steps in sequence")
@@ -89,18 +101,24 @@ def run_demo():
 
     # 4. Demonstrate Live Tactical Reasoning with Local Ollama SLM
     print("\n[4] Testing Live Tactical Event with Local SLM (Qwen2.5-1.5B via Ollama):")
-    print("    Scenario: Robot R1 detects maintenance cart in corridor-2B.")
+    print("    Scenario: Robot R1 detects maintenance trolley blocking east_mid_hall.")
     tactical_context = {
         "lease_id": lease_t1["lease_id"],
         "version": 1,
         "time_remaining_sec": 480.0,
         "robot_id": "R1",
-        "current_pos": [14.2, 5.0],
-        "current_zone": "corridor-2B",
-        "allowed_zones": lease_t1["allowed_zones"],
+        "current_pos": [4.5, 3.0],  # east_mid_hall waypoint
+        "current_zone": "east_mid_hall",
+        "allowed_zones": [
+            "east_waiting_approach",
+            "east_mid_hall",
+            "east_north_gate",
+            "north_hall",
+            "nurse_station_approach"
+        ],
         "forbidden_zones": lease_t1["forbidden_zones"],
-        "event_description": "Maintenance trolley partially blocking corridor path; bypass corridor-2B-north available.",
-        "allowed_waypoints": ["corridor-2B", "corridor-2B-north"]
+        "event_description": "Maintenance trolley partially blocking east_mid_hall; bypass via east_north_gate -> north_hall available.",
+        "allowed_waypoints": ["east_mid_hall", "east_north_gate", "north_hall", "nurse_station_approach"]
     }
 
     print("    Invoking SLM inference...")

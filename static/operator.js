@@ -21,6 +21,7 @@ const msgId = () => "op-" + Math.random().toString(36).slice(2, 12);
 let selectedTaskId = null;
 
 async function refreshTasks() {
+  refreshStock();
   const { data } = await api("GET", "/tasks");
   const rows = $("task-rows");
   rows.innerHTML = "";
@@ -38,6 +39,16 @@ async function refreshTasks() {
   if (window.NimbusSpatial && window.NimbusSpatial.onTasksUpdate) {
     window.NimbusSpatial.onTasksUpdate(data.tasks);
   }
+}
+
+async function refreshStock() {
+  const { data } = await api("GET", "/fleet");
+  const clusters = data.fleet;
+  const items = [...new Set(clusters.flatMap((c) => Object.keys(c.stock)))].sort();
+  $("stock-head").innerHTML = `<tr><th>item</th>${clusters.map((c) =>
+    `<th>${esc(c.cluster_id)} <span class="muted">${esc(c.health)}</span></th>`).join("")}</tr>`;
+  $("stock-rows").innerHTML = items.map((item) =>
+    `<tr><td>${esc(item)}</td>${clusters.map((c) => `<td>${esc(c.stock[item] ?? 0)}</td>`).join("")}</tr>`).join("");
 }
 
 async function selectTask(taskId) {

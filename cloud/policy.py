@@ -17,6 +17,7 @@ import re
 import threading
 
 from .pack import Pack
+from .topology import Topology
 
 
 class PolicyBook:
@@ -25,6 +26,10 @@ class PolicyBook:
         self._kinds = pack.restrictions
         self._active: dict[str, dict] = {}  # zone -> {"kind","source"}
         self._lock = threading.Lock()
+        self._topo = Topology(pack)
+
+    def _node(self, zone: str) -> str:
+        return self._topo.resolve_node(zone) or zone
 
     def retrieve(self, text: str, *, extra_terms: tuple[str, ...] = (), limit: int = 3) -> list[dict]:
         """Top documents by keyword overlap with the request. Always cites id."""
@@ -47,11 +52,11 @@ class PolicyBook:
         if kind not in self._kinds:
             raise KeyError(f"unknown restriction kind {kind!r}; this pack defines {sorted(self._kinds)}")
         with self._lock:
-            self._active[zone] = {"kind": kind, "source": source}
+            self._active[self._node(zone)] = {"kind": kind, "source": source}
 
     def lift(self, zone: str) -> None:
         with self._lock:
-            self._active.pop(zone, None)
+            self._active.pop(self._node(zone), None)
 
     def restrictions(self) -> dict[str, dict]:
         """zone -> {kind, policy, effect, exempt_priorities, source}."""

@@ -56,8 +56,64 @@ def ensure_tables(client, names: dict) -> None:
         pass
 
 
+STOCK_LABEL = "stock"
+
+
 def _s(v): return {"S": v}
 def _n(v): return {"N": str(v)}
+
+
+def _stock_pk(cluster_id: str, item: str) -> str:
+    return f"STOCK#{cluster_id}#{item}"
+
+
+class DynamoStockStore:
+    """Durable stock: one row per cluster and item in the state table
+    (pk STOCK#<cluster>#<item>, attribute qty). Decrements happen inside the
+    lease transaction (DynamoLeaseRepo.commit); this class seeds, loads and
+    sets absolute counts, and gives an item back."""
+
+    def __init__(self, client, names: dict | None = None):
+        self.c = client
+        self.t = names or tables_from_env()
+
+    @classmethod
+    def from_env(cls) -> "DynamoStockStore":
+        import boto3
+        return cls(boto3.client("dynamodb", region_name=os.environ.get("AWS_REGION", "ap-south-1")))
+
+    def seed(self, clusters: dict) -> None:
+        """Write the seed counts for rows that do not exist yet; existing rows are left alone."""
+        for cid, c in clusters.items():
+            for item, qty in c["stock"].items():
+                try:
+                    self.c.put_item(TableName=self.t["state"], ConditionExpression="attribute_not_exists(pk)",
+                                    Item={"pk": _s(_stock_pk(cid, item)), "cluster": _s(cid), "item": _s(item), "qty": _n(qty)})
+                except self.c.exceptions.ConditionalCheckFailedException:
+                    pass
+
+    def load(self) -> dict:
+        """cluster -> {item: qty} for every stock row."""
+        out: dict = {}
+        kw = {"TableName": self.t["state"], "ConsistentRead": True,
+              "FilterExpression": "begins_with(pk, :p)", "ExpressionAttributeValues": {":p": _s("STOCK#")}}
+        while True:
+            page = self.c.scan(**kw)
+            for it in page.get("Items", []):
+                out.setdefault(it["cluster"]["S"], {})[it["item"]["S"]] = int(it["qty"]["N"])
+            if "LastEvaluatedKey" not in page:
+                return out
+            kw["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+    def set(self, cluster_id: str, item: str, qty: int) -> None:
+        self.c.put_item(TableName=self.t["state"], Item={"pk": _s(_stock_pk(cluster_id, item)), "cluster": _s(cluster_id),
+                                                         "item": _s(item), "qty": _n(qty)})
+
+    def add(self, cluster_id: str, item: str, delta: int) -> None:
+        self.c.update_item(TableName=self.t["state"], Key={"pk": _s(_stock_pk(cluster_id, item))},
+                           UpdateExpression="SET qty = if_not_exists(qty, :z) + :d, #c = :c, #i = :i",
+                           ExpressionAttributeNames={"#c": "cluster", "#i": "item"},
+                           ExpressionAttributeValues={":z": _n(0), ":d": _n(delta), ":c": _s(cluster_id), ":i": _s(item)})
 
 
 class DynamoLeaseRepo:
@@ -102,7 +158,9 @@ class DynamoLeaseRepo:
             "ConditionExpression": "attribute_not_exists(pk) OR until_epoch <= :now OR task_id = :me",
             "ExpressionAttributeValues": {":now": _n(now.timestamp()), ":me": _s(task_id)}}}
 
-    def commit(self, lease: dict, claim_keys: list[str], *, now: datetime) -> None:
+    def commit(self, lease: dict, claim_keys: list[str], *, now: datetime, stock: tuple | None = None) -> None:
+        """`stock` = (cluster, item): take one from the durable count in the same
+        transaction as the lease and the robot claim, so they succeed or fail together."""
         task_id = _task_of(lease)
         cur = self._get(f"TASK#{task_id}")
         if cur and cur["state"]["S"] == "released":
@@ -132,6 +190,13 @@ class DynamoLeaseRepo:
                                      "version": _n(lease["version"]), "lease": _s(json.dumps(lease))},
                             "ConditionExpression": "attribute_not_exists(lease_id)"}})
         labels = ["task pointer"] + [f"{k}" for k in claim_keys] + [f"drop {k}" for k in old_keys if k not in claim_keys] + ["history"]
+        if stock:
+            ops.append({"Update": {"TableName": self.t["state"], "Key": {"pk": _s(_stock_pk(*stock))},
+                                   "UpdateExpression": "SET #q = #q - :one",
+                                   "ConditionExpression": "attribute_exists(pk) AND #q >= :one",
+                                   "ExpressionAttributeNames": {"#q": "qty"},
+                                   "ExpressionAttributeValues": {":one": _n(1)}}})
+            labels.append(STOCK_LABEL)
         self._transact(ops, labels)
 
     def renew(self, task_id: str, version: int, new_expiry: str, *, now: datetime) -> dict:
@@ -185,6 +250,7 @@ class DynamoLeaseRepo:
             reasons = exc.response.get("CancellationReasons", [])
             failed = [labels[i] for i, r in enumerate(reasons) if r.get("Code") == CONDITION_FAILED]
             if failed or reasons:
-                raise Conflict([f"{f}: condition failed (held or version moved)" for f in failed]
+                raise Conflict([("stock taken concurrently" if f == STOCK_LABEL else
+                                 f"{f}: condition failed (held or version moved)") for f in failed]
                                or ["transaction cancelled"]) from exc
             raise

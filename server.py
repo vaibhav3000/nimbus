@@ -189,6 +189,8 @@ class Handler(BaseHTTPRequestHandler):
             self._post_escalation(body)
         elif path == "/fleet/heartbeat":
             self._post_heartbeat(body)
+        elif path == "/fleet/stock":
+            self._post_stock(body)
         elif path.startswith("/tasks/") and path.endswith("/replan"):
             self._post_replan(path.split("/")[2], body)
         elif path == "/checkins":
@@ -418,6 +420,27 @@ class Handler(BaseHTTPRequestHandler):
             self.cost.record(iot_messages=1)
             self._drain()  # a cluster coming back may unblock queued work
         self._send_json(201, {"accepted": True, "health": self.orch.fleet.health(cluster_id)})
+
+    def _post_stock(self, body: dict):
+        """Operator restock (added by P3): set absolute counts for one cluster,
+        then retry the queued tasks that were waiting on stock."""
+        cluster_id, counts = body.get("cluster_id"), body.get("stock")
+        if cluster_id not in self.orch.fleet.clusters:
+            self._send_json(404, {"error": f"unknown cluster {cluster_id!r}"})
+            return
+        known_items = {i["id"] for i in self.orch.pack.items}
+        if (not isinstance(counts, dict) or not counts
+                or not all(isinstance(q, int) and not isinstance(q, bool) and q >= 0 for q in counts.values())):
+            self._send_json(400, {"error": "stock must be a non-empty object of item -> whole number >= 0"})
+            return
+        unknown = sorted(set(counts) - known_items)
+        if unknown:
+            self._send_json(400, {"error": f"unknown items {unknown}"})
+            return
+        self.cost.record(dynamodb_ops=len(counts))
+        new_counts = self.orch.fleet.set_stock(cluster_id, counts)
+        self._drain()  # restocked items may unblock queued work; do it before replying so the console is current
+        self._send_json(201, {"accepted": True, "cluster_id": cluster_id, "stock": new_counts})
 
     def _post_replan(self, task_id: str, body: dict):
         """Issue lease v(n+1) avoiding blocked zones: the explicit trigger for

@@ -1,0 +1,35 @@
+{
+  "note": "Seed fleet registry for the Gazebo map. Both clusters keep stock at the equipment store; robot names match P1's launch_hospital_two_racecars.sh (namespaces /robot_1 and /robot_2). Stock counts as in the hospital pack.",
+  "clusters": {
+    "east-wing": {
+      "home": "south_equipment_approach",
+      "robots": [
+        "robot_1"
+      ],
+      "stock": {
+        "infusion_pump": 3,
+        "infusion_pump_paediatric": 2,
+        "wheelchair": 4,
+        "iv_pole": 5,
+        "monitor": 2,
+        "blanket": 20
+      },
+      "area": "east"
+    },
+    "west-wing": {
+      "home": "south_equipment_approach",
+      "robots": [
+        "robot_2"
+      ],
+      "stock": {
+        "infusion_pump": 2,
+        "infusion_pump_paediatric": 1,
+        "wheelchair": 2,
+        "iv_pole": 3,
+        "monitor": 1,
+        "blanket": 15
+      },
+      "area": "west"
+    }
+  }
+}
