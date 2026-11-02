@@ -29,6 +29,7 @@ class FleetRegistry:
         self.down_s = down_s
         self._lock = threading.RLock()
         self.version = 0                    # bumped whenever something a queued task could be waiting on changes
+        self.status_sink = None             # called with (robot_id, record) when a robot's state or zone changes
         self._held: dict[tuple, int] = {}   # (cluster, item) -> leased but not yet delivered
         self.clusters: dict[str, dict] = {}
         for cid, c in seed["clusters"].items():
@@ -77,6 +78,11 @@ class FleetRegistry:
                     c["robots"][r["id"]].update(known)
                     if any(known.get(k, old[k]) != old[k] for k in old):
                         self.version += 1
+                        if self.status_sink is not None:
+                            rob = c["robots"][r["id"]]
+                            self.status_sink(r["id"], {"cluster": cluster_id, "state": rob["state"], "zone": rob["zone"],
+                                                       "battery": rob.get("battery"), "pos": rob.get("pos"),
+                                                       "seen": self.clock.now().isoformat()})
             # The edge counts what is on its shelves; items already leased out are still there until
             # delivered, so its digest must not hand them back to the allocator.
             self._write_stock(cluster_id, {i: max(0, q - self._held.get((cluster_id, i), 0))

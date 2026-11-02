@@ -27,7 +27,7 @@ CONDITION_FAILED = "ConditionalCheckFailed"
 def tables_from_env() -> dict:
     p = os.environ.get("NIMBUS_DDB_PREFIX", "nimbus-ds252")
     return {"state": f"{p}-state", "leases": f"{p}-leases", "tasks": f"{p}-tasks",
-            "decision_log": f"{p}-decision_log"}
+            "decision_log": f"{p}-decision_log", "robot_status": f"{p}-robot_status"}
 
 
 def ensure_tables(client, names: dict) -> None:
@@ -38,6 +38,7 @@ def ensure_tables(client, names: dict) -> None:
         names["leases"]: ([("lease_id", "S")], None),
         names["tasks"]: ([("task_id", "S")], None),
         names["decision_log"]: ([("task_id", "S"), ("ts", "S")], "ts"),
+        names["robot_status"]: ([("robot_id", "S")], None),
     }
     existing = set(client.list_tables()["TableNames"])
     for name, (attrs, range_key) in spec.items():

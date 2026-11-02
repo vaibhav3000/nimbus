@@ -34,6 +34,7 @@ from .clock import Clock, iso, parse_iso
 from .context import Context
 from .fleet import FleetRegistry
 from .mapstate import MapState
+from .memory import Memory
 from .notify import Notifier
 from .trace import Trace, TracingLLM, task_scope
 from .orchestrator_types import LLM_MODES, Outcome, row as _row
@@ -66,6 +67,12 @@ class StaleVersion(Exception):
         self.current = current
 
 
+def _with_kb(book: PolicyBook) -> PolicyBook:
+    from .retrieval import BedrockKBRetriever
+    book.retriever = BedrockKBRetriever.from_env()      # None unless NIMBUS_KB_ID is set
+    return book
+
+
 def _sha(lease: dict) -> str:
     return hashlib.sha256(json.dumps(lease, sort_keys=True).encode()).hexdigest()
 
@@ -78,12 +85,16 @@ def _public(info: dict) -> dict:
 class Orchestrator:
     def __init__(self, *, pack: Pack, topo: Topology, fleet: FleetRegistry, policies: PolicyBook, repo,
                  scheduler: Scheduler, llm, clock: Clock, mode: str = "C1",
-                 allow_unknown: bool = True, publish=None, probe_timeout_s: float = 0.0):
+                 allow_unknown: bool = True, publish=None, probe_timeout_s: float = 0.0, durable=None):
         self.pack, self.topo, self.fleet, self.policies, self.repo = pack, topo, fleet, policies, repo
         self.scheduler, self.llm, self.clock = scheduler, llm, clock
         self.tools = ToolRegistry(pack)
-        self.mapstate = MapState(topo)
-        self.notifier = Notifier(clock)
+        self.durable = durable
+        self.mapstate = MapState(topo, durable)
+        self.notifier = Notifier(clock, durable)
+        self.memory = Memory(durable)
+        if durable is not None:
+            fleet.status_sink = durable.put_robot
         self.trace = Trace()
         if not isinstance(llm, TracingLLM):
             self.llm = TracingLLM(llm, self.trace)
@@ -116,12 +127,16 @@ class Orchestrator:
         stock_store = None
         if os.environ.get("NIMBUS_BACKEND", "local") == "aws":
             from .aws_dynamo import DynamoLeaseRepo, DynamoStockStore
+            from .durable import DynamoDurable
             repo = DynamoLeaseRepo.from_env()
             stock_store = DynamoStockStore.from_env()
+            durable = DynamoDurable.from_env()
         else:
+            from .durable import FileDurable
             repo = MemoryLeaseRepo(Path(data_dir) / "claims.json")
+            durable = FileDurable(Path(data_dir) / "durable.json")
         return cls(pack=pack, topo=topo, fleet=FleetRegistry.load(clock, pack, stock_store=stock_store),
-                   policies=PolicyBook(pack), repo=repo,
+                   policies=_with_kb(PolicyBook(pack, durable=durable)), repo=repo, durable=durable,
                    scheduler=Scheduler(pack.ranks), llm=llm, clock=clock,
                    mode=os.environ.get("NIMBUS_MODE", "C1"),
                    allow_unknown=os.environ.get("NIMBUS_ALLOW_UNKNOWN", "1") == "1",
@@ -164,7 +179,8 @@ class Orchestrator:
         return Context.build(
             self.pack, self.topo, now=iso(self.clock.now()), mode=self.mode, fleet=self.fleet.snapshot(),
             policies=self.policies.retrieve(text, extra_terms=flags), restrictions=self.policies.restrictions(),
-            busy_robots=view.busy_robots(), probes_sent=probes, history=history)
+            busy_robots=view.busy_robots(), probes_sent=probes, history=history,
+            memory=self.memory.lines_for(loc["anchor"] if loc else None))
 
     # -- entry: a new request or an answer -------------------------------------
 
@@ -185,6 +201,8 @@ class Orchestrator:
         if parsed is None:
             parsed = self._form_intent(text, answer)
         kind, payload = parsed
+        if kind == "clarify" and answer is None and (alt := self._memory_spec(text)):
+            kind, payload = "spec", alt        # this place has confirmed its usual choice: do not ask again (the checker still runs)
         if kind == "clarify":
             return self._clarify_outcome(payload, text, ctx, info, notice)
         if kind == "statement":
@@ -195,7 +213,28 @@ class Orchestrator:
         out = self._allocate(task, specs[0], ctx, info, use_llm, notice, request_text=text, answer=answer)
         if out.kind != "clarify":   # after a question the whole message is read again, so extras would be duplicated
             out.children = specs[1:]
+        if out.kind == "leased":
+            self._remember(specs[0])
         return out
+
+    def _memory_spec(self, text: str) -> dict | None:
+        """A complete request that would be clarified, for a place whose usual variant is remembered: the spec with it."""
+        p = nlp.parse(self.pack, self.topo, text)
+        if p.missing or p.fields.get("variant_confirmed_by_requester"):
+            return None
+        usual = self.memory.usual(p.destination["anchor"], p.item)
+        if not usual:
+            return None
+        spec = nlp.spec_from(p, note="usual choice remembered for this place")
+        spec["item"] = usual
+        spec["constraints"] = [f"usual choice for this place: {usual}"]
+        return spec
+
+    def _remember(self, spec: dict) -> None:
+        """A request was leased: note which variant this place got (the base item counts as "no variant")."""
+        item = self.pack.item(spec["item"]) or {}
+        base = item.get("variant_of") or spec["item"]
+        self.memory.record(self.topo.anchor_of(spec["destination"]) or spec["destination"], base, spec["item"])
 
     def _ground(self, spec: dict, text: str, answer: str | None) -> dict:
         """Check the model's task against the words the requester used. The model may misread or drop a detail
@@ -208,6 +247,10 @@ class Orchestrator:
         default = self.pack.doc["default_priority"]
         if p.priority != default and spec["priority"] == default:
             spec["priority"] = p.priority
+        usual = self.memory.usual(self.topo.anchor_of(spec["destination"]) or spec["destination"], spec["item"])
+        if usual and not p.fields.get("variant_confirmed_by_requester"):   # not an explicit "the standard one": use the habit
+            spec["item"] = usual
+            spec["constraints"] = [*spec.get("constraints", []), f"usual choice for this place: {usual}"]
         stated = p.deadline_minutes != self.pack.priority(p.priority)["default_deadline_minutes"]
         spec["deadline_minutes"] = p.deadline_minutes if stated else self.pack.priority(spec["priority"])["default_deadline_minutes"]
         return spec

@@ -32,10 +32,12 @@ class Notice:
 
 
 class Notifier:
-    def __init__(self, clock: Clock):
-        self.clock = clock
+    MAX_KEPT = 300
+
+    def __init__(self, clock: Clock, durable=None):
+        self.clock, self.durable = clock, durable
         self._lock = threading.Lock()
-        self.feed: list[dict] = []
+        self.feed: list[dict] = sorted(durable.load("notice").values(), key=lambda e: e["ts"]) if durable is not None else []
 
     def send(self, n: Notice) -> tuple[dict, tuple | None]:
         """Record a notice. Returns (feed entry, (topic, payload) to publish or None)."""
@@ -49,6 +51,11 @@ class Notifier:
                     return e, None          # a repeat of something already said
             entry = {**asdict(n), "message_id": mid, "ts": iso(self.clock.now())}
             self.feed.append(entry)
+            if self.durable is not None:
+                self.durable.put("notice", mid, entry, ttl_s=7 * 86400)
+                if len(self.feed) > self.MAX_KEPT:          # bounded: the oldest fall off memory and storage together
+                    old = self.feed.pop(0)
+                    self.durable.delete("notice", old["message_id"])
         if n.audience == "cluster":
             payload = {k: v for k, v in entry.items() if k != "audience" and v is not None}
             return entry, (f"nimbus/{n.cluster_id}/notice", payload)

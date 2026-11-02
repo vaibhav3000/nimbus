@@ -21,11 +21,15 @@ from .topology import Topology
 
 
 class PolicyBook:
-    def __init__(self, pack: Pack):
+    def __init__(self, pack: Pack, durable=None):
         self._docs = pack.policy_docs
         self._kinds = pack.restrictions
         self._active: dict[str, dict] = {}  # zone -> {"kind","source"}
+        self.retriever = None               # optional Bedrock Knowledge Base (cloud/retrieval.py); keywords are the default and the fallback
         self.version = 0                    # bumped on declare/lift: a held task may now be placeable
+        self.durable = durable
+        if durable is not None:             # a restriction declared before a restart is still in force after it
+            self._active = {z: a for z, a in durable.load("restriction").items() if a.get("kind") in self._kinds}
         self._lock = threading.Lock()
         self._topo = Topology(pack)
 
@@ -33,7 +37,21 @@ class PolicyBook:
         return self._topo.resolve_node(zone) or zone
 
     def retrieve(self, text: str, *, extra_terms: tuple[str, ...] = (), limit: int = 3) -> list[dict]:
-        """Top documents by keyword overlap with the request. Always cites id."""
+        """The rule texts the model should read. Keyword overlap by default; a Knowledge Base when one is set, with the
+        keyword result as the fallback. The documents of active restrictions are always included."""
+        if self.retriever is not None:
+            try:
+                found = self.retriever.retrieve(text, limit=limit)
+            except Exception:
+                found = []
+            if found:
+                have = {d["id"] for d in found}
+                cited = [dict(self.get(self._kinds[a["kind"]]["policy_id"])) for a in self._active.values()
+                         if self._kinds[a["kind"]]["policy_id"] not in have]
+                return (cited + found)[: max(limit, len(cited))]
+        return self._keyword(text, extra_terms, limit)
+
+    def _keyword(self, text: str, extra_terms: tuple[str, ...], limit: int) -> list[dict]:
         words = set(re.findall(r"[a-z0-9\-]+", text.lower())) | {t.lower() for t in extra_terms}
         cited = {self._kinds[a["kind"]]["policy_id"] for a in self._active.values()}
         scored = []
@@ -53,13 +71,19 @@ class PolicyBook:
         if kind not in self._kinds:
             raise KeyError(f"unknown restriction kind {kind!r}; this pack defines {sorted(self._kinds)}")
         with self._lock:
-            self._active[self._node(zone)] = {"kind": kind, "source": source}
+            node = self._node(zone)
+            self._active[node] = {"kind": kind, "source": source}
             self.version += 1
+            if self.durable is not None:
+                self.durable.put("restriction", node, self._active[node])
 
     def lift(self, zone: str) -> None:
         with self._lock:
-            self._active.pop(self._node(zone), None)
+            node = self._node(zone)
+            self._active.pop(node, None)
             self.version += 1
+            if self.durable is not None:
+                self.durable.delete("restriction", node)
 
     def restrictions(self) -> dict[str, dict]:
         """zone -> {kind, policy, effect, exempt_priorities, source}."""

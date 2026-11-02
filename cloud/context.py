@@ -58,10 +58,12 @@ class Context:
     busy_robots: list = field(default_factory=list)
     probes_sent: list = field(default_factory=list)
     task_log: list = field(default_factory=list)
+    memory: list = field(default_factory=list)
 
     @classmethod
     def build(cls, pack: Pack, topo: Topology, *, now: str, mode: str, fleet: list, policies: list,
-              restrictions: dict, busy_robots: list, probes_sent: list, history: list | None) -> "Context":
+              restrictions: dict, busy_robots: list, probes_sent: list, history: list | None,
+              memory: list | None = None) -> "Context":
         labels = pack.ontology.get("flag_labels", {})
         dest_lines = []
         for node_id, attrs in sorted(topo.destinations().items()):
@@ -72,7 +74,8 @@ class Context:
                    item_lines=[f"{i['id']} ({i['label']})" for i in pack.items],
                    destination_lines=dest_lines,
                    source_lines=[f"{n} (area {d['area']})" for n, d in sorted(topo.sources().items())], fleet=fleet, policies=policies, restrictions=restrictions,
-                   busy_robots=busy_robots, probes_sent=probes_sent, task_log=summarise_log(history or []))
+                   busy_robots=busy_robots, probes_sent=probes_sent, task_log=summarise_log(history or []),
+                   memory=memory or [])
 
     def digest(self) -> dict:
         return {
@@ -88,6 +91,7 @@ class Context:
             "restrictions": {z: f"{r['policy']}:{r['effect']}" for z, r in self.restrictions.items()},
             "probes_sent": self.probes_sent,
             "task_log_lines": len(self.task_log),
+            "memory": self.memory,
         }
 
     def to_prompt(self) -> str:
@@ -110,6 +114,9 @@ class Context:
         lines.append("Relevant rules:")
         for p in self.policies:
             lines.append(f"  [{p['id']}] {p['title']}: {p['text']}")
+        if self.memory:
+            lines.append("Memory (confirmed earlier by requesters; a safety rule still applies):")
+            lines += [f"  {m}" for m in self.memory]
         if self.task_log:
             lines.append("Task log so far (oldest first):")
             lines += [f"  {l}" for l in self.task_log]
