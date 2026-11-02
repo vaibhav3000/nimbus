@@ -28,6 +28,7 @@ from store import Store
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 _STATE_LOCK = threading.RLock()
+TERMINAL_STATUSES = ("completed", "cancelled", "rejected")
 
 
 def make_decision_row(orch: Orchestrator, who: str, inputs: dict, output: dict, lease_version, task_id: str) -> dict:
@@ -198,6 +199,8 @@ class Handler(BaseHTTPRequestHandler):
             self._post_replan(path.split("/")[2], body)
         elif path == "/checkins":
             self._post_checkin(body)
+        elif path == "/relay/decide":
+            self._post_relay_decide(body)
         elif path.startswith("/tasks/") and path.endswith("/control"):
             self._post_control(path.split("/")[2], body)
         elif path == "/fault":
@@ -305,6 +308,7 @@ class Handler(BaseHTTPRequestHandler):
             # T_in/T_out from the model's usage (estimates for the offline stand-in);
             # M: leases published; W: rows + task write; F/K: flat per-decision stand-ins.
             self.cost.record(
+                llm_calls=outcome.llm_calls,
                 input_tokens=outcome.tokens_in,
                 output_tokens=outcome.tokens_out,
                 iot_messages=len(outcome.publish),
@@ -380,6 +384,9 @@ class Handler(BaseHTTPRequestHandler):
         if task is None:
             self._send_json(404, {"error": f"unknown task {task_id}"})
             return
+        if task["status"] in TERMINAL_STATUSES:
+            self._send_json(409, {"error": f"task is already {task['status']}", "status": task["status"]})
+            return
         dup, message_id = self._dedupe(body)
         if dup:
             return
@@ -425,6 +432,40 @@ class Handler(BaseHTTPRequestHandler):
             self.cost.record(iot_messages=1)
             self._drain()  # a cluster coming back may unblock queued work
         self._send_json(201, {"accepted": True, "health": self.orch.fleet.health(cluster_id)})
+
+    def _post_relay_decide(self, body: dict):
+        """C2 (cloud-only): the edge is a thin relay and asks the cloud before each non-reflex
+        step. One model round trip per call; the reply says proceed, wait, reroute or abort."""
+        if self.orch.mode != "C2":
+            self._send_json(409, {"error": f"relay decisions exist only in C2 (this service runs {self.orch.mode})"})
+            return
+        missing = [k for k in ("cluster_id", "lease_id", "lease_version", "step_index") if k not in body]
+        match = re.fullmatch(r"lease-(.+)-v\d+", str(body.get("lease_id", "")))
+        if missing or not match:
+            self._send_json(400, {"error": f"relay request needs {missing or 'lease_id as lease-<task_id>-v<n>'}"})
+            return
+        dup, message_id = self._dedupe(body)
+        if dup:
+            return
+        event = {k: body[k] for k in ("step_index", "cmd", "zone", "target", "situation", "blocked_zones", "attempt")
+                 if k in body}
+        task_id = match.group(1)
+        with _STATE_LOCK:
+            self.orch.fleet.heartbeat(body["cluster_id"], {})
+            try:
+                res = self.orch.decide_step(task_id, body["lease_version"], body["cluster_id"], event)
+            except StaleVersion as exc:
+                self._send_json(409, {"error": "outdated lease_version", "current": exc.current})
+                return
+            if "error" in res:
+                self._send_json(res["status"], {"error": res["error"]})
+                return
+            for r in res["rows"]:
+                self.store.append_decision(self._row(r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
+            self.store.see_message_id(message_id)
+            self.cost.record(llm_calls=res["calls"], input_tokens=res["tokens_in"], output_tokens=res["tokens_out"],
+                             iot_messages=2, dynamodb_ops=len(res["rows"]), fargate_gbs=0.001, cloudwatch_metrics=1)
+        self._send_json(201, {"duplicate": False, **res["decision"]})
 
     def _post_stock(self, body: dict):
         """Operator restock (added by P3): set absolute counts for one cluster,
@@ -742,7 +783,7 @@ def process_escalation(
         if body["lease_version"] < current:
             return 409, {"error": "outdated lease_version", "current": current}
 
-        if esc_type == "OUTPUT_READY":
+        if esc_type == "OUTPUT_READY" and task["status"] != "cancelled":
             task["status"] = "completed"
             task["result_ref"] = body["payload"]["result_ref"]
             orch.finish(task)  # robots and zones are free again
@@ -807,13 +848,7 @@ def process_checkin(
         if not match:
             return 400, {"error": "lease_id must be lease-<task_id>-v<version>"}
 
-        digest = {k: body[k] for k in ("robots", "stock") if k in body}
-        orch.fleet.heartbeat(body["cluster_id"], digest)  # alive, whatever the lease says
-        try:
-            renewed = orch.renew(match.group(1), body["lease_version"])
-        except StaleVersion as exc:
-            return 409, {"error": "outdated lease_version", "current": exc.current}
-
+        task_id = match.group(1)
         row = make_decision_row(
             orch,
             "edge",
@@ -824,18 +859,28 @@ def process_checkin(
             },
             {"event": "checkin"},
             body["lease_version"],
-            match.group(1),
+            task_id,
         )
         errors = contracts.validate_document("decision_log_entry", row)
         if errors:
             return 400, {"error": "check-in violates decision-log contract", "detail": errors}
+        live = orch.repo.current(task_id)
+        if live and live["cluster_id"] != body["cluster_id"]:
+            return 409, {"error": "lease belongs to another cluster", "cluster_id": live["cluster_id"]}
+
+        digest = {k: body[k] for k in ("robots", "stock") if k in body}
+        orch.fleet.heartbeat(body["cluster_id"], digest)  # alive, whatever the lease says
+        try:
+            renewed = orch.renew(task_id, body["lease_version"])
+        except StaleVersion as exc:
+            return 409, {"error": "outdated lease_version", "current": exc.current}
 
         store.see_message_id(message_id)  # accepted: record for FR-8 dedup
         store.append_decision(row)
         cost.record(sqs_messages=1, dynamodb_ops=1)  # queue delivery + log row
         reply = {"duplicate": False, "accepted": True}
         if renewed:
-            task = store.get_task(match.group(1))
+            task = store.get_task(task_id)
             if task and task.get("lease"):
                 task["lease"] = renewed
                 store.put_task(task)

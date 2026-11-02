@@ -105,6 +105,11 @@ resource "aws_ecs_task_definition" "app" {
       ]
       environment = [
         { name = "AWS_REGION", value = var.aws_region },
+        { name = "NIMBUS_BACKEND", value = "aws" },
+        { name = "NIMBUS_LLM", value = "bedrock" },
+        { name = "NIMBUS_BEDROCK_MODEL", value = var.bedrock_model_id },
+        { name = "NIMBUS_MODE", value = var.nimbus_mode },
+        { name = "NIMBUS_DDB_PREFIX", value = local.name_prefix },
       ]
       logConfiguration = {
         logDriver = "awslogs"
