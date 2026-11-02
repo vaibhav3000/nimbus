@@ -9,6 +9,7 @@ import pytest
 import contracts
 from cloud.clock import iso
 from cloud.llm import LLMError
+from cloud.pack import Pack
 from cloud.orchestrator import MAX_OVERRUN_S, StaleVersion
 from cloud_helpers import make_orch, new_task, tool
 
@@ -52,7 +53,7 @@ def test_decision_rows_keep_p4_shape_and_carry_context_evidence():
     propose = out.rows[0]
     assert propose["inputs"]["context"]["health"] == {"east-wing": "unknown", "west-wing": "unknown"}
     assert "SOP-PAED-01" in propose["inputs"]["context"]["policies"]
-    assert propose["output"]["llm"]["calls"] == 2 and propose["output"]["llm"]["tokens_estimated"] is True
+    assert propose["output"]["llm"]["calls"] == 1 and propose["output"]["llm"]["tokens_estimated"] is True
     for r in out.rows:
         row = dict(r, timestamp="2026-10-18T09:00:00Z", task_id="task-000001")
         assert contracts.validate_document("decision_log_entry", row) == []
@@ -118,13 +119,16 @@ def bad_alloc(cluster, robots):
     return override
 
 
+SIM = Pack.load("hospital_sim")     # ward 3 is a shared place there: two clusters can take it, so the model really chooses
+
+
 @pytest.mark.parametrize("cluster,robots,rule", [
-    ("west-wing", ["R4"], "reachability"),   # wrong wing for ward 3
-    ("east-wing", ["R5"], "robots"),          # a robot from another cluster
-    ("atlantis", ["R1"], "cluster"),          # hallucinated cluster
+    ("east-wing", ["robot_2"], "robots"),      # a robot from another cluster
+    ("atlantis", ["robot_1"], "cluster"),      # hallucinated cluster
+    ("east-wing", ["robot_9"], "robots"),      # a robot that does not exist
 ])
 def test_vetoed_llm_proposal_is_replaced_by_the_classical_allocator(cluster, robots, rule):
-    orch = make_orch(override=bad_alloc(cluster, robots))
+    orch = make_orch(override=bad_alloc(cluster, robots), pack=SIM)
     out = orch.handle_request(new_task(), "Deliver a wheelchair to ward 3, routine.")
     assert out.kind == "leased" and out.lease["cluster_id"] == "east-wing"
     out_attempts = out.rows[0]["output"]["attempts"]
@@ -141,10 +145,10 @@ def test_llm_gets_one_retry_with_the_checkers_feedback():
         if "propose_allocation" in tools:
             seen.append(kw["messages"][-1]["text"])
             if len(seen) == 1:
-                return tool("propose_allocation", cluster_id="west-wing", robot_ids=["R4"], rationale="guess")
+                return tool("propose_allocation", cluster_id="east-wing", robot_ids=["robot_2"], rationale="guess")
 
-    out = make_orch(override=override).handle_request(new_task(), "wheelchair to ward 3")
-    assert "rejected" in seen[1] and "reachability" in seen[1]
+    out = make_orch(override=override, pack=SIM).handle_request(new_task(), "wheelchair to ward 3")
+    assert "rejected" in seen[1] and "robots" in seen[1]
     assert out.rows[0]["output"]["proposed_by"] == "llm"  # the corrected proposal passed
 
 

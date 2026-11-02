@@ -1,0 +1,482 @@
+{
+ "status": "DRAFT: labels written from templates; a person must review before use as gold",
+ "synthetic": true,
+ "n": 50,
+ "vague": 13,
+ "requests": [
+  {
+   "id": "req-01",
+   "text": "take it to 2B",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "req-02",
+   "text": "Deliver a monitor to 2C.",
+   "gold": {
+    "item": "monitor",
+    "destination": "west_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-03",
+   "text": "Please bring a wheelchair to ward 2B within 15 minutes.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 15
+   }
+  },
+  {
+   "id": "req-04",
+   "text": "Please bring an IV pole to ward 2C, urgent.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "west_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-05",
+   "text": "A wheelchair to ward 3 please within 45 minutes.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 45
+   }
+  },
+  {
+   "id": "req-06",
+   "text": "Can someone take a wheel chair to 2B, routine.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-07",
+   "text": "Can someone take a patient monitor to ward 3.",
+   "gold": {
+    "item": "monitor",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-08",
+   "text": "Please bring a wheel chair to ward 3, urgent.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "south_room_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-09",
+   "text": "A blanket to 2C please.",
+   "gold": {
+    "item": "blanket",
+    "destination": "west_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-10",
+   "text": "I need a wheelchair",
+   "gold": {
+    "ask": true,
+    "about": "destination"
+   }
+  },
+  {
+   "id": "req-11",
+   "text": "Please bring an IV pole to 2C, urgent.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "west_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-12",
+   "text": "infusion pump to 2B please",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   }
+  },
+  {
+   "id": "req-13",
+   "text": "equipment for 2C",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "req-14",
+   "text": "Deliver a wheel chair to ward 3, urgent.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "south_room_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-15",
+   "text": "I need a patient monitor in ward 2C, urgent.",
+   "gold": {
+    "item": "monitor",
+    "destination": "west_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-16",
+   "text": "Deliver a blanket to 2B, urgent.",
+   "gold": {
+    "item": "blanket",
+    "destination": "east_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-17",
+   "text": "Need an infusion pump at 2B-12, urgent.",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   }
+  },
+  {
+   "id": "req-18",
+   "text": "Deliver a blanket to ward 2B.",
+   "gold": {
+    "item": "blanket",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-19",
+   "text": "I need an iv pole in ward 3.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-20",
+   "text": "A wheelchair to 2B please, urgent.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "east_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-21",
+   "text": "Deliver two blankets to ward 2B.",
+   "gold": {
+    "item": "blanket",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-22",
+   "text": "Deliver a wheelchair to 2C, urgent.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "west_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-23",
+   "text": "Deliver a wheel chair to ward 2B within 20 minutes.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 20
+   }
+  },
+  {
+   "id": "req-24",
+   "text": "bring something to ward 3",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "req-25",
+   "text": "pump needed at 2B",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   }
+  },
+  {
+   "id": "req-26",
+   "text": "Deliver a monitor to ward 2C, routine.",
+   "gold": {
+    "item": "monitor",
+    "destination": "west_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-27",
+   "text": "I need two blankets in 2B, urgent within 45 minutes.",
+   "gold": {
+    "item": "blanket",
+    "destination": "east_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 45
+   }
+  },
+  {
+   "id": "req-28",
+   "text": "I need two blankets in ward 2B, urgent.",
+   "gold": {
+    "item": "blanket",
+    "destination": "east_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-29",
+   "text": "A blanket to ward 2C please, urgent.",
+   "gold": {
+    "item": "blanket",
+    "destination": "west_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-30",
+   "text": "I need an iv pole in ward 3.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-31",
+   "text": "Can someone take an IV pole to ward 3.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-32",
+   "text": "a paediatric thing for 2B",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "req-33",
+   "text": "Deliver an iv pole to ward 3, routine.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-34",
+   "text": "send an iv pole urgently",
+   "gold": {
+    "ask": true,
+    "about": "destination"
+   }
+  },
+  {
+   "id": "req-35",
+   "text": "something urgent to ward 3",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "req-36",
+   "text": "need a blanket",
+   "gold": {
+    "ask": true,
+    "about": "destination"
+   }
+  },
+  {
+   "id": "req-37",
+   "text": "Can someone take an iv pole to ward 3.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-38",
+   "text": "Can someone take a blanket to 2C, urgent within 15 minutes.",
+   "gold": {
+    "item": "blanket",
+    "destination": "west_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 15
+   }
+  },
+  {
+   "id": "req-39",
+   "text": "An iv pole to ward 3 please, urgent.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "south_room_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-40",
+   "text": "a pump to 2B",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   }
+  },
+  {
+   "id": "req-41",
+   "text": "I need two blankets in 2B.",
+   "gold": {
+    "item": "blanket",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-42",
+   "text": "I need a patient monitor in ward 2B.",
+   "gold": {
+    "item": "monitor",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-43",
+   "text": "I need a patient monitor in ward 3, routine.",
+   "gold": {
+    "item": "monitor",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-44",
+   "text": "bring a monitor",
+   "gold": {
+    "ask": true,
+    "about": "destination"
+   }
+  },
+  {
+   "id": "req-45",
+   "text": "Please bring a wheelchair to ward 3, urgent.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "south_room_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-46",
+   "text": "I need a monitor in ward 3.",
+   "gold": {
+    "item": "monitor",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-47",
+   "text": "Please bring a monitor to ward 3, routine.",
+   "gold": {
+    "item": "monitor",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-48",
+   "text": "Please bring a patient monitor to ward 2B, routine.",
+   "gold": {
+    "item": "monitor",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "req-49",
+   "text": "Please bring a wheelchair to ward 3, urgent.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "south_room_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "req-50",
+   "text": "Please bring a wheelchair to 2C.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "west_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  }
+ ]
+}

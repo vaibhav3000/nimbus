@@ -144,6 +144,15 @@ class Topology:
                 n = self.nodes.get(node)
                 if n and (not loc.get("kinds") or n["kind"] in loc["kinds"]):
                     return {"zone": node, "anchor": node, "label": loc["label"]}
+        # a place named outright: its id or an alias. Longest name first; short names (a bare digit) are ignored so a
+        # number in a sentence is not read as a place.
+        low = text.lower()
+        names = {**self._alias, **{n.lower(): n for n in self.nodes}}
+        for name in sorted(names, key=lambda s: (-len(s), s)):
+            if len(name) >= 4 and re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", low):
+                node = names[name]
+                if node:
+                    return {"zone": node, "anchor": node, "label": self.nodes[node].get("label") or self.nodes[node]["kind"]}
         return None
 
     # -- routing ----------------------------------------------------------------------

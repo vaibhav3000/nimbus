@@ -29,9 +29,13 @@ def build(overlay_path: Path = OVERLAY) -> dict:
     if missing:
         raise ValueError(f"overlay names nodes that are not in {overlay['base']}: {missing}")
     p1_aliases = _p1_aliases(overlay, base)
+    wp_path = (ROOT / overlay["base"]).with_name("topology_waypoints.json")   # P1's world coordinates, for the map view
+    waypoints = json.loads(wp_path.read_text(encoding="utf-8"))["waypoints"] if wp_path.exists() else {}
     nodes = {}
     for nid, attrs in base["nodes"].items():
         node = {**attrs, **overlay["nodes"].get(nid, {})}
+        if nid in waypoints:
+            node["pos"] = waypoints[nid]
         names = _dedupe([*node.get("aliases", []), *p1_aliases.get(nid, [])])
         if names:
             node["aliases"] = names

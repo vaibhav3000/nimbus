@@ -28,6 +28,8 @@ class FleetRegistry:
         self.healthy_s = healthy_s
         self.down_s = down_s
         self._lock = threading.RLock()
+        self.version = 0                    # bumped whenever something a queued task could be waiting on changes
+        self.status_sink = None             # called with (robot_id, record) when a robot's state or zone changes
         self._held: dict[tuple, int] = {}   # (cluster, item) -> leased but not yet delivered
         self.clusters: dict[str, dict] = {}
         for cid, c in seed["clusters"].items():
@@ -59,14 +61,28 @@ class FleetRegistry:
             c = self.clusters.get(cluster_id)
             if c is None:
                 return False
+            before_health = self.health(cluster_id)
             c["last_seen"] = self.clock.now()
+            if self.health(cluster_id) != before_health:
+                self.version += 1
             digest = digest or {}
             for r in digest.get("robots", []):
                 if r.get("id") in c["robots"]:
-                    known = {k: r[k] for k in ("state", "zone", "battery") if k in r}
+                    known = {k: r[k] for k in ("state", "zone", "battery", "pos") if k in r}
+                    if "pos" in known and not (isinstance(known["pos"], list) and len(known["pos"]) == 2
+                                               and all(isinstance(v, (int, float)) for v in known["pos"])):
+                        known.pop("pos")      # optional metres in the map frame; used only to draw the robot smoothly
                     if self.zones is not None and known.get("zone") not in self.zones:
                         known.pop("zone", None)   # not a map node: keep the last zone we could route from
+                    old = {k: c["robots"][r["id"]].get(k) for k in ("state", "zone")}
                     c["robots"][r["id"]].update(known)
+                    if any(known.get(k, old[k]) != old[k] for k in old):
+                        self.version += 1
+                        if self.status_sink is not None:
+                            rob = c["robots"][r["id"]]
+                            self.status_sink(r["id"], {"cluster": cluster_id, "state": rob["state"], "zone": rob["zone"],
+                                                       "battery": rob.get("battery"), "pos": rob.get("pos"),
+                                                       "seen": self.clock.now().isoformat()})
             # The edge counts what is on its shelves; items already leased out are still there until
             # delivered, so its digest must not hand them back to the allocator.
             self._write_stock(cluster_id, {i: max(0, q - self._held.get((cluster_id, i), 0))
@@ -91,6 +107,8 @@ class FleetRegistry:
             if isinstance(qty, int) and not isinstance(qty, bool) and qty >= 0:
                 if self.stock_store is not None and stock.get(item) != qty:
                     self.stock_store.set(cluster_id, item, qty)
+                if stock.get(item) != qty:
+                    self.version += 1
                 stock[item] = qty
         return dict(stock)
 
@@ -116,6 +134,23 @@ class FleetRegistry:
                 if robot_id in c["robots"]:
                     return c["robots"][robot_id].get("zone")
         return None
+
+    def merge_report(self, counts: dict, known_items: set) -> int:
+        """Merge what survey robots saw (place -> {item: n}) into the cloud's picture (FR-17). Unknown places and items and
+        non-numeric counts are ignored. Returns how many place/item counts were updated."""
+        n = 0
+        with self._lock:
+            for place, items in (counts or {}).items():
+                if self.zones is not None and place not in self.zones:
+                    continue
+                for item, q in (items or {}).items():
+                    if item in known_items and isinstance(q, int) and not isinstance(q, bool) and q >= 0:
+                        if self.places.setdefault(place, {}).get(item) != q:
+                            self.places[place][item] = q
+                            if self.stock_store is not None:
+                                self.stock_store.set("@" + place, item, q)
+                        n += 1
+        return n
 
     def place_stock(self, place: str) -> dict:
         with self._lock:
@@ -154,6 +189,7 @@ class FleetRegistry:
         with self._lock:
             stock = self.clusters[cluster_id]["stock"]
             stock[item] = stock.get(item, 0) + 1
+            self.version += 1
             self._unhold(cluster_id, item)
 
     def settle_stock(self, cluster_id: str, item: str) -> None:

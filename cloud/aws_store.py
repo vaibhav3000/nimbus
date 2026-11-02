@@ -11,6 +11,7 @@ can no longer both pass (the gap P4's file store documents).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
@@ -35,6 +36,7 @@ class DynamoStore:
         self.c = client
         self.t = names or tables_from_env()
         self.iot = iot_client
+        self.iot_failures = 0
         self.seen_message_ids = _SeenIds(self)
         self._outbox: list[dict] = []
         self._seq = 0
@@ -104,7 +106,11 @@ class DynamoStore:
         with self._lock:
             self._outbox.append(entry)
         if self.iot:
-            self.iot.publish(topic=entry["topic"], qos=1, payload=json.dumps(entry["payload"]).encode())
+            try:
+                self.iot.publish(topic=entry["topic"], qos=1, payload=json.dumps(entry["payload"]).encode())
+            except Exception as exc:          # the message is in the outbox (GET /outbox still serves it): count, do not fail the request
+                self.iot_failures += 1
+                logging.getLogger("nimbus.iot").warning("iot publish to %s failed: %s", entry["topic"], exc)
 
     def outbox(self) -> list[dict]:
         with self._lock:

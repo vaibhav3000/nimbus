@@ -35,6 +35,7 @@ class LeaseRepo(Protocol):
     def holder(self, key: str, now: datetime) -> dict | None: ...
     def current(self, task_id: str) -> dict | None: ...
     def live_leases(self) -> list[dict]: ...
+    def last_lease(self, task_id: str) -> dict | None: ...
     def free_claims(self, task_id: str) -> list[str]: ...
 
 
@@ -64,6 +65,12 @@ class MemoryLeaseRepo:
         with self._lock:
             rec = self.leases.get(task_id)
             return dict(rec["lease"]) if rec and rec["state"] == "live" else None
+
+    def last_lease(self, task_id: str) -> dict | None:
+        """The most recent lease issued for a task, live or not (a returning edge may still hold an old one)."""
+        with self._lock:
+            rec = self.leases.get(task_id)
+            return dict(rec["lease"]) if rec else None
 
     def live_leases(self) -> list[dict]:
         with self._lock:

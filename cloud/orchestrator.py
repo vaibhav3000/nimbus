@@ -30,14 +30,21 @@ import contracts
 from . import leasebuilder, nlp
 from .allocator import FleetView, eligible_options, needs_stock
 from .checker import Proposal, check
+from .bundle import bundle_publish
 from .clock import Clock, iso, parse_iso
 from .context import Context
 from .fleet import FleetRegistry
 from .mapstate import MapState
+from .metrics import Metrics
+from .memory import Memory
 from .notify import Notifier
+from .trace import Trace, TracingLLM, task_scope
 from .orchestrator_types import LLM_MODES, Outcome, row as _row
 from .react import Reactor
+from .results import ResultStore
 from .statements import Statements
+from .survey import Surveyor
+from .ticker import Ticker
 from .legs import handover_options, make_legs
 from .leases import Conflict, MemoryLeaseRepo, _task_of, claim_keys_for
 from .llm import CircuitBreakerLLM, LLMError, RuleBasedLLM
@@ -64,6 +71,12 @@ class StaleVersion(Exception):
         self.current = current
 
 
+def _with_kb(book: PolicyBook) -> PolicyBook:
+    from .retrieval import BedrockKBRetriever
+    book.retriever = BedrockKBRetriever.from_env()      # None unless NIMBUS_KB_ID is set
+    return book
+
+
 def _sha(lease: dict) -> str:
     return hashlib.sha256(json.dumps(lease, sort_keys=True).encode()).hexdigest()
 
@@ -76,50 +89,85 @@ def _public(info: dict) -> dict:
 class Orchestrator:
     def __init__(self, *, pack: Pack, topo: Topology, fleet: FleetRegistry, policies: PolicyBook, repo,
                  scheduler: Scheduler, llm, clock: Clock, mode: str = "C1",
-                 allow_unknown: bool = True, publish=None, probe_timeout_s: float = 0.0):
+                 allow_unknown: bool = True, publish=None, probe_timeout_s: float = 0.0, durable=None, results=None):
         self.pack, self.topo, self.fleet, self.policies, self.repo = pack, topo, fleet, policies, repo
         self.scheduler, self.llm, self.clock = scheduler, llm, clock
         self.tools = ToolRegistry(pack)
-        self.mapstate = MapState(topo)
-        self.notifier = Notifier(clock)
+        self.durable = durable
+        self.mapstate = MapState(topo, durable)
+        self.notifier = Notifier(clock, durable)
+        self.memory = Memory(durable)
+        if durable is not None:
+            fleet.status_sink = durable.put_robot
+        self.trace = Trace()
+        self.metrics = Metrics()
+        if not isinstance(llm, TracingLLM):
+            self.llm = TracingLLM(llm, self.trace, self.metrics)
+        self._freed = 0          # robots/claims given back by this process (finish, cancel, hold, expiry)
         self.statements = Statements(self)
+        self.ticker = Ticker(self)
+        self.surveyor = Surveyor(self)
+        self.results = results if results is not None else ResultStore()
         self.load_task = lambda task_id: None    # the HTTP layer plugs in its task store
+        self.waits: dict[str, dict] = {}         # task_id -> {"until", "payload", "version"}: "look again later" from the model
         self.react = Reactor(self)
         self.mode, self.allow_unknown = mode, allow_unknown
         self.publish = publish or (lambda topic, payload: None)
         self.probe_timeout_s = probe_timeout_s
 
     @classmethod
-    def from_env(cls, data_dir: Path, publish=None, clock: Clock | None = None) -> "Orchestrator":
+    def from_env(cls, data_dir: Path, publish=None, clock: Clock | None = None, backend: str | None = None) -> "Orchestrator":
+        """Build from the environment. `backend="local"` forces in-process storage whatever NIMBUS_BACKEND says (experiment
+        tools must be hermetic: two runs must not share a DynamoDB prefix)."""
         clock = clock or Clock()
         pack = Pack.load()
         topo = Topology(pack)
         tools = ToolRegistry(pack)
+        from .faults import FaultyLLM
         if os.environ.get("NIMBUS_LLM", "fake") == "bedrock":
             from .llm import BedrockLLM
-            llm = CircuitBreakerLLM(
-                BedrockLLM(os.environ["NIMBUS_BEDROCK_MODEL"], tools, os.environ.get("AWS_REGION", "ap-south-1")), clock)
+            faulty = FaultyLLM.from_env(BedrockLLM(os.environ["NIMBUS_BEDROCK_MODEL"], tools, os.environ.get("AWS_REGION", "ap-south-1")), clock)
+            llm = CircuitBreakerLLM(faulty, clock)         # the breaker sees injected outages exactly as it sees real ones
         else:
-            llm = RuleBasedLLM(pack, topo)
+            faulty = FaultyLLM.from_env(RuleBasedLLM(pack, topo), clock)
+            llm = faulty
         if os.environ.get("NIMBUS_CASSETTE"):  # record real calls once, replay them free
             from .llm import CassetteLLM
             mode = os.environ.get("NIMBUS_CASSETTE_MODE", "replay")
             llm = CassetteLLM(llm if mode == "record" else None, Path(os.environ["NIMBUS_CASSETTE"]), mode)
         stock_store = None
-        if os.environ.get("NIMBUS_BACKEND", "local") == "aws":
+        if (backend or os.environ.get("NIMBUS_BACKEND", "local")) == "aws":
             from .aws_dynamo import DynamoLeaseRepo, DynamoStockStore
+            from .durable import DynamoDurable
             repo = DynamoLeaseRepo.from_env()
             stock_store = DynamoStockStore.from_env()
+            durable = DynamoDurable.from_env()
         else:
+            from .durable import FileDurable
             repo = MemoryLeaseRepo(Path(data_dir) / "claims.json")
-        return cls(pack=pack, topo=topo, fleet=FleetRegistry.load(clock, pack, stock_store=stock_store),
-                   policies=PolicyBook(pack), repo=repo,
+            durable = FileDurable(Path(data_dir) / "durable.json")
+        orch = cls(pack=pack, topo=topo, fleet=FleetRegistry.load(clock, pack, stock_store=stock_store),
+                   policies=_with_kb(PolicyBook(pack, durable=durable)), repo=repo, durable=durable,
+                   results=ResultStore.from_env(data_dir),
                    scheduler=Scheduler(pack.ranks), llm=llm, clock=clock,
                    mode=os.environ.get("NIMBUS_MODE", "C1"),
                    allow_unknown=os.environ.get("NIMBUS_ALLOW_UNKNOWN", "1") == "1",
                    publish=publish, probe_timeout_s=float(os.environ.get("NIMBUS_PROBE_TIMEOUT", "0")))
+        orch.faults = faulty                              # POST /llm/outage and the E5 tests reach it here
+        return orch
 
     # -- context + health check --------------------------------------------------
+
+    def _lease_publish(self, lease: dict, spec: dict) -> list:
+        """The lease, then (if enabled) the bundle of data and rules the edge needs for it (cloud/bundle.py)."""
+        out = [(f"nimbus/{lease['cluster_id']}/lease", lease)]
+        extra = bundle_publish(self, lease, spec)
+        return out + ([extra] if extra else [])
+
+    def epoch(self) -> int:
+        """A number that changes whenever something a queued task could be waiting on changes: a robot freed, a
+        cluster's health, robots or stock, a restriction or a closure. A queued task is retried only when it moved."""
+        return self._freed + self.fleet.version + self.policies.version + self.mapstate.version
 
     def view(self, task_id: str | None = None, extra_forbidden: dict | None = None, exclude=()) -> FleetView:
         return FleetView(self.topo, self.fleet, self.repo, self.policies, self.clock, self.pack,
@@ -151,7 +199,8 @@ class Orchestrator:
         return Context.build(
             self.pack, self.topo, now=iso(self.clock.now()), mode=self.mode, fleet=self.fleet.snapshot(),
             policies=self.policies.retrieve(text, extra_terms=flags), restrictions=self.policies.restrictions(),
-            busy_robots=view.busy_robots(), probes_sent=probes, history=history)
+            busy_robots=view.busy_robots(), probes_sent=probes, history=history,
+            memory=self.memory.lines_for(loc["anchor"] if loc else None))
 
     # -- entry: a new request or an answer -------------------------------------
 
@@ -172,17 +221,48 @@ class Orchestrator:
         if parsed is None:
             parsed = self._form_intent(text, answer)
         kind, payload = parsed
+        if kind == "clarify" and answer is None and (alt := self._memory_spec(text)):
+            kind, payload = "spec", alt        # this place has confirmed its usual choice: do not ask again (the checker still runs)
         if kind == "clarify":
             return self._clarify_outcome(payload, text, ctx, info, notice)
         if kind == "statement":
             out = self.statements.apply(task, {**payload, "zone": self.topo.anchor_of(payload["zone"])}, text)
             out.notice = f"{notice} {out.notice}" if notice else out.notice
             return out
+        if kind == "survey":
+            specs = [self._complete_spec(s) for s in self.surveyor.plan(payload, text)]
+            if not specs:
+                return Outcome("rejected", reason="no place that a robot cluster can reach was named", rows=[
+                    _row("rule", {"survey": payload}, {"decision": "reject", "reason": "no reachable place"})])
+            out = self._allocate(task, specs[0], ctx, info, use_llm, notice, request_text=text, answer=answer)
+            out.children = specs[1:]
+            return out
         specs = [self._complete_spec(self._ground(s, text, answer)) for s in (payload if kind == "specs" else [payload])]
         out = self._allocate(task, specs[0], ctx, info, use_llm, notice, request_text=text, answer=answer)
         if out.kind != "clarify":   # after a question the whole message is read again, so extras would be duplicated
             out.children = specs[1:]
+        if out.kind == "leased":
+            self._remember(specs[0])
         return out
+
+    def _memory_spec(self, text: str) -> dict | None:
+        """A complete request that would be clarified, for a place whose usual variant is remembered: the spec with it."""
+        p = nlp.parse(self.pack, self.topo, text)
+        if p.missing or p.fields.get("variant_confirmed_by_requester"):
+            return None
+        usual = self.memory.usual(p.destination["anchor"], p.item)
+        if not usual:
+            return None
+        spec = nlp.spec_from(p, note="usual choice remembered for this place")
+        spec["item"] = usual
+        spec["constraints"] = [f"usual choice for this place: {usual}"]
+        return spec
+
+    def _remember(self, spec: dict) -> None:
+        """A request was leased: note which variant this place got (the base item counts as "no variant")."""
+        item = self.pack.item(spec["item"]) or {}
+        base = item.get("variant_of") or spec["item"]
+        self.memory.record(self.topo.anchor_of(spec["destination"]) or spec["destination"], base, spec["item"])
 
     def _ground(self, spec: dict, text: str, answer: str | None) -> dict:
         """Check the model's task against the words the requester used. The model may misread or drop a detail
@@ -195,6 +275,10 @@ class Orchestrator:
         default = self.pack.doc["default_priority"]
         if p.priority != default and spec["priority"] == default:
             spec["priority"] = p.priority
+        usual = self.memory.usual(self.topo.anchor_of(spec["destination"]) or spec["destination"], spec["item"])
+        if usual and not p.fields.get("variant_confirmed_by_requester"):   # not an explicit "the standard one": use the habit
+            spec["item"] = usual
+            spec["constraints"] = [*spec.get("constraints", []), f"usual choice for this place: {usual}"]
         stated = p.deadline_minutes != self.pack.priority(p.priority)["default_deadline_minutes"]
         spec["deadline_minutes"] = p.deadline_minutes if stated else self.pack.priority(spec["priority"])["default_deadline_minutes"]
         return spec
@@ -212,12 +296,81 @@ class Orchestrator:
         info = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0}
         return self._allocate(task, spec, ctx, info, self.mode in LLM_MODES, None, request_text=task["request_text"], answer=None)
 
+    def complete_summary(self, task: dict, result_ref: str) -> dict:
+        """The edge reported the last result of a task (OUTPUT_READY): look at what it stored and tell the requester in plain
+        words (PRD Table 2: "summarise for the user"). The model writes the sentence only when the result has text worth
+        reading; otherwise a template from the facts is used, so a photo does not cost a model call. Returns
+        {text, info, rows, calls, tokens_in, tokens_out}."""
+        info = self.results.describe(result_ref)
+        spec = task.get("spec") or {}
+        if spec.get("task") == "survey":      # robots looked around: merge their report into the cloud's picture (FR-17)
+            text, n = self.surveyor.merge(task, info.get("preview"))
+            return {"text": text, "info": info, "calls": 0, "tokens_in": 0, "tokens_out": 0, "merged": n,
+                    "rows": [_row("rule", {"result_ref": result_ref, "bytes": info.get("size")},
+                                  {"decision": "merge_survey", "updated": n, "summary": text}, (task.get("lease") or {}).get("version"))]}
+        what = f"{spec.get('item', 'the item')} {('from ' + spec['source'] + ' ') if spec.get('source') else ''}to {spec.get('destination', 'its destination')}"
+        facts = f"{what.strip()} for task {task['task_id']}."
+        calls = tin = tout = 0
+        text, source = f"Done: {facts}" + (f" The result ({info['size']} bytes) is stored for review." if info.get("readable") else ""), "template"
+        if self.mode in LLM_MODES and info.get("preview"):
+            ctx = self.build_context(task["request_text"], task["task_id"], [])
+            try:
+                res = self.llm.converse(system=self.pack.prompts["result"], tools=self.tools.names("result"), tool_choice="any",
+                                        messages=[{"role": "user", "text": f"TASK: {facts}\nRESULT: {info['preview'][:1500]}"}], context=ctx)
+                calls, tin, tout = 1, res.input_tokens, res.output_tokens
+                call = res.tool_calls[0] if res.tool_calls else None
+                if call and not self.tools.validate(call["name"], call["input"]):
+                    text, source = call["input"]["summary"], "llm"
+            except LLMError:
+                pass
+        rows = [_row("cloud" if source == "llm" else "rule", {"result_ref": result_ref, "readable": info.get("readable", False)},
+                     {"decision": "summarise_result", "source": source, "summary": text}, (task.get("lease") or {}).get("version"))]
+        return {"text": text, "info": info, "rows": rows, "calls": calls, "tokens_in": tin, "tokens_out": tout}
+
+    def expire(self, task: dict, reason: str) -> Outcome:
+        """The lease ran out with no completion and no renewal: the claim ends and the task goes back in the queue
+        (same mechanics as a hold: stop lease out, claims freed, the reserved item returned)."""
+        out = self.hold(task, reason)
+        if out.kind == "held":
+            out.rows.insert(0, _row("cloud", {"reason": reason}, {"decision": "lease_expired", "reason": reason}, out.lease["version"]))
+        return out
+
+    def reconcile(self, cluster_id: str, held: list[dict]) -> list[dict]:
+        """After an outage the edge says which leases it still holds (FR-12). Reply, per lease: ok; replaced (here is
+        the current version, re-sent); or stop (the task is finished, cancelled or lives on another cluster, and a
+        stop lease with a higher version is sent so a returning robot parks). No robot ends up under two leases."""
+        out = []
+        for h in held:
+            lid, ver = h.get("lease_id", ""), h.get("version")
+            try:
+                tid = lid[len("lease-"):lid.rindex("-v")]
+            except ValueError:
+                out.append({"lease_id": lid, "action": "unknown"}); continue
+            cur = self.repo.current(tid)
+            if cur and cur["cluster_id"] == cluster_id and cur["version"] == ver:
+                out.append({"lease_id": lid, "action": "ok"})
+            elif cur and cur["cluster_id"] == cluster_id and isinstance(ver, int) and cur["version"] > ver:
+                self.publish(f"nimbus/{cluster_id}/lease", cur)
+                out.append({"lease_id": lid, "action": "replaced", "current": cur["version"]})
+            else:
+                last = self.repo.last_lease(tid)
+                if last is None:
+                    out.append({"lease_id": lid, "action": "unknown"}); continue
+                version = max((ver or 0) + 1, (cur or last)["version"] if cur else last["version"] + 1)
+                zone = next((r.get("zone") for r in self.fleet.clusters[cluster_id]["robots"].values()
+                             if r.get("zone") in self.topo.nodes), last["allowed_zones"][0])
+                stop = self._stop_lease({**last, "cluster_id": cluster_id}, version, zone)
+                self.publish(f"nimbus/{cluster_id}/lease", stop)
+                out.append({"lease_id": lid, "action": "stop", "version": version})
+        return out
+
     def hold(self, task: dict, reason: str) -> Outcome:
         """Stop a task that a new restriction blocks and queue it until the restriction is lifted: stop lease out,
         claims freed, the reserved item returned, the task back in the scheduler."""
         stop = self.stand_down(task, reason)
         if stop.kind != "stood_down":
             return stop
+        self._freed += 1
         self.repo.free_claims(task["task_id"])
         res = task.get("reservation")
         if res and not task.get("stock_released") and not task.get("stock_settled"):
@@ -241,6 +394,9 @@ class Orchestrator:
         errs = self.tools.validate(call["name"], call["input"])
         if errs:
             return errs
+        if call["name"] == "submit_survey":
+            bad = [z for z in call["input"].get("places", []) if self.topo.anchor_of(z) is None]
+            return [f"place {z!r} is not in the context" for z in bad]
         if call["name"] == "announce_restriction":
             if self.topo.anchor_of(call["input"]["zone"]) is None:
                 errs.append(f"zone {call['input']['zone']!r} is not a place in the context")
@@ -279,6 +435,8 @@ class Orchestrator:
         name, i = call["name"], call["input"]
         if name == "ask_clarification":
             return "clarify", i
+        if name == "submit_survey":
+            return "survey", i
         if name == "announce_restriction":
             return "statement", {"zone": call["input"]["zone"], "kind": i["kind"], "lift": bool(i.get("lift")),
                                  "extract_items": i.get("extract_items", [])}
@@ -294,6 +452,9 @@ class Orchestrator:
                 return "clarify", {"question": f"Which {nouns['destination']} do you mean by {st['unknown_zone']!r}?",
                                    "possible_readings": sorted(self.topo.destinations())[:6]}
             return "statement", st
+        sv = nlp.parse_survey(self.pack, self.topo, text)
+        if sv is not None:
+            return "survey", sv
         p = nlp.parse(self.pack, self.topo, text, answer=answer)
         if p.missing:
             return "clarify", nlp.missing_question(self.pack, p)
@@ -324,8 +485,11 @@ class Orchestrator:
 
     # -- allocation + check + commit ----------------------------------------------
 
-    def _llm_proposal(self, spec, ctx, view, feedback, info) -> Proposal:
+    def _llm_proposal(self, spec, ctx, view, feedback, info, options=None) -> Proposal:
         text = "TASK_SPEC: " + json.dumps(spec, sort_keys=True)
+        if options:   # the code has already ranked who could do this: the model chooses among them, it does not search
+            text += "\nCANDIDATES (nearest first): " + json.dumps(
+                [{"cluster_id": o.cluster_id, "robot_id": o.robot_id, "distance_m": round(o.distance, 1)} for o in options[:8]])
         if feedback:
             text += "\nYour previous proposal was rejected: " + feedback
         res = self.llm.converse(system=self.pack.prompts["allocation"] + "\n\n" + ctx.to_prompt(),
@@ -340,13 +504,20 @@ class Orchestrator:
         return Proposal(i["cluster_id"], i["robot_ids"], i["rationale"], "llm")
 
     def _candidates(self, spec, ctx, view, use_llm, info, attempts, state):
-        """Yield proposals in preference order: the LLM's (two tries, the second
-        with the checker's feedback), then the classical allocator's ranking."""
-        if use_llm:
+        """Yield proposals in preference order. The code ranks who is eligible first. With nobody eligible there is
+        nothing to propose (no model call). With one eligible cluster the choice is made (nearest free robot) and
+        the model is not asked. Only when two or more clusters could take the task does the model choose among
+        the ranked candidates (twice at most, the second time with the checker's reasons); then the ranking."""
+        options, excluded = eligible_options(spec, view)
+        state["excluded"] = [e.__dict__ for e in excluded]
+        if not options:
+            return
+        clusters = list(dict.fromkeys(o.cluster_id for o in options))
+        if use_llm and len(clusters) >= 2:
             feedback = None
             for _ in range(2):
                 try:
-                    prop = self._llm_proposal(spec, ctx, view, feedback, info)
+                    prop = self._llm_proposal(spec, ctx, view, feedback, info, options)
                 except LLMError as exc:
                     attempts.append({"source": "llm", "error": str(exc)})
                     state["notice"] = REDUCED_AUTONOMY
@@ -356,13 +527,14 @@ class Orchestrator:
                 feedback = state.get("feedback")
                 if not feedback:
                     return
-        options, excluded = eligible_options(spec, view)
-        state["excluded"] = [e.__dict__ for e in excluded]
+        why = "nearest free robot" if len(clusters) >= 2 else f"only {clusters[0]} can take it; nearest free robot"
         for opt in options:
-            yield Proposal(opt.cluster_id, [opt.robot_id], "nearest free robot", "classical")
+            yield Proposal(opt.cluster_id, [opt.robot_id], why, "classical")
 
     def _allocate(self, task, spec, ctx, info, use_llm, notice, *, request_text, answer, retry=False,
                   exclude=()) -> Outcome:
+        if spec.get("task") == "survey":
+            return self.surveyor.allocate(task, spec, ctx, info, notice, request_text=request_text, retry=retry)
         task_id = task["task_id"]
         view = self.view(task_id, exclude=exclude)
         attempts: list = []
@@ -443,7 +615,7 @@ class Orchestrator:
                  {"decision": "issue_lease", "lease_id": lease["lease_id"], "sha256": _sha(lease)}, lease["version"]),
         ]
         return Outcome("leased", rows=rows, lease=lease, spec=spec, notice=state["notice"],
-                       publish=[(f"nimbus/{lease['cluster_id']}/lease", lease)],
+                       publish=self._lease_publish(lease, spec),
                        tokens_in=info["input_tokens"], tokens_out=info["output_tokens"], llm_calls=info["calls"],
                        reservation={"cluster": lease["cluster_id"], "item": spec["item"]} if uses_stock else None,
                        timings={"llm_ms": info["_latency_ms"]})
@@ -457,7 +629,7 @@ class Orchestrator:
         if any(e["transient"] for e in excluded):
             deadline = parse_iso(spec["requested_at"]) + timedelta(minutes=spec["deadline_minutes"])
             self.scheduler.push(task["task_id"], spec["priority"], deadline)
-            reason = "; ".join(f"{e['cluster_id']}: {e['reason']}" for e in excluded)
+            reason = "; ".join(f"{e['cluster_id']}: {e['reason']}" for e in excluded if e["transient"])   # what waiting can fix
             rows = [] if retry else [_row("cloud", {"request_text": request_text, "context": ctx.digest()},
                                           {"decision": "queue", "reason": reason, "excluded": excluded,
                                            "attempts": attempts, "llm": _public(info)})]
@@ -514,7 +686,7 @@ class Orchestrator:
                  {"decision": "issue_lease", "lease_id": lease["lease_id"], "sha256": _sha(lease)}, lease["version"]),
         ]
         return Outcome("leased", rows=rows, lease=lease, spec=spec,
-                       publish=[(f"nimbus/{lease['cluster_id']}/lease", lease)])
+                       publish=self._lease_publish(lease, spec))
 
     # -- hand-over between clusters: legs, and re-assignment after a closure (SC-2, FR-16) ----------------
 
@@ -555,6 +727,24 @@ class Orchestrator:
         out.leg_index = idx
         out.rows.insert(0, _row("cloud", {"completed_leg": idx}, {"decision": "advance_leg", "next_leg": idx + 1,
                                                                   "result": out.kind}, None))
+        return out
+
+    def preview_options(self, task: dict, blocked: list[str], robot_zone: str | None) -> dict:
+        """What each way out of a blockage would do, computed without changing anything, so the model chooses among facts
+        instead of searching: staying in the cluster (replan) or giving the rest to another cluster (hand_over)."""
+        cur = self.repo.current(task["task_id"])
+        if cur is None or not task.get("spec"):
+            return {}
+        view = self.view(task["task_id"], {z: "blocked" for z in blocked})
+        prop = Proposal(cur["cluster_id"], list(cur["assigned_robots"]), "preview", "classical")
+        res = check(task["spec"], prop, view, holds_stock=True)
+        out = {"replan_in_cluster": {"feasible": res.ok, "route": res.routes[0] if res.routes else None,
+                                    "why_not": None if res.ok else "; ".join(v["detail"] for v in res.violations)[:160]}}
+        here = robot_zone if robot_zone in self.topo.nodes else self.fleet.robot_zone(cur["assigned_robots"][0])
+        if here in self.topo.nodes:
+            opts, _ = eligible_options({**task["spec"], "source": here}, self.view(task["task_id"], {z: "blocked" for z in blocked}))
+            out["hand_over_to"] = [{"cluster": o.cluster_id, "robot": o.robot_id, "distance_m": round(o.distance, 1)}
+                                   for o in opts if o.cluster_id != cur["cluster_id"]][:4]
         return out
 
     def reassign(self, task: dict, reason: str, *, only_cluster: str | None = None, robot_zone: str | None = None) -> Outcome:
@@ -734,6 +924,7 @@ class Orchestrator:
 
     def finish(self, task: dict) -> None:
         """Task delivered: free robots and zones; the item stays consumed."""
+        self._freed += 1
         self.repo.release(task["task_id"])
         self.scheduler.remove(task["task_id"])
         res = task.get("reservation")
@@ -749,6 +940,7 @@ class Orchestrator:
 
     def cancel(self, task: dict) -> None:
         """Task cancelled: free robots and zones and give the item back once."""
+        self._freed += 1
         self.repo.release(task["task_id"])
         self.scheduler.remove(task["task_id"])
         res = task.get("reservation")
@@ -760,12 +952,16 @@ class Orchestrator:
         """Retry queued tasks in priority/deadline order after capacity frees.
         Returns [(task, Outcome)] for the tasks that got a lease."""
         done = []
+        ep = self.epoch()
         for entry in self.scheduler.ordered():
+            if entry.tried_epoch == ep:      # nothing it could be waiting on has changed since it last failed
+                continue
             task = load_task(entry.task_id)
             if task is None or task["status"] != "queued":
                 self.scheduler.remove(entry.task_id)
                 continue
             out = self.retry_queued(task)
+            self.scheduler.mark_tried(entry.task_id, ep)
             if out.kind == "leased":
                 done.append((task, out))
         return done
@@ -776,3 +972,21 @@ class Orchestrator:
                 s = t["spec"]
                 self.scheduler.push(t["task_id"], s["priority"],
                                     parse_iso(s["requested_at"]) + timedelta(minutes=s["deadline_minutes"]))
+
+
+def _scoped(fn, arg_index=1):
+    """Run an orchestrator entry point inside a trace scope for its task (a task dict or a task id)."""
+    import functools
+
+    @functools.wraps(fn)
+    def inner(self, *a, **k):
+        ref = a[0] if a else next(iter(k.values()), None)
+        tid = ref.get("task_id") if isinstance(ref, dict) else ref if isinstance(ref, str) else None
+        with task_scope(tid):
+            return fn(self, *a, **k)
+    return inner
+
+
+for _name in ("handle_request", "retry_queued", "advance_leg", "reassign", "allocate_spec", "replan", "hold",
+              "decide_step", "stand_down"):
+    setattr(Orchestrator, _name, _scoped(getattr(Orchestrator, _name)))

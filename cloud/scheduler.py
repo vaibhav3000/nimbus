@@ -21,6 +21,7 @@ class Entry:
     priority: str
     deadline: datetime
     seq: int
+    tried_epoch: int = -1      # the capacity epoch at which this task last failed to place; retry only when it moved
 
     def key(self, ranks: dict) -> tuple:
         return (ranks[self.priority], self.deadline, self.seq)
@@ -37,6 +38,11 @@ class Scheduler:
         with self._lock:
             if task_id not in self._entries:
                 self._entries[task_id] = Entry(task_id, priority, deadline, next(self._seq))
+
+    def mark_tried(self, task_id: str, epoch: int) -> None:
+        with self._lock:
+            if task_id in self._entries:
+                self._entries[task_id].tried_epoch = epoch
 
     def remove(self, task_id: str) -> None:
         with self._lock:

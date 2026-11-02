@@ -109,9 +109,37 @@ resource "aws_iam_role_policy" "task_p3" {
         Effect = "Allow"
         Action = ["iot:Publish"]
         Resource = [
-          for t in ["lease", "renewal", "probe"] :
+          for t in ["lease", "renewal", "probe", "notice"] :
           "arn:aws:iot:${var.aws_region}:${data.aws_caller_identity.current.account_id}:topic/nimbus/*/${t}"
         ]
+      },
+      {
+        Sid    = "ResultsAndLogs"
+        Effect = "Allow"
+        Action = ["s3:GetObject", "s3:PutObject"]
+        Resource = [
+          "${aws_s3_bucket.outputs.arn}/results/*",
+          "${aws_s3_bucket.outputs.arn}/logs/*",
+          "${aws_s3_bucket.outputs.arn}/bundles/*",
+        ]
+      },
+      {
+        Sid      = "ResultsHead"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [aws_s3_bucket.outputs.arn]
+      },
+      {
+        Sid      = "EdgeQueue"
+        Effect   = "Allow"
+        Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
+        Resource = aws_sqs_queue.escalations.arn
+      },
+      {
+        Sid      = "RuleKnowledgeBase"
+        Effect   = "Allow"
+        Action   = ["bedrock:Retrieve"]
+        Resource = "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:knowledge-base/*"
       },
       {
         Sid    = "IotSubscribe"

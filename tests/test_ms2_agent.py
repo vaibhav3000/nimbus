@@ -114,3 +114,78 @@ def test_cassette_replays_a_multi_turn_run(tmp_path):
     play = CassetteLLM(None, path, "replay")
     again = run_agent(play, system="s", user="u", tools=["get_fleet", "no_action"], registry=reg, read=read, terminal=TERMINAL)
     assert again.call == first.call and again.calls == 2
+
+
+# -- batch 1.5: several tool calls per turn, new look-ups, new final choices, precomputed options -------------------------------
+
+from cloud_helpers import new_task  # noqa: E402
+
+
+class Multi(Script):
+    """A model that answers a turn with several tool calls at once."""
+
+
+def multi(*calls):
+    return LLMResult(tool_calls=[{"id": f"c{i}", "name": n, "input": a} for i, (n, a) in enumerate(calls)],
+                     input_tokens=10, output_tokens=5, model_id="script")
+
+
+def test_look_ups_asked_together_are_answered_together_in_one_turn():
+    o, read, reg = parts()
+    llm = Script(multi(("get_fleet", {}), ("get_route", {"src": "E1", "dst": "2B"}), ("get_map", {})),
+                 tool("no_action", rationale="fine"))
+    res = run_agent(llm, system="s", user="u", tools=["get_fleet", "get_route", "get_map", "no_action"], registry=reg, read=read, terminal=TERMINAL)
+    assert res.call["name"] == "no_action" and res.calls == 2
+    results = llm.seen[1][2]["tool_results"]
+    assert [r["id"] for r in results] == ["c0", "c1", "c2"] and results[1]["content"]["path"]
+
+
+def test_only_one_final_choice_is_taken_per_turn():
+    o, read, reg = parts()
+    llm = Script(multi(("replan", {"avoid_zones": ["E3"], "rationale": "a"}), ("no_action", {"rationale": "b"})))
+    res = run_agent(llm, system="s", user="u", tools=["replan", "no_action"], registry=reg, read=read, terminal=TERMINAL)
+    assert res.call["name"] == "replan" and res.calls == 1
+
+
+def test_new_look_ups_robot_task_and_eta():
+    o, read, reg = parts()
+    assert read.run("get_robot", {"robot_id": "R1"})["cluster"] == "east-wing"
+    assert "error" in read.run("get_robot", {"robot_id": "nope"})
+    t = new_task(1, "Deliver a wheelchair to 2B-3, routine."); out = o.handle_request(t, t["request_text"])
+    t.update(spec=out.spec, lease=out.lease, status="leased")
+    o.load_task = lambda tid: t if tid == t["task_id"] else None
+    read = ReadTools(topo=o.topo, fleet=o.fleet, policies=o.policies, mapstate=o.mapstate, clock=o.clock, load_task=o.load_task, repo=o.repo)
+    assert read.run("get_task", {"task_id": t["task_id"]})["lease"]["cluster"] == "east-wing"
+    assert read.run("get_robot", {"robot_id": "R1"})["task"] == out.lease["lease_id"]
+    e = read.run("eta", {"src": "E1", "dst": "2B", "speed": 0.5})
+    assert e["seconds"] == round(e["length"] / 0.5)
+
+
+def test_react_prompt_carries_the_options_the_code_computed():
+    seen = []
+    o = make_orch(override=lambda tools, kw: (seen.append(kw["messages"][0]["text"]), None)[1] if "replan" in tools else None)
+    t = new_task(1, "Deliver a wheelchair to 2B-3, routine."); out = o.handle_request(t, t["request_text"])
+    t.update(spec=out.spec, lease=out.lease, status="leased", request_text=t["request_text"])
+    o.react.on_event(t, {"what_happened": "E3 blocked", "where": "E3", "robots_saw": ["cart"]})
+    assert "OPTIONS (already computed by code)" in seen[0] and "replan_in_cluster" in seen[0] and "'feasible': True" in seen[0]
+
+
+def test_model_can_escalate_to_the_operator_and_the_task_is_left_alone():
+    o = make_orch(override=lambda tools, kw: tool("escalate_operator", text="Cart in E3 needs a porter.") if "replan" in tools else None)
+    t = new_task(1, "Deliver a wheelchair to 2B-3, routine."); out = o.handle_request(t, t["request_text"])
+    t.update(spec=out.spec, lease=out.lease, status="leased", request_text=t["request_text"])
+    r = o.react.on_event(t, {"what_happened": "E3 blocked", "where": "E3", "robots_saw": ["cart"]})
+    assert r.outcome is None and any("porter" in n["text"] for n in o.notifier.for_audience("operator"))
+
+
+def test_wait_and_retry_looks_again_later_and_does_nothing_if_the_way_has_opened():
+    o = make_orch(override=lambda tools, kw: tool("wait_and_retry", seconds=60, rationale="a cart usually moves") if "replan" in tools else None)
+    t = new_task(1, "Deliver a wheelchair to 2B-3, routine."); out = o.handle_request(t, t["request_text"])
+    t.update(spec=out.spec, lease=out.lease, status="leased", request_text=t["request_text"])
+    r = o.react.on_event(t, {"what_happened": "E3 blocked", "where": "E3", "robots_saw": ["cart"], "segments": [{"segment_id": "E3", "state": "blocked"}]})
+    assert r.outcome is None and t["task_id"] in o.waits
+    assert o.ticker.tick([t]).apply == []                   # not due yet
+    o.mapstate.clear("E3"); o.clock.advance(61)             # the cart moved
+    res = o.ticker.tick([t])
+    assert any(x["output"].get("rationale") == "the blockage cleared while waiting" for _, oc in res.apply for x in oc.rows)
+    assert o.repo.current(t["task_id"])["version"] == 1     # no needless v2

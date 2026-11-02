@@ -175,8 +175,9 @@ def test_cancel_or_pause_on_a_completed_task_is_refused_and_late_output_cannot_r
     assert http_json("GET", api + f"/tasks/{other}")[1]["status"] == "cancelled"
 
 
-def test_c2_still_understands_and_allocates_with_the_model():
-    """C2 differs from C1 at the edge only; the cloud's own two model calls remain."""
+def test_c2_still_understands_with_the_model():
+    """C2 differs from C1 at the edge only; the cloud's own understanding call remains (one cluster covers 2B-3, so
+    allocation needs no model call)."""
     orch = make_orch(mode="C2")
     leased(orch)
-    assert len(orch.llm.calls) == 2
+    assert len(orch.llm.calls) == 1

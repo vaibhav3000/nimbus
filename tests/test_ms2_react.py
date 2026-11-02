@@ -148,7 +148,7 @@ def test_edge_clarify_goes_to_requester_and_the_answer_is_relayed(api):
     st, body = http_json("POST", api + f"/requests/{tid}/answer", {"text": "Door A", "message_id": "a-1"})
     assert st == 201 and body["status"] == "leased" and body["relayed_to"] == "east-wing"
     _, out = http_json("GET", api + "/outbox")
-    assert any(i["topic"] == "nimbus/east-wing/notice" and i["payload"]["text"] == "Door A" for i in out["outbox"])
+    assert any(i["topic"] == "nimbus/east-wing/notice" and i["payload"].get("text") == "Door A" for i in out["outbox"])
 
 
 def test_a_commit_error_other_than_conflict_does_not_leak_the_reserved_item():

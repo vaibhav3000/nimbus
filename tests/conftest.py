@@ -15,6 +15,19 @@ import server
 
 
 @pytest.fixture(autouse=True)
+def _no_background_ticker(monkeypatch):
+    """Tests drive the ticker by hand (server.tick_once / orch.ticker.tick) so time stays under their control."""
+    monkeypatch.setenv("NIMBUS_TICK_S", "0")
+
+
+@pytest.fixture(autouse=True)
+def _pin_hospital_pack(monkeypatch):
+    """The shipped default is P1's Gazebo map (hospital_sim). Most tests were written against the hand-made
+    map, so they pin it; tests of the Gazebo map set NIMBUS_PACK themselves (it overrides this)."""
+    monkeypatch.setenv("NIMBUS_PACK", "hospital")
+
+
+@pytest.fixture(autouse=True)
 def _aws_backend(monkeypatch):
     """NIMBUS_BACKEND=aws runs the whole suite against the DynamoDB adapters
     on moto (an emulator: no account, no network, no cost)."""

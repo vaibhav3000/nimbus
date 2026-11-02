@@ -8,19 +8,23 @@ touching these routes. Endpoints are the public seam; see SPEC-P4.md.
 
 from __future__ import annotations
 
+import hmac
 import json
+import logging
 import math
 import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import threading
+import time
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Callable
 
 import contracts
 from cloud.clock import iso
 from cloud.notify import Notice
+from cloud.trace import wire_store
 from cloud.orchestrator import InvalidLeaseError, Orchestrator, StaleVersion
 from cost import CostBook
 from mqtt_transport import is_mqtt_enabled, make_mqtt_transport_from_env
@@ -42,6 +46,29 @@ def make_decision_row(orch: Orchestrator, who: str, inputs: dict, output: dict, 
         "timestamp": iso(orch.clock.now()),
         "task_id": task_id,
     }
+
+
+_EMF_STATE = {"last": 0.0, "calls": 0}
+
+
+def emit_metrics(orch, tasks: list) -> None:
+    """CloudWatch Embedded Metric Format line every NIMBUS_EMF_EVERY_S seconds (default 60) when NIMBUS_EMF=1."""
+    if os.environ.get("NIMBUS_EMF") != "1" or time.time() - _EMF_STATE["last"] < float(os.environ.get("NIMBUS_EMF_EVERY_S", "60")):
+        return
+    from cloud.metrics import emf_line
+    snap = orch.metrics.snapshot()
+    calls = snap["counters"].get("llm_calls", 0)
+    r2l = snap["latency"].get("request_to_lease_s", {})
+    llm = snap["latency"].get("llm_latency_ms", {})
+    values = {"QueueDepth": (len(orch.scheduler.ordered()), "Count"), "LiveLeases": (len(orch.repo.live_leases()), "Count"),
+              "LlmCallsSinceLast": (calls - _EMF_STATE["calls"], "Count"),
+              "HealthyClusters": (sum(c["health"] == "healthy" for c in orch.fleet.snapshot()), "Count")}
+    if r2l:
+        values["RequestToLeaseP95"] = (r2l["p95"], "Seconds")
+    if llm:
+        values["LlmLatencyP95"] = (llm["p95"], "Milliseconds")
+    print(emf_line("Nimbus", {"Service": "nimbus-cloud", "Pack": orch.pack.name}, values, int(time.time() * 1000)), flush=True)
+    _EMF_STATE["last"], _EMF_STATE["calls"] = time.time(), calls
 
 
 def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
@@ -80,6 +107,7 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
             publish(topic, payload)
         for other, other_outcome in outcome.others:      # tasks this decision stopped or held (a new restriction)
             apply_outcome(orch, store, cost, publish, other, other_outcome)
+        spawned = []
         for n, spec in enumerate(outcome.children, 1):   # further tasks the message created
             child_id = store.next_task_id()
             child = {"task_id": child_id, "message_id": f"{task.get('message_id') or task_id}#{n}",
@@ -87,13 +115,10 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
                      "result_ref": None, "parent": task_id}
             store.append_decision(make_decision_row(orch, "cloud", {"parent": task_id, "spec": spec},
                                                     {"decision": "spawn_task"}, None, child_id))
-            apply_outcome(orch, store, cost, publish, child, orch.allocate_spec(child, spec))
             task.setdefault("children", []).append(child_id)
+            spawned.append((child, spec))
         if outcome.children:
             store.put_task(task)
-        if outcome.drain:
-            for queued, out in orch.drain(store.get_task):
-                apply_outcome(orch, store, cost, publish, queued, out)
         # T_in/T_out from the model's usage (estimates for the offline stand-in);
         # M: leases published; W: rows + task write; F/K: flat per-decision stand-ins.
         cost.record(
@@ -105,6 +130,15 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
             fargate_gbs=0.001,
             cloudwatch_metrics=1,
         )
+    # Planning can call the model (seconds): never while holding the lock that every check-in and heartbeat needs.
+    for child, spec in spawned:
+        apply_outcome(orch, store, cost, publish, child, orch.allocate_spec(child, spec))
+    if outcome.drain:
+        for queued, out in orch.drain(store.get_task):
+            apply_outcome(orch, store, cost, publish, queued, out)
+
+
+EDGE_PATHS = ("/checkins", "/escalations", "/fleet/heartbeat", "/outbox", "/relay/decide")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -155,6 +189,8 @@ class Handler(BaseHTTPRequestHandler):
             "spec": task.get("spec"),
             "notice": task.get("notice"),
             "reason": task.get("reason"),
+            "summary": task.get("summary"),
+            "archive_ref": task.get("archive_ref"),
             "children": task.get("children"),
             "parent": task.get("parent"),
             "legs": task.get("legs"),           # P3, additive: hand-over legs and which one is live
@@ -163,14 +199,33 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- routes ----------------------------------------------------------
 
+    def _edge_authorised(self, path: str) -> bool:
+        """NFR-5: when NIMBUS_EDGE_TOKEN is set, the edge-facing endpoints need `Authorization: Bearer <token>`.
+        (Requester and operator pages are protected in front by API Gateway; MQTT and SQS by IAM.)"""
+        token = os.environ.get("NIMBUS_EDGE_TOKEN")
+        if not token or path not in EDGE_PATHS:
+            return True
+        given = self.headers.get("Authorization", "")
+        ok = given.startswith("Bearer ") and hmac.compare_digest(given[7:].encode(), token.encode())
+        if not ok:
+            self._send_json(401, {"error": "edge token required"})
+        return ok
+
     def do_GET(self):
         path = urlparse(self.path).path
+        if not self._edge_authorised(path):
+            return
         if path == "/":
             self._send_static("index.html")
         elif path == "/app.js":
             self._send_static("app.js")
         elif path == "/operator":
             self._send_static("operator.html")
+        elif path == "/map":
+            self._send_static("map.html")
+        elif path == "/map.json":
+            from cloud import mapview
+            self._send_json(200, mapview.build(self.orch, self.store.all_tasks()))
         elif path == "/operator.js":
             self._send_static("operator.js")
         elif path.startswith("/tasks/"):
@@ -180,12 +235,26 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": f"unknown task {task_id}"})
             elif path.endswith("/timeline"):
                 self._send_json(200, {"task_id": task_id, "timeline": self.store.timeline(task_id)})
+            elif path.endswith("/trace"):   # P3: the full conversation for this task, with the model calls in it
+                self._send_json(200, {"task_id": task_id, "events": self.orch.trace.events(task_id=task_id)})
             else:
                 self._send_json(200, self._task_view(task))
         elif path == "/tasks":
             self._send_json(
                 200, {"tasks": [self._task_view(t) for t in self.store.all_tasks()]}
             )
+        elif path == "/metrics":
+            tasks = self.store.all_tasks()
+            snap = self.orch.metrics.snapshot()
+            snap["gauges"] = {"queue_depth": len(self.orch.scheduler.ordered()), "live_leases": len(self.orch.repo.live_leases()),
+                              "tasks_by_status": {s: sum(t["status"] == s for t in tasks) for s in sorted({t["status"] for t in tasks})},
+                              "clusters": {c["cluster_id"]: c["health"] for c in self.orch.fleet.snapshot()}}
+            snap["cost"] = self.cost.snapshot()
+            self._send_json(200, snap)
+        elif path == "/trace":
+            q = parse_qs(urlparse(self.path).query)
+            self._send_json(200, {"events": self.orch.trace.events(after=int((q.get("after") or ["0"])[0]),
+                                                                   limit=int((q.get("limit") or ["200"])[0]))})
         elif path == "/cost":
             self._send_json(
                 200,
@@ -228,6 +297,7 @@ class Handler(BaseHTTPRequestHandler):
             "app.js": "application/javascript",
             "operator.html": "text/html",
             "operator.js": "application/javascript",
+            "map.html": "text/html",          # P3: live map of the whole system
         }
         if filename not in allowed:
             self._send_json(404, {"error": "not found"})
@@ -253,6 +323,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if not self._edge_authorised(path):
+            return
         try:
             body = self._read_json()
         except ValueError as exc:
@@ -272,6 +344,23 @@ class Handler(BaseHTTPRequestHandler):
             self._post_replan(path.split("/")[2], body)
         elif path == "/checkins":
             self._post_checkin(body)
+        elif path == "/llm/outage":       # E5: make the model unavailable for N seconds (0 ends it); the rules take over (FR-18)
+            seconds = body.get("seconds")
+            if not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or not 0 <= seconds <= 3600:
+                self._send_json(400, {"error": "seconds must be a number from 0 to 3600"})
+            else:
+                self.orch.faults.fail_for(seconds)
+                self._send_json(201, {"model_down": self.orch.faults.down, "seconds": seconds})
+        elif path == "/map/reopen":
+            zone = body.get("zone")
+            node = self.orch.topo.resolve_node(zone) if isinstance(zone, str) else None
+            if node is None:
+                self._send_json(400, {"error": "zone must be a place on the map"})
+            else:
+                with _STATE_LOCK:
+                    self.orch.mapstate.clear(node)
+                    self._drain()    # work that was waiting on the closure may now be placed
+                self._send_json(201, {"reopened": node})
         elif path == "/relay/decide":
             self._post_relay_decide(body)
         elif path.startswith("/tasks/") and path.endswith("/control"):
@@ -327,21 +416,27 @@ class Handler(BaseHTTPRequestHandler):
             self.store.append_decision(
                 self._row("requester", {"text": text}, {"event": "request_received"}, None, task_id)
             )
-            self._decide(task, lambda: self.orch.handle_request(
-                task, text, history=self.store.timeline(task_id)), created=True)
+            history = self.store.timeline(task_id)
+        self._decide(task, lambda: self.orch.handle_request(task, text, history=history), created=True)
 
     def _decide(self, task: dict, run, *, created: bool = False) -> bool:
         """Run one orchestrator decision and answer the caller. Returns False
         after sending an error, in which case nothing more may be sent."""
-        with _STATE_LOCK:
-            try:
-                outcome = run()
-            except InvalidLeaseError as exc:
+        started = time.perf_counter()
+        try:
+            outcome = run()          # may call the model: not under the state lock
+        except InvalidLeaseError as exc:
+            with _STATE_LOCK:
                 task["status"] = "rejected"
                 task.pop("message_id", None)  # faulted delivery must not burn the id
                 self.store.put_task(task)
-                self._send_json(500, {"error": "orchestrator produced an invalid lease", "detail": exc.errors})
-                return False
+            self._send_json(500, {"error": "orchestrator produced an invalid lease", "detail": exc.errors})
+            return False
+        self.orch.metrics.inc("requests")
+        self.orch.metrics.inc(f"outcome_{outcome.kind}")
+        if outcome.kind == "leased":      # NFR-1: a request becomes a lease within 30 s (p95)
+            self.orch.metrics.observe("request_to_lease_s", time.perf_counter() - started)
+        with _STATE_LOCK:
             self._apply(task, outcome)
             view = {"duplicate": False, "task_id": task["task_id"], "status": task["status"]}
             if created or task["status"] == "needs_clarification":
@@ -361,9 +456,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _drain(self) -> None:
         """Capacity freed: lease queued tasks in priority/deadline order."""
-        with _STATE_LOCK:
-            for task, outcome in self.orch.drain(self.store.get_task):
-                self._apply(task, outcome)
+        for task, outcome in self.orch.drain(self.store.get_task):    # planning outside the lock; apply_outcome locks
+            self._apply(task, outcome)
 
     def _post_answer(self, task_id: str, body: dict):
         task = self.store.get_task(task_id)
@@ -396,10 +490,10 @@ class Handler(BaseHTTPRequestHandler):
                     task_id,
                 )
             )
-            # The model sees the whole exchange: request, its question, the answer.
-            self._decide(task, lambda: self.orch.handle_request(
-                task, task["request_text"], question=question, answer=text,
-                history=self.store.timeline(task_id)))
+            history = self.store.timeline(task_id)
+        # The model sees the whole exchange: request, its question, the answer.
+        self._decide(task, lambda: self.orch.handle_request(
+            task, task["request_text"], question=question, answer=text, history=history))
 
     def _post_escalation(self, body: dict):
         """Ingress for edge escalations (PRD Table 2; Person 3 replaces the
@@ -459,8 +553,8 @@ class Handler(BaseHTTPRequestHandler):
             self.store.put_task(task)
             self.store.see_message_id(message_id)  # accepted: record for FR-8 dedup
             self.cost.record(dynamodb_ops=2)  # status write + log row
-            if action == "cancel":
-                self._drain()
+        if action == "cancel":
+            self._drain()
         self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
 
     def _relay_edge_answer(self, task: dict, text: str, message_id: str) -> None:
@@ -494,8 +588,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": f"unknown cluster {cluster_id}"})
                 return
             self.cost.record(iot_messages=1)
-            self._drain()  # a cluster coming back may unblock queued work
-        self._send_json(201, {"accepted": True, "health": self.orch.fleet.health(cluster_id)})
+        held = body.get("leases")      # optional (FR-12): the leases the edge still holds after an outage
+        reconcile = self.orch.reconcile(cluster_id, held) if isinstance(held, list) and held else None
+        self._drain()  # a cluster coming back may unblock queued work (retries only if capacity really changed)
+        reply = {"accepted": True, "health": self.orch.fleet.health(cluster_id)}
+        if reconcile is not None:
+            reply["reconcile"] = reconcile
+        self._send_json(201, reply)
 
     def _post_relay_decide(self, body: dict):
         """C2 (cloud-only): the edge is a thin relay and asks the cloud before each non-reflex
@@ -514,16 +613,16 @@ class Handler(BaseHTTPRequestHandler):
         event = {k: body[k] for k in ("step_index", "cmd", "zone", "target", "situation", "blocked_zones", "attempt")
                  if k in body}
         task_id = match.group(1)
+        self.orch.fleet.heartbeat(body["cluster_id"], {})
+        try:
+            res = self.orch.decide_step(task_id, body["lease_version"], body["cluster_id"], event)   # model call: unlocked
+        except StaleVersion as exc:
+            self._send_json(409, {"error": "outdated lease_version", "current": exc.current})
+            return
+        if "error" in res:
+            self._send_json(res["status"], {"error": res["error"]})
+            return
         with _STATE_LOCK:
-            self.orch.fleet.heartbeat(body["cluster_id"], {})
-            try:
-                res = self.orch.decide_step(task_id, body["lease_version"], body["cluster_id"], event)
-            except StaleVersion as exc:
-                self._send_json(409, {"error": "outdated lease_version", "current": exc.current})
-                return
-            if "error" in res:
-                self._send_json(res["status"], {"error": res["error"]})
-                return
             for r in res["rows"]:
                 self.store.append_decision(self._row(r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
             self.store.see_message_id(message_id)
@@ -841,9 +940,10 @@ def process_escalation(
         if body["lease_version"] < current:
             return 409, {"error": "outdated lease_version", "current": current}
 
-        if esc_type == "OUTPUT_READY" and task["status"] != "cancelled" and orch.has_next_leg(task):
+        next_leg = esc_type == "OUTPUT_READY" and task["status"] != "cancelled" and orch.has_next_leg(task)
+        if next_leg:
             task.setdefault("leg_results", []).append(body["payload"]["result_ref"])
-            apply_fn(task, orch.advance_leg(task))   # a hand-over: the next leg is the next lease version
+            store.put_task(task)
         elif esc_type == "OUTPUT_READY" and task["status"] != "cancelled":
             task["status"] = "completed"
             task["result_ref"] = body["payload"]["result_ref"]
@@ -866,12 +966,25 @@ def process_escalation(
         if esc_type == "OUTPUT_READY":
             cost_map["s3_ops"] = 1
         cost.record(**cost_map)
+        reacts = esc_type in ("UNEXPECTED_EVENT", "CLARIFY") and bool(task.get("lease"))
+        finished = esc_type == "OUTPUT_READY" and not next_leg and task["status"] == "completed"
 
+    # What follows can call the model (seconds), so it runs without the lock that check-ins and heartbeats need.
+    # Anything that moved meanwhile is handled by the lease store's conditional writes, not by holding everyone up.
+    leg_outcome = orch.advance_leg(task) if next_leg else None            # a hand-over: the next leg is the next version
+    done = orch.complete_summary(task, body["payload"]["result_ref"]) if finished else None   # reads the result; may call the model
+    react = None
+    if reacts:
+        react = (orch.react.on_event(task, body["payload"]) if esc_type == "UNEXPECTED_EVENT"
+                 else orch.react.on_clarify(task, body["payload"], body["lease_version"]))
+
+    with _STATE_LOCK:
+        task = store.get_task(task_id) or task      # a check-in may have renewed the lease meanwhile: do not overwrite it
         replanned = None
         answer = None
-        if esc_type in ("UNEXPECTED_EVENT", "CLARIFY") and task.get("lease"):
-            react = (orch.react.on_event(task, body["payload"]) if esc_type == "UNEXPECTED_EVENT"
-                     else orch.react.on_clarify(task, body["payload"], body["lease_version"]))
+        if leg_outcome is not None:
+            apply_fn(task, leg_outcome)
+        if react is not None:
             for r in react.rows:
                 store.append_decision(make_decision_row(orch, r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
             cost.record(llm_calls=react.llm_calls, input_tokens=react.tokens_in, output_tokens=react.tokens_out,
@@ -885,16 +998,37 @@ def process_escalation(
                 task["status"], task["question"], task["edge_question"] = "needs_clarification", react.question, True
                 store.put_task(task)
             answer = react.answer
+        if done is not None:
+            task["summary"] = done["text"]
+            for r in done["rows"]:
+                store.append_decision(make_decision_row(orch, r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
+            orch.notifier.send(Notice("requester", done["text"], type="ANSWER", task_id=task_id))
+            cost.record(llm_calls=done["calls"], input_tokens=done["tokens_in"], output_tokens=done["tokens_out"], s3_ops=1)
+            store.put_task(task)
+        status, version = task["status"], (task.get("lease") or {}).get("version")
+        timeline = store.timeline(task_id) if done is not None else None
 
-        if esc_type == "OUTPUT_READY":
-            drain_fn()
+    if done is not None:     # the cloud's own record of the finished task (PRD: S3 holds logs), outside the lock
+        ref = orch.results.put_json(f"logs/{task_id}.json", {
+            "task_id": task_id, "request": task.get("request_text"), "spec": task.get("spec"), "summary": done["text"],
+            "result_ref": body["payload"]["result_ref"], "timeline": timeline,
+            "trace": orch.trace.events(task_id=task_id)})
+        if ref:
+            with _STATE_LOCK:
+                fresh = store.get_task(task_id)
+                if fresh:
+                    fresh["archive_ref"] = ref
+                    store.put_task(fresh)
 
-        reply = {"duplicate": False, "accepted": True, "status": task["status"]}
-        if replanned is not None:
-            reply.update(replanned=replanned, lease_version=task["lease"]["version"])
-        if answer is not None:
-            reply["answer"] = answer
-        return 201, reply
+    if esc_type == "OUTPUT_READY":
+        drain_fn()
+
+    reply = {"duplicate": False, "accepted": True, "status": status}
+    if replanned is not None:
+        reply.update(replanned=replanned, lease_version=version)
+    if answer is not None:
+        reply["answer"] = answer
+    return 201, reply
 
 
 def process_checkin(
@@ -969,6 +1103,10 @@ class NimbusServer(ThreadingHTTPServer):
     data_dir = None
 
     def server_close(self):
+        if getattr(self, "ticker_stop", None):
+            self.ticker_stop.set()
+        if getattr(self, "sqs", None):
+            self.sqs.stop()
         if self.transport:
             try:
                 self.transport.stop()
@@ -999,6 +1137,7 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
 
     orch = Orchestrator.from_env(data_dir, publish)
     orch.load_task = store.get_task
+    wire_store(orch.trace, store)   # P3: every message and decision becomes a trace event (see /tasks/{id}/trace)
     orch.recover(store.all_tasks())
 
     def apply_fn(task: dict, outcome) -> None:
@@ -1009,6 +1148,16 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
             for task, outcome in orch.drain(store.get_task):
                 apply_fn(task, outcome)
 
+    def ingest(topic: str, body: dict, kind: str) -> tuple[int, dict]:
+        """One entry for edge messages that arrive by MQTT or by SQS: the same functions as POST /checkins and
+        POST /escalations, so de-duplication, fencing, validation and logging do not depend on the path."""
+        if kind == "escalation":
+            return process_escalation(store, orch, cost, body, apply_fn=apply_fn, drain_fn=drain_fn)
+        parts = topic.split("/")
+        if len(parts) >= 3 and "cluster_id" not in body:
+            body["cluster_id"] = parts[1]
+        return process_checkin(store, orch, cost, body)
+
     if transport:
         def on_mqtt_escalation(topic: str, data: dict) -> None:
             body = (
@@ -1016,7 +1165,7 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
                 if isinstance(data, dict) and "topic" in data and isinstance(data.get("payload"), dict)
                 else data
             )
-            process_escalation(store, orch, cost, body, apply_fn=apply_fn, drain_fn=drain_fn)
+            ingest(topic, body, "escalation")
 
         def on_mqtt_checkin(topic: str, data: dict) -> None:
             body = (
@@ -1024,10 +1173,7 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
                 if isinstance(data, dict) and "topic" in data and isinstance(data.get("payload"), dict)
                 else data
             )
-            parts = topic.split("/")
-            if len(parts) >= 3 and isinstance(body, dict) and "cluster_id" not in body:
-                body["cluster_id"] = parts[1]
-            process_checkin(store, orch, cost, body)
+            ingest(topic, body, "checkin")
 
         transport.subscribe("nimbus/+/escalation", on_mqtt_escalation)
         transport.subscribe("nimbus/+/checkin", on_mqtt_checkin)
@@ -1044,6 +1190,39 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
     server_inst.cost = cost
     server_inst.orch = orch
     server_inst.data_dir = data_dir
+
+    def tick_once():
+        """One pass of the time-driven work (cloud/ticker.py): expiries, deadlines, silent clusters, queue."""
+        tasks = store.all_tasks()
+        res = orch.ticker.tick(tasks)                      # may plan (model calls): outside the lock
+        emit_metrics(orch, tasks)
+        for task, outcome in res.apply:
+            apply_fn(task, outcome)
+        with _STATE_LOCK:
+            for task in res.touched:
+                store.put_task(task)
+        return res
+
+    server_inst.tick_once = tick_once
+    server_inst.ingest = ingest
+    queue_url = os.environ.get("NIMBUS_SQS_QUEUE_URL")
+    if queue_url:                       # edge messages that IoT Core's rule drops on the queue (cloud/sqs_consumer.py)
+        from cloud.sqs_consumer import SQSConsumer
+        server_inst.sqs = SQSConsumer(queue_url, ingest, region=os.environ.get("AWS_REGION", "ap-south-1"))
+        server_inst.sqs.start()
+    tick_s = float(os.environ.get("NIMBUS_TICK_S", "5"))
+    if tick_s > 0:
+        stop = threading.Event()
+
+        def loop():
+            while not stop.wait(tick_s):
+                try:
+                    tick_once()
+                except Exception as exc:       # a failed pass must never take the service down
+                    logging.getLogger("nimbus.tick").warning("tick failed: %s", exc)
+
+        threading.Thread(target=loop, name="nimbus-ticker", daemon=True).start()
+        server_inst.ticker_stop = stop
     return server_inst
 
 

@@ -19,7 +19,7 @@ from cloud.llm import BedrockLLM, CassetteLLM, LLMError, LLMResult  # noqa: E402
 from cloud.pack import Pack  # noqa: E402
 from cloud.tools import ToolRegistry  # noqa: E402
 
-REGISTRY = ToolRegistry(Pack.load())
+REGISTRY = ToolRegistry(Pack.load("hospital"))
 from cloud_helpers import make_orch, new_task  # noqa: E402
 from test_cloud_units import lease  # noqa: E402
 
@@ -289,8 +289,8 @@ def test_bedrock_failure_becomes_llm_error_so_fallback_engages():
 
 
 def test_orchestrator_with_bedrock_shaped_model_uses_real_usage_and_falls_back_on_throttle():
-    orch = make_orch()
-    spec = {"item": "wheelchair", "destination": "ward-3", "priority": "routine", "deadline_minutes": 60, "rationale": "r"}
+    orch = make_orch(pack=Pack.load("hospital_sim"))     # ward 3 is shared there: the allocation call is made (and throttled)
+    spec = {"item": "wheelchair", "destination": "south_room_approach", "priority": "routine", "deadline_minutes": 60, "rationale": "r"}
 
     class Seq(StubBedrock):
         def converse(self, **kw):

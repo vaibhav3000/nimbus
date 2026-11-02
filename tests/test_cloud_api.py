@@ -49,7 +49,7 @@ def test_replan_makes_v2_and_stale_v1_escalation_is_dropped(api):
     assert http_json("POST", api + "/escalations", fresh)[0] == 201
 
     _, out = http_json("GET", api + "/outbox")
-    assert [r["payload"]["version"] for r in out["outbox"]] == [1, 2]
+    assert [r["payload"]["version"] for r in out["outbox"] if r["topic"].endswith("/lease")] == [1, 2]
     _, tl = http_json("GET", api + f"/tasks/{task_id}/timeline")
     assert [r["output"].get("decision") for r in tl["timeline"] if r["who"] == "cloud"][-2:] == ["replan", "issue_lease"]
 

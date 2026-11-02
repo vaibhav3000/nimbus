@@ -36,3 +36,13 @@ nimbus/{cluster_id}/notice   (cloud -> edge)   optional
 
 - The operator console could show `GET /notifications?audience=operator` (isolations, re-assignments, failed re-plans).
 - Persistent closures, restrictions and notices are in memory today; a restart forgets them. Tell us if you want them in DynamoDB.
+
+## Added after MS2 (all on branch `p3-complete`)
+
+| Where | Change |
+|---|---|
+| `server.py` | model calls moved out of the global lock; `apply_outcome` plans children and the queue after releasing it; a ticker thread (`NIMBUS_TICK_S`, default 5 s); `ingest()` shared by MQTT and the SQS consumer (`NIMBUS_SQS_QUEUE_URL`); `NIMBUS_EDGE_TOKEN` guard on edge routes; new routes `/metrics`, `/llm/outage`, `/trace`, `/tasks/{id}/trace`; heartbeat reply may carry `reconcile` |
+| `tests/test_api.py`, `tests/conftest.py` | outbox assertions filter by topic (a lease now has a `BUNDLE` notice beside it); conftest pins the older map and turns the background ticker off for tests |
+| Terraform (`p3.tf`, `main.tf`, `variables.tf`) | IAM for S3 (`results/ logs/ bundles/`), SQS delete, `bedrock:Retrieve`, IoT `notice`; Fargate env `NIMBUS_RESULTS_BUCKET`, `NIMBUS_SQS_QUEUE_URL`, `NIMBUS_EMF`, `NIMBUS_KB_ID`; variable `knowledge_base_id` |
+| Needed from you | the IoT rule `SELECT *, topic() AS topic FROM 'nimbus/+/checkin'` (and `escalation`) with an SQS action, plus a dead-letter queue on `escalations`; add `notice` to `contracts/topics.md` and the IoT topic rules |
+| Suggestions | an outbox cursor (`?cluster=&after=`: a poll returns the whole file today); log only renewing check-ins; link `/map` from the operator console |

@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from .agent import run_agent
+from .clock import iso
 from .notify import Notice
 from .orchestrator_types import LLM_MODES, Outcome, row as _row
 from .readtools import ReadTools
@@ -54,6 +56,11 @@ class Reactor:
     def on_event(self, task: dict, payload: dict) -> Reaction:
         o = self.o
         zones = blocked_zones(o.topo, payload)
+        if payload.get("_retry") and not any(z in o.mapstate.closed(o.clock.now()) for z in zones):
+            cur = o.repo.current(task["task_id"])      # a "look again" came due and the way is open again: nothing to do
+            return Reaction(rows=[_row("rule", {"zones": zones}, {"decision": "react", "action": "no_action",
+                                                                 "rationale": "the blockage cleared while waiting"},
+                                       cur["version"] if cur else None)])
         states = {s.get("segment_id"): s.get("state") for s in payload.get("segments", []) if isinstance(s, dict)}
         for z in zones:
             o.mapstate.report(z, states.get(z, "blocked"), task.get("lease", {}).get("cluster_id", "edge"), o.clock.now())
@@ -83,7 +90,14 @@ class Reactor:
                                 "robot_zone": robot_zone}, row_out, cur["version"]))
         reason = payload["what_happened"]
         out = None
-        if choice["action"] == "replan":
+        if choice["action"] == "wait":     # the blockage may clear by itself: look again later (the ticker does)
+            o.waits[task["task_id"]] = {"until": iso(o.clock.now() + timedelta(seconds=choice["seconds"])),
+                                        "payload": dict(payload, _retry=True), "version": cur["version"]}
+            react.rows.append(_row("cloud", {"zones": zones}, {"decision": "wait_and_retry", "seconds": choice["seconds"]}, cur["version"]))
+        elif choice["action"] == "escalate":
+            self._notice(react, Notice("operator", f"{task['task_id']}: {choice['text']}", task_id=task["task_id"],
+                                       lease_version=cur["version"]), cur["version"], task)
+        elif choice["action"] == "replan":
             out = o.replan(task, blocked_zones=choice["avoid"], reason=reason)
             if out.kind != "leased":   # nothing inside this cluster's area works: another cluster takes the rest (SC-2)
                 react.rows += out.rows
@@ -116,9 +130,11 @@ class Reactor:
         if o.mode not in LLM_MODES:
             return fallback
         ctx = o.build_context(payload["what_happened"], task["task_id"], [])
+        options = o.preview_options(task, zones, robot_zone)
         user = (f"UNEXPECTED_EVENT: {payload['what_happened']} at {payload['where']}; robots saw: {payload['robots_saw']}\n"
                 f"BLOCKED_ZONES: {zones}\nROBOT_ZONE: {robot_zone}\n"
-                f"LEASE: allowed={cur['allowed_zones']} forbidden={cur['forbidden_zones']} cluster={cur['cluster_id']}")
+                f"LEASE: allowed={cur['allowed_zones']} forbidden={cur['forbidden_zones']} cluster={cur['cluster_id']}\n"
+                f"OPTIONS (already computed by code): {options}")
 
         def validate(call: dict) -> list[str]:
             if call["name"] == "hand_over":
@@ -131,7 +147,7 @@ class Reactor:
 
         res = run_agent(o.llm, system=o.pack.prompts["react"] + "\n\n" + ctx.to_prompt(), user=user,
                         tools=o.tools.names("react_event"), registry=o.tools, read=self._read(),
-                        terminal={"replan", "hand_over", "no_action"}, validate=validate, context=ctx, fleet_view=o.view(task["task_id"]))
+                        terminal={"replan", "hand_over", "wait_and_retry", "escalate_operator", "no_action"}, validate=validate, context=ctx, fleet_view=o.view(task["task_id"]))
         react.llm_calls += res.calls
         react.tokens_in += res.tokens_in
         react.tokens_out += res.tokens_out
@@ -142,6 +158,11 @@ class Reactor:
             return {**fallback, "error": "model chose no_action although zones were reported", "trace": res.trace}
         if res.call["name"] == "no_action":
             return {"action": "no_action", "avoid": [], "source": "llm", "rationale": i["rationale"], "trace": res.trace}
+        if res.call["name"] == "wait_and_retry":
+            return {"action": "wait", "seconds": i["seconds"], "avoid": zones, "source": "llm", "rationale": i["rationale"], "trace": res.trace}
+        if res.call["name"] == "escalate_operator":
+            return {"action": "escalate", "text": i["text"], "avoid": zones, "source": "llm",
+                    "rationale": i.get("rationale") or i["text"], "trace": res.trace}
         if res.call["name"] == "hand_over":
             return {"action": "hand_over", "to_cluster": i["to_cluster"], "avoid": zones, "source": "llm",
                     "rationale": i["rationale"], "trace": res.trace}
@@ -192,4 +213,20 @@ class Reactor:
 
     def _read(self) -> ReadTools:
         o = self.o
-        return ReadTools(topo=o.topo, fleet=o.fleet, policies=o.policies, mapstate=o.mapstate, clock=o.clock)
+        return ReadTools(topo=o.topo, fleet=o.fleet, policies=o.policies, mapstate=o.mapstate, clock=o.clock,
+                         load_task=o.load_task, repo=o.repo)
+
+
+def _scoped_react(fn):
+    import functools
+    from .trace import task_scope
+
+    @functools.wraps(fn)
+    def inner(self, task, *a, **k):
+        with task_scope(task.get("task_id")):
+            return fn(self, task, *a, **k)
+    return inner
+
+
+Reactor.on_event = _scoped_react(Reactor.on_event)
+Reactor.on_clarify = _scoped_react(Reactor.on_clarify)

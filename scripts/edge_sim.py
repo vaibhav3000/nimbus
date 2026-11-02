@@ -6,6 +6,12 @@ UNEXPECTED_EVENT, which is how re-planning is exercised without a real edge.
     python scripts/edge_sim.py --api http://127.0.0.1:8000 --cluster east-wing --complete
     python scripts/edge_sim.py --cluster east-wing --block E3 --once
     python scripts/edge_sim.py --cluster east-wing --close W0 --robot-zone E4 --once   # SC-2: a gate shuts, robot parked at E4
+    python scripts/edge_sim.py --cluster east-wing --pace 10 --complete                # drive each lease at 10x lease speed, watch it go
+    python scripts/edge_sim.py --cluster east-wing --pace 10 --block east_mid_hall     # ... and the corridor is reported blocked half way
+
+This is a SCRIPTED stand-in for an edge, not the edge's decision logic (that is P2's): with --pace it only walks the
+route the cloud gave it, at the lease's speed limit times the pace, checking in and reporting its position, and fires
+the incident you ask for. It makes no local decisions.
 
 Real edge (Person 2) replaces this; the messages are the contract's.
 
@@ -21,6 +27,7 @@ from __future__ import annotations
 import argparse
 import http.client
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -44,10 +51,12 @@ class EdgeSim:
     TOPIC_CHECKIN = "nimbus/{cluster}/checkin"
 
     def __init__(self, api: str, cluster: str, *, complete: bool = False, block: str | None = None,
-                 robots: list | None = None, state: str = "blocked", robot_zone: str | None = None):
+                 robots: list | None = None, state: str = "blocked", robot_zone: str | None = None, pace: float = 0.0):
         self.api, self.cluster = api.rstrip("/"), cluster
         self.complete, self.block, self.state = complete, block, state
         self.robot_zone = robot_zone      # where the robot is parked when it reports; sent as a map node, as the contract says
+        self.token = os.environ.get("NIMBUS_EDGE_TOKEN")   # sent as a Bearer token when the cloud requires one
+        self.pace = pace                  # 0: instant (old behaviour). > 0: drive leases at lease speed x pace
         self.robot_id: str | None = None  # learned from the first lease
         self.stopped: set[str] = set()    # tasks the cloud told this cluster to stop (a lease whose only step is `stop`)
         self.robots = robots
@@ -60,6 +69,8 @@ class EdgeSim:
         req = urlreq.Request(self.api + path, data=data, method=method)
         if data:
             req.add_header("Content-Type", "application/json")
+        if self.token:
+            req.add_header("Authorization", f"Bearer {self.token}")
         try:
             with urlreq.urlopen(req, timeout=timeout) as resp:
                 raw = resp.read().decode("utf-8")
@@ -127,6 +138,74 @@ class EdgeSim:
             self.outbox_buffer.append(body)
         return status, resp
 
+    def _say(self, text: str) -> None:
+        print(f"[{self.cluster} {time.strftime('%H:%M:%S')}] {text}", flush=True)
+
+    def drive(self, lease: dict) -> str:
+        """Walk the lease's plan in real time. Returns "done", "incident" (the scripted event was reported) or "replaced"
+        (the cloud issued a newer version; the next step() picks that one up)."""
+        _, m = self._call("GET", "/map.json")
+        mine = next((l for l in m.get("leases", []) if l["task_id"] == lease["lease_id"][len("lease-"):lease["lease_id"].rindex("-v")]
+                     and l["version"] == lease["version"]), None)
+        if not mine:
+            return "replaced"
+        pos = {n["id"]: (n["x"], n["y"]) for n in m["nodes"]}
+        robot = lease["assigned_robots"][0]
+        here = next((r for r in m["robots"] if r["id"] == robot), {})
+        x, y = (here.get("pos") or pos.get(here.get("zone")) or (0.0, 0.0))
+        zone, speed = here.get("zone") or next(iter(pos)), max(0.05, mine["speed"]) * self.pace
+        total = sum(sum(((pos[a][0] - pos[b][0]) ** 2 + (pos[a][1] - pos[b][1]) ** 2) ** 0.5 for a, b in zip(s["path"], s["path"][1:]))
+                    for s in mine["plan"] if s["type"] == "drive")
+        done_d, last_hb, last_ci, tag = 0.0, 0.0, time.time(), f"{robot} {lease['lease_id']}"
+        self._say(f"{tag}: starting, {len(mine['plan'])} steps, about {total:.0f} m at {speed:.2f} m/s (lease limit {mine['speed']} x pace {self.pace})")
+
+        def beat(state="busy"):
+            nonlocal last_hb
+            self._call("POST", "/fleet/heartbeat", {"cluster_id": self.cluster, "robots": [{"id": robot, "state": state, "zone": zone, "pos": [round(x, 2), round(y, 2)]}]})
+            last_hb = time.time()
+
+        for step in mine["plan"]:
+            if step["type"] == "drive":
+                self._say(f"{tag}: {step['label']}")
+                for node in step["path"]:
+                    tx, ty = pos[node]
+                    while True:
+                        d = ((tx - x) ** 2 + (ty - y) ** 2) ** 0.5
+                        move = min(d, speed * 0.25)
+                        if d > 1e-6:
+                            x, y, done_d = x + (tx - x) / d * move, y + (ty - y) / d * move, done_d + move
+                        time.sleep(0.25)
+                        if time.time() - last_hb >= 1.0:
+                            beat()
+                        if time.time() - last_ci >= 5.0:
+                            st, reply = self.checkin(lease); last_ci = time.time()
+                            if st == 409:
+                                self._say(f"{tag}: cloud says version {lease['version']} is outdated (now {reply.get('current')}): stopping"); return "replaced"
+                            self._say(f"{tag}: check-in -> {st} {('renewed until ' + reply['renewed_until']) if reply.get('renewed_until') else 'ok'}")
+                        if self.block and lease["version"] == 1 and done_d >= total / 2:
+                            self._say(f"{tag}: obstacle! {self.block} is {self.state}. Parking at {zone} and telling the cloud")
+                            beat(); self.robot_zone = zone
+                            self.escalate("UNEXPECTED_EVENT", lease, {
+                                "what_happened": f"{self.block} is {self.state}", "where": self.block, "robot_zone": zone,
+                                "robots_saw": [f"{robot}: {self.block} {self.state}"],
+                                "segments": [{"segment_id": self.block, "state": self.state}]})
+                            return "incident"
+                        if d - move < 1e-6:
+                            break
+                    zone = node
+                    beat()
+            else:
+                secs = step["seconds"] / self.pace
+                self._say(f"{tag}: {step['label']} ({step['seconds']:.0f}s of robot time, {secs:.1f}s here)")
+                end = time.time() + secs
+                while time.time() < end:
+                    time.sleep(0.25)
+                    if time.time() - last_hb >= 1.0:
+                        beat()
+        beat("idle")
+        self._say(f"{tag}: lease finished")
+        return "done"
+
     def escalate(self, kind: str, lease: dict, payload: dict):
         task_id = lease["lease_id"][len("lease-"):lease["lease_id"].rindex("-v")]
         body = {
@@ -165,6 +244,13 @@ class EdgeSim:
                             self.stopped.add(payload["lease_id"])      # park and stay quiet: the cloud ended this task here
                             continue
                         self.checkin(payload)
+                        if self.pace:
+                            outcome = self.drive(payload)
+                            if outcome == "done" and self.complete:
+                                lid = payload["lease_id"]; task = lid[len("lease-"):lid.rindex("-v")]
+                                self.escalate("OUTPUT_READY", payload, {"result_ref": f"s3://nimbus-outputs/{task}/delivery-proof.jpg"})
+                                self._say(f"{lid}: OUTPUT_READY sent")
+                            continue
                         if self.block and payload.get("version") == 1:
                             self.heartbeat()   # report where the robot is parked before the cloud has to plan around it
                             extra = {"robot_zone": self.robot_zone} if self.robot_zone else {}
@@ -192,6 +278,7 @@ def main() -> None:
     ap.add_argument("--block", help="send UNEXPECTED_EVENT blocking this zone for each first-version lease")
     ap.add_argument("--close", help="like --block, but the zone is reported closed (a gate or door), not blocked")
     ap.add_argument("--robot-zone", help="map node where the robot is parked when it reports (heartbeat and event)")
+    ap.add_argument("--pace", type=float, default=0.0, help="drive each lease in real time at lease speed x PACE (0 = instant)")
     ap.add_argument("--once", action="store_true", help="process the outbox once and exit")
     ap.add_argument("--interval", type=float, default=2.0)
     ap.add_argument(
@@ -231,7 +318,7 @@ def main() -> None:
 
     try:
         sim = EdgeSim(target_api, a.cluster, complete=a.complete, block=a.close or a.block,
-                      state="closed" if a.close else "blocked", robot_zone=a.robot_zone)
+                      state="closed" if a.close else "blocked", robot_zone=a.robot_zone, pace=a.pace)
         try:
             sim.heartbeat()
         except Exception:

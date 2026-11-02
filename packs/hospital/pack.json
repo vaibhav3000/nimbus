@@ -6,6 +6,7 @@
   "nouns": {"item": "equipment", "destination": "ward or bed", "example": "wheelchair to ward 3"},
   "ontology": {
     "destination_kinds": ["ward"],
+    "survey_kinds": ["ward", "store"],
     "source_kinds": ["store"],
     "flag_labels": {"paediatric": "PAEDIATRIC"},
     "destination_line": "{id} (area {area}{flags}, beds 1-{beds})"
@@ -44,6 +45,7 @@
     "deny": ["^\\s*(?:no|nope|nah)\\b"],
     "source": [{"pattern": "\\b(?:from|out of)\\s+((?:ward\\s+)?[\\w][\\w\\-]*)", "group": 1}],
     "default_destination": "area_source",
+    "survey": ["\\b(?:survey|sweep|inventory)\\b", "\\b(?:count|how many|check|find)\\b.*\\b(?:idle|spare|free|available|unused)\\b"],
     "extract": ["\\b(?:get|move|take|bring|clear|remove)\\b[^.]*\\bout\\b"]
   },
   "questions": {
@@ -73,6 +75,7 @@
         "readings": [
           {"label": "paediatric infusion pump",
            "patterns": ["paediatric", "pediatric", "\\bpaeds?\\b", "\\bpeds\\b", "child", "\\b(?:not|no)\\s+(?:a\\s+)?(?:standard|adult|regular|normal)"],
+        "exclude": ["\\b(?:no|not|without)\\s+(?:a\\s+)?(?:paediatric|pediatric|paeds?)\\b"],
            "set": {"item": "infusion_pump_paediatric"}},
           {"label": "standard infusion pump",
            "patterns": ["standard", "adult", "regular", "normal"],
@@ -97,6 +100,11 @@
       {"cmd": "beep", "params": {}},
       {"cmd": "photo", "params": {"purpose": "delivery_proof"}},
       {"cmd": "report", "params": {}}
+    ],
+    "survey": [
+      {"cmd": "go_to", "params": {"to": "{target}"}, "each": true},
+      {"cmd": "photo", "params": {"purpose": "survey"}, "each": true},
+      {"cmd": "report", "params": {}}
     ]
   },
   "default_template": "delivery",
@@ -106,11 +114,12 @@
     "when_to_escalate": ["door_closed", "deadline_at_risk", "robot_failed", "route_blocked_no_alternative"]
   },
   "steps": {
-    "intent": ["submit_task_spec", "submit_task_specs", "announce_restriction", "ask_clarification"],
+    "intent": ["submit_task_spec", "submit_task_specs", "submit_survey", "announce_restriction", "ask_clarification"],
     "allocation": ["propose_allocation"],
     "step": ["decide_step"],
-    "react_event": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "replan", "hand_over", "no_action"],
-    "react_clarify": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "answer_clarification", "ask_requester"]
+    "result": ["summarise_result"],
+    "react_event": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "get_robot", "get_task", "eta", "replan", "hand_over", "wait_and_retry", "escalate_operator", "no_action"],
+    "react_clarify": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "get_task", "answer_clarification", "ask_requester", "escalate_operator"]
   },
-  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt", "step": "prompts/step.txt", "react": "prompts/react.txt"}
+  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt", "step": "prompts/step.txt", "result": "prompts/result.txt", "react": "prompts/react.txt"}
 }
