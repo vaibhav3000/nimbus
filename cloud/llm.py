@@ -81,6 +81,11 @@ class RuleBasedLLM:
         user_turns = [m["text"] for m in messages if m["role"] == "user"]
         request = user_turns[0]
         answer = user_turns[1] if len(user_turns) > 1 else None
+        sv0 = nlp.parse_survey(self.pack, self.topo, request)
+        if sv0 is not None:
+            p0 = nlp.parse(self.pack, self.topo, request)
+            return {"name": "submit_survey", "input": {**sv0, "priority": p0.priority, "deadline_minutes": p0.deadline_minutes,
+                                                       "rationale": "the message asks robots to look, not to carry"}}
         st = nlp.parse_statement(self.pack, self.topo, request)
         if st is not None:
             if "unknown_zone" in st:

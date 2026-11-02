@@ -43,6 +43,7 @@ from .orchestrator_types import LLM_MODES, Outcome, row as _row
 from .react import Reactor
 from .results import ResultStore
 from .statements import Statements
+from .survey import Surveyor
 from .ticker import Ticker
 from .legs import handover_options, make_legs
 from .leases import Conflict, MemoryLeaseRepo, _task_of, claim_keys_for
@@ -105,6 +106,7 @@ class Orchestrator:
         self._freed = 0          # robots/claims given back by this process (finish, cancel, hold, expiry)
         self.statements = Statements(self)
         self.ticker = Ticker(self)
+        self.surveyor = Surveyor(self)
         self.results = results if results is not None else ResultStore()
         self.load_task = lambda task_id: None    # the HTTP layer plugs in its task store
         self.waits: dict[str, dict] = {}         # task_id -> {"until", "payload", "version"}: "look again later" from the model
@@ -221,6 +223,14 @@ class Orchestrator:
             out = self.statements.apply(task, {**payload, "zone": self.topo.anchor_of(payload["zone"])}, text)
             out.notice = f"{notice} {out.notice}" if notice else out.notice
             return out
+        if kind == "survey":
+            specs = [self._complete_spec(s) for s in self.surveyor.plan(payload, text)]
+            if not specs:
+                return Outcome("rejected", reason="no place that a robot cluster can reach was named", rows=[
+                    _row("rule", {"survey": payload}, {"decision": "reject", "reason": "no reachable place"})])
+            out = self._allocate(task, specs[0], ctx, info, use_llm, notice, request_text=text, answer=answer)
+            out.children = specs[1:]
+            return out
         specs = [self._complete_spec(self._ground(s, text, answer)) for s in (payload if kind == "specs" else [payload])]
         out = self._allocate(task, specs[0], ctx, info, use_llm, notice, request_text=text, answer=answer)
         if out.kind != "clarify":   # after a question the whole message is read again, so extras would be duplicated
@@ -287,6 +297,11 @@ class Orchestrator:
         {text, info, rows, calls, tokens_in, tokens_out}."""
         info = self.results.describe(result_ref)
         spec = task.get("spec") or {}
+        if spec.get("task") == "survey":      # robots looked around: merge their report into the cloud's picture (FR-17)
+            text, n = self.surveyor.merge(task, info.get("preview"))
+            return {"text": text, "info": info, "calls": 0, "tokens_in": 0, "tokens_out": 0, "merged": n,
+                    "rows": [_row("rule", {"result_ref": result_ref, "bytes": info.get("size")},
+                                  {"decision": "merge_survey", "updated": n, "summary": text}, (task.get("lease") or {}).get("version"))]}
         what = f"{spec.get('item', 'the item')} {('from ' + spec['source'] + ' ') if spec.get('source') else ''}to {spec.get('destination', 'its destination')}"
         facts = f"{what.strip()} for task {task['task_id']}."
         calls = tin = tout = 0
@@ -373,6 +388,9 @@ class Orchestrator:
         errs = self.tools.validate(call["name"], call["input"])
         if errs:
             return errs
+        if call["name"] == "submit_survey":
+            bad = [z for z in call["input"].get("places", []) if self.topo.anchor_of(z) is None]
+            return [f"place {z!r} is not in the context" for z in bad]
         if call["name"] == "announce_restriction":
             if self.topo.anchor_of(call["input"]["zone"]) is None:
                 errs.append(f"zone {call['input']['zone']!r} is not a place in the context")
@@ -411,6 +429,8 @@ class Orchestrator:
         name, i = call["name"], call["input"]
         if name == "ask_clarification":
             return "clarify", i
+        if name == "submit_survey":
+            return "survey", i
         if name == "announce_restriction":
             return "statement", {"zone": call["input"]["zone"], "kind": i["kind"], "lift": bool(i.get("lift")),
                                  "extract_items": i.get("extract_items", [])}
@@ -426,6 +446,9 @@ class Orchestrator:
                 return "clarify", {"question": f"Which {nouns['destination']} do you mean by {st['unknown_zone']!r}?",
                                    "possible_readings": sorted(self.topo.destinations())[:6]}
             return "statement", st
+        sv = nlp.parse_survey(self.pack, self.topo, text)
+        if sv is not None:
+            return "survey", sv
         p = nlp.parse(self.pack, self.topo, text, answer=answer)
         if p.missing:
             return "clarify", nlp.missing_question(self.pack, p)
@@ -504,6 +527,8 @@ class Orchestrator:
 
     def _allocate(self, task, spec, ctx, info, use_llm, notice, *, request_text, answer, retry=False,
                   exclude=()) -> Outcome:
+        if spec.get("task") == "survey":
+            return self.surveyor.allocate(task, spec, ctx, info, notice, request_text=request_text, retry=retry)
         task_id = task["task_id"]
         view = self.view(task_id, exclude=exclude)
         attempts: list = []

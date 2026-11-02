@@ -24,7 +24,8 @@
         "destination_kinds": {"type": "array", "minItems": 1, "items": {"type": "string"}},
         "source_kinds": {"type": "array", "minItems": 1, "items": {"type": "string"}},
         "flag_labels": {"type": "object", "additionalProperties": {"type": "string"}},
-        "destination_line": {"type": "string"}
+        "destination_line": {"type": "string"},
+        "survey_kinds": {"type": "array", "items": {"type": "string"}}
       }
     },
     "locators": {
@@ -84,7 +85,8 @@
         "source": {"type": "array", "items": {"type": "object", "required": ["pattern", "group"],
                    "properties": {"pattern": {"type": "string"}, "group": {"type": "integer"}}}},
         "default_destination": {"enum": ["area_source", "none"]},
-        "extract": {"type": "array", "items": {"type": "string"}}
+        "extract": {"type": "array", "items": {"type": "string"}},
+        "survey": {"type": "array", "items": {"type": "string"}}
       }
     },
     "questions": {

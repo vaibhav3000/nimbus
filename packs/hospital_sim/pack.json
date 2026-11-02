@@ -12,6 +12,10 @@
     "destination_kinds": [
       "ward"
     ],
+    "survey_kinds": [
+      "ward",
+      "store"
+    ],
     "source_kinds": [
       "store"
     ],
@@ -162,6 +166,7 @@
       }
     ],
     "default_destination": "area_source",
+    "survey": ["\\b(?:survey|sweep|inventory)\\b", "\\b(?:count|how many|check|find)\\b.*\\b(?:idle|spare|free|available|unused)\\b"],
     "extract": [
       "\\b(?:get|move|take|bring|clear|remove)\\b[^.]*\\bout\\b"
     ]
@@ -321,6 +326,11 @@
         "cmd": "report",
         "params": {}
       }
+    ],
+    "survey": [
+      {"cmd": "go_to", "params": {"to": "{target}"}, "each": true},
+      {"cmd": "photo", "params": {"purpose": "survey"}, "each": true},
+      {"cmd": "report", "params": {}}
     ]
   },
   "default_template": "delivery",
@@ -335,7 +345,7 @@
     ]
   },
   "steps": {
-    "intent": ["submit_task_spec", "submit_task_specs", "announce_restriction", "ask_clarification"],
+    "intent": ["submit_task_spec", "submit_task_specs", "submit_survey", "announce_restriction", "ask_clarification"],
     "allocation": [
       "propose_allocation"
     ],

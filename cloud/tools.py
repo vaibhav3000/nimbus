@@ -53,6 +53,16 @@ class ToolRegistry:
                            "properties": {"tasks": {"type": "array", "minItems": 2, "maxItems": 8, "items": spec_item},
                                           "rationale": {"type": "string", "minLength": 1}}},
             },
+            "submit_survey": {
+                "class": "propose",
+                "description": ("The requester wants robots to go and LOOK, not carry: count or find an item across places (an inventory "
+                                "sweep). Give the item and, only if they name them, the places; otherwise all places are surveyed."),
+                "schema": {"type": "object", "additionalProperties": False,
+                           "required": ["item", "priority", "deadline_minutes", "rationale"],
+                           "properties": {"item": {"enum": item_ids}, "places": {"type": "array", "items": {"type": "string"}},
+                                          "priority": props["priority"], "deadline_minutes": props["deadline_minutes"],
+                                          "rationale": {"type": "string", "minLength": 1}}},
+            },
             "announce_restriction": {
                 "class": "propose",
                 "description": ("The requester is not asking for a delivery but telling the system a rule about a place "

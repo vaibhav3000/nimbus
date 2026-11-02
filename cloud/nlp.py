@@ -122,6 +122,25 @@ def spec_from(parsed: Parsed, note: str = "deterministic parse") -> dict:
     return spec
 
 
+def parse_survey(pack: Pack, topo: Topology, text: str) -> dict | None:
+    """"Count the idle <items>", "inventory sweep of <items>": a look-around job, not a delivery. Needs the pack to define
+    survey phrases and an item in the text. Places are those the text names; none named means every survey place."""
+    if not _any(pack.doc["nlp"].get("survey", []), text):
+        return None
+    names = items_in(pack, text)
+    if not names:
+        return None
+    places, seen = [], set()
+    words = re.findall(r"[A-Za-z0-9\-]+", text)
+    for i in range(len(words)):
+        for width in (2, 1):                    # "<noun> 3" before "3": the pack's locators know the forms
+            hit = topo.locate(" ".join(words[i:i + width]))
+            if hit and hit["anchor"] not in seen and topo.nodes[hit["anchor"]]["kind"] in pack.ontology.get("survey_kinds", []):
+                seen.add(hit["anchor"]); places.append(hit["anchor"])
+                break
+    return {"item": names[0], "places": places}
+
+
 def items_in(pack: Pack, text: str) -> list[str]:
     """Item ids named in the text, a more specific variant replacing the item it varies."""
     found = [i for i in pack.items if _any(i["patterns"], text)]

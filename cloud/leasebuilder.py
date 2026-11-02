@@ -63,3 +63,35 @@ def build_lease(task_id: str, spec: dict, proposal: Proposal, result: CheckResul
         "cluster_id": proposal.cluster_id,
         "when_to_escalate": list(cfg["when_to_escalate"]),
     }
+
+
+def build_survey_lease(task_id: str, spec: dict, proposal: Proposal, result: CheckResult, *, topo: Topology, clock: Clock,
+                       pack: Pack, version: int = 1, restricted_zones: list | None = None) -> dict:
+    """A survey lease: one or more robots, each visiting its own places (photo at each), one report at the end. Same 12 fields."""
+    now = clock.now()
+    asked = parse_iso(spec["requested_at"]) if spec.get("requested_at") else now
+    deadline = max(asked + timedelta(minutes=spec["deadline_minutes"]), now + timedelta(seconds=60))
+    cfg = pack.doc["lease"]
+    allowed: list[str] = []
+    for path in result.extra["paths"].values():
+        for z in path:
+            if z not in allowed:
+                allowed.append(z)
+    caps = [c for z in allowed if (c := topo.speed_cap(z)) is not None]
+    template = pack.doc["task_templates"]["survey"]
+    steps = []
+    for robot, targets in result.extra["assign"].items():
+        for target in targets:
+            for step in template:
+                if step.get("each"):
+                    steps.append({**{k: v for k, v in _fill(step, {"target": target}).items() if k != "each"}, "robot": robot})
+    robots = list(result.extra["assign"])
+    steps += [{**{k: v for k, v in step.items() if k != "each"}, "robot": robots[0]} for step in template if not step.get("each")]
+    return {
+        "lease_id": f"lease-{task_id}-v{version}", "version": version,
+        "priority": pack.priority(spec["priority"])["lease_priority"],
+        "deadline_ts": iso(deadline), "expiry_ts": iso(deadline + timedelta(seconds=cfg["expiry_grace_seconds"])),
+        "allowed_zones": allowed, "forbidden_zones": sorted(restricted_zones or []),
+        "speed_limit": min([cfg["speed_limit"], *caps]), "assigned_robots": robots, "task_sequence": steps,
+        "cluster_id": proposal.cluster_id, "when_to_escalate": list(cfg["when_to_escalate"]),
+    }

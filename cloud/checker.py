@@ -35,6 +35,7 @@ class CheckResult:
     source_zone: str | None = None                   # where the robot picks the item up
     anchor: str | None = None                        # routable node of the destination
     approach: list = field(default_factory=list)     # robot's current zone -> pickup, when it is not already there
+    extra: dict = field(default_factory=dict)        # task-type specific results (a survey's assignment and skipped places)
 
 
 def check(spec: dict, proposal: Proposal, view: FleetView, *, holds_stock: bool = False) -> CheckResult:
@@ -130,4 +131,73 @@ def check(spec: dict, proposal: Proposal, view: FleetView, *, holds_stock: bool 
     bad += out.violations
 
     res.ok = not bad
+    return res
+
+
+def check_survey(spec: dict, proposal: Proposal, view: FleetView) -> CheckResult:
+    """The Rule Checker for a survey (a look-around job): the cluster is healthy, its robots are free, and each place to
+    visit is inside the cluster, not restricted for this priority, and reachable. Places that fail are SKIPPED and
+    reported (one closed place does not cancel the sweep); only if none is left is the survey refused. Assigns the places
+    to the robots nearest-first and gives each robot's full path."""
+    topo, fleet = view.topo, view.fleet
+    res = CheckResult(ok=False)
+    bad = res.violations
+
+    def violate(rule: str, detail: str, kind: str = "veto") -> None:
+        bad.append({"rule": rule, "detail": detail, "kind": kind})
+
+    cluster = fleet.clusters.get(proposal.cluster_id)
+    if cluster is None:
+        violate("cluster", f"unknown cluster {proposal.cluster_id!r}")
+        return res
+    if not view.health_ok(proposal.cluster_id):
+        violate("health", f"{proposal.cluster_id} health is {fleet.health(proposal.cluster_id)}")
+    unknown = [r for r in proposal.robot_ids if r not in cluster["robots"]]
+    if unknown:
+        violate("robots", f"robots {unknown} are not in {proposal.cluster_id}")
+    else:
+        busy = [r for r in proposal.robot_ids if not view.robot_free(r) or cluster["robots"][r]["state"] == "failed"]
+        if busy:
+            violate("capacity", f"robots not available: {busy}")
+    if bad:
+        return res
+    zones = topo.cluster_zones(proposal.cluster_id)
+    restricted = view.restricted_for(spec["priority"])
+    avoid = set(restricted)
+    skipped, todo = [], []
+    for t in spec["targets"]:
+        if t not in zones:
+            skipped.append({"target": t, "why": f"outside {proposal.cluster_id}'s area"})
+        elif t in restricted:
+            r = restricted[t]
+            skipped.append({"target": t, "why": f"{r['effect']} by {r['reason']}"})
+        else:
+            todo.append(t)
+    pos = {r: cluster["robots"][r]["zone"] if cluster["robots"][r]["zone"] in zones else topo.home_of(proposal.cluster_id)
+           for r in proposal.robot_ids}
+    assign: dict[str, list] = {r: [] for r in proposal.robot_ids}
+    paths: dict[str, list] = {r: [pos[r]] for r in proposal.robot_ids}
+    remaining = list(todo)
+    travelled = {r: 0.0 for r in proposal.robot_ids}
+    while remaining:
+        best = None
+        for r in proposal.robot_ids:
+            for t in remaining:
+                p = topo.shortest_path(pos[r], t, allowed=zones - avoid | {pos[r]}, avoid=avoid - {pos[r]})
+                # balance the robots: the cheapest way to finish is the shortest total route for whoever takes it
+                if p and (best is None or travelled[r] + topo.path_length(p) < best[0]):
+                    best = (travelled[r] + topo.path_length(p), r, t, p)
+        if best is None:
+            skipped += [{"target": t, "why": "no route inside the cluster"} for t in remaining]
+            break
+        _, r, t, p = best
+        assign[r].append(t); paths[r] += p[1:]; pos[r] = t; remaining.remove(t); travelled[r] += topo.path_length(p)
+    if not any(assign.values()):
+        violate("reachability", "no place can be surveyed: " + "; ".join(f"{s['target']}: {s['why']}" for s in skipped),
+                "hold" if any("hold" in s["why"] for s in skipped) else "veto")
+        return res
+    res.checks += ["cluster", "health", "robots", "capacity", "reachability"]
+    res.routes = [paths[r] for r in proposal.robot_ids if assign[r]]
+    res.extra = {"assign": {r: ts for r, ts in assign.items() if ts}, "paths": {r: p for r, p in paths.items() if assign[r]}, "skipped": skipped}
+    res.ok = True
     return res

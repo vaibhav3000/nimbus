@@ -135,6 +135,23 @@ class FleetRegistry:
                     return c["robots"][robot_id].get("zone")
         return None
 
+    def merge_report(self, counts: dict, known_items: set) -> int:
+        """Merge what survey robots saw (place -> {item: n}) into the cloud's picture (FR-17). Unknown places and items and
+        non-numeric counts are ignored. Returns how many place/item counts were updated."""
+        n = 0
+        with self._lock:
+            for place, items in (counts or {}).items():
+                if self.zones is not None and place not in self.zones:
+                    continue
+                for item, q in (items or {}).items():
+                    if item in known_items and isinstance(q, int) and not isinstance(q, bool) and q >= 0:
+                        if self.places.setdefault(place, {}).get(item) != q:
+                            self.places[place][item] = q
+                            if self.stock_store is not None:
+                                self.stock_store.set("@" + place, item, q)
+                        n += 1
+        return n
+
     def place_stock(self, place: str) -> dict:
         with self._lock:
             return {i: q for i, q in self.places.get(place, {}).items() if q > 0}
