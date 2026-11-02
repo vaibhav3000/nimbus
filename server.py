@@ -44,6 +44,45 @@ def make_decision_row(orch: Orchestrator, who: str, inputs: dict, output: dict, 
     }
 
 
+def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
+    """Persist an orchestrator Outcome: log rows first, then the state they explain (FR-20 replay order),
+    then publish and meter. One copy for the HTTP handler and the MQTT ingress."""
+    with _STATE_LOCK:
+        task_id = task["task_id"]
+        for r in outcome.rows:
+            store.append_decision(make_decision_row(orch, r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
+        task["notice"] = outcome.notice
+        if outcome.spec:
+            task["spec"] = outcome.spec
+        if outcome.kind == "clarify":
+            task["status"], task["question"] = "needs_clarification", outcome.question
+        elif outcome.kind == "leased":
+            task["status"], task["question"], task["reason"] = "leased", None, None
+            task["lease"] = outcome.lease
+            if outcome.reservation:
+                task["reservation"], task["stock_released"] = outcome.reservation, False
+        elif outcome.kind == "queued":
+            task["status"], task["reason"] = "queued", outcome.reason
+        elif outcome.kind == "rejected":
+            task["status"], task["reason"] = "rejected", outcome.reason
+        elif outcome.kind == "stood_down":
+            task["lease"] = outcome.lease   # the stop lease is now the highest version the edge may honour
+        store.put_task(task)  # records task["message_id"] as seen
+        for topic, payload in outcome.publish:
+            publish(topic, payload)
+        # T_in/T_out from the model's usage (estimates for the offline stand-in);
+        # M: leases published; W: rows + task write; F/K: flat per-decision stand-ins.
+        cost.record(
+            llm_calls=outcome.llm_calls,
+            input_tokens=outcome.tokens_in,
+            output_tokens=outcome.tokens_out,
+            iot_messages=len(outcome.publish),
+            dynamodb_ops=len(outcome.rows) + 2,
+            fargate_gbs=0.001,
+            cloudwatch_metrics=1,
+        )
+
+
 class Handler(BaseHTTPRequestHandler):
     store: Store  # injected per server instance
     cost: CostBook
@@ -290,38 +329,7 @@ class Handler(BaseHTTPRequestHandler):
     def _apply(self, task: dict, outcome) -> None:
         """Persist an orchestrator Outcome: log rows first, then the state they
         explain (FR-20 replay order), then publish and meter."""
-        with _STATE_LOCK:
-            task_id = task["task_id"]
-            for r in outcome.rows:
-                self.store.append_decision(self._row(r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
-            task["notice"] = outcome.notice
-            if outcome.spec:
-                task["spec"] = outcome.spec
-            if outcome.kind == "clarify":
-                task["status"], task["question"] = "needs_clarification", outcome.question
-            elif outcome.kind == "leased":
-                task["status"], task["question"], task["reason"] = "leased", None, None
-                task["lease"] = outcome.lease
-                if outcome.reservation:
-                    task["reservation"], task["stock_released"] = outcome.reservation, False
-            elif outcome.kind == "queued":
-                task["status"], task["reason"] = "queued", outcome.reason
-            elif outcome.kind == "rejected":
-                task["status"], task["reason"] = "rejected", outcome.reason
-            self.store.put_task(task)  # records task["message_id"] as seen
-            for topic, payload in outcome.publish:
-                self.publish(topic, payload)
-            # T_in/T_out from the model's usage (estimates for the offline stand-in);
-            # M: leases published; W: rows + task write; F/K: flat per-decision stand-ins.
-            self.cost.record(
-                llm_calls=outcome.llm_calls,
-                input_tokens=outcome.tokens_in,
-                output_tokens=outcome.tokens_out,
-                iot_messages=len(outcome.publish),
-                dynamodb_ops=len(outcome.rows) + 2,
-                fargate_gbs=0.001,
-                cloudwatch_metrics=1,
-            )
+        apply_outcome(self.orch, self.store, self.cost, self.publish, task, outcome)
 
     def _drain(self) -> None:
         """Capacity freed: lease queued tasks in priority/deadline order."""
@@ -415,6 +423,8 @@ class Handler(BaseHTTPRequestHandler):
             new_status = {"pause": "paused", "cancel": "cancelled"}[action]
             # Log row first, then the state it explains (FR-20 replay order).
             self.store.append_decision(row)
+            if self.orch.repo.current(task_id) is not None:   # FR-22: the stop must reach the robots, not just the record
+                self._apply(task, self.orch.stand_down(task, f"operator {action}"))
             task["status"] = new_status
             if action == "cancel":
                 self.orch.cancel(task)  # frees robots and zones, returns the item
@@ -960,35 +970,7 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
     orch.recover(store.all_tasks())
 
     def apply_fn(task: dict, outcome) -> None:
-        with _STATE_LOCK:
-            task_id = task["task_id"]
-            for r in outcome.rows:
-                store.append_decision(make_decision_row(orch, r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
-            task["notice"] = outcome.notice
-            if outcome.spec:
-                task["spec"] = outcome.spec
-            if outcome.kind == "clarify":
-                task["status"], task["question"] = "needs_clarification", outcome.question
-            elif outcome.kind == "leased":
-                task["status"], task["question"], task["reason"] = "leased", None, None
-                task["lease"] = outcome.lease
-                if outcome.reservation:
-                    task["reservation"], task["stock_released"] = outcome.reservation, False
-            elif outcome.kind == "queued":
-                task["status"], task["reason"] = "queued", outcome.reason
-            elif outcome.kind == "rejected":
-                task["status"], task["reason"] = "rejected", outcome.reason
-            store.put_task(task)  # records task["message_id"] as seen
-            for topic, payload in outcome.publish:
-                publish(topic, payload)
-            cost.record(
-                input_tokens=outcome.tokens_in,
-                output_tokens=outcome.tokens_out,
-                iot_messages=len(outcome.publish),
-                dynamodb_ops=len(outcome.rows) + 2,
-                fargate_gbs=0.001,
-                cloudwatch_metrics=1,
-            )
+        apply_outcome(orch, store, cost, publish, task, outcome)
 
     def drain_fn() -> None:
         with _STATE_LOCK:

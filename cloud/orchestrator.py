@@ -418,6 +418,35 @@ class Orchestrator:
         return Outcome("leased", rows=rows, lease=lease, spec=spec,
                        publish=[(f"nimbus/{lease['cluster_id']}/lease", lease)])
 
+    # -- stand-down: stop work without changing the lease contract ----------------------------------
+
+    def stand_down(self, task: dict, reason: str) -> Outcome:
+        """Publish lease v(n+1) whose only sub-task is `stop` and whose only allowed zone is where the robot is.
+
+        The edge already honours "a higher version replaces the old one" (FR-8), so this halts a task
+        (operator cancel or pause, a recall, or the old cluster after a hand-over) with the 12-field
+        contract unchanged. Claims stay as they are: the caller releases them when the task is over.
+        """
+        cur = self.repo.current(task["task_id"])
+        if cur is None:
+            return Outcome("stand_down_failed", reason="no live lease")
+        here = self.fleet.robot_zone(cur["assigned_robots"][0])
+        zone = here if here in self.topo.nodes else cur["allowed_zones"][0]
+        lease = {**cur, "version": cur["version"] + 1, "lease_id": f"lease-{task['task_id']}-v{cur['version'] + 1}",
+                 "allowed_zones": [zone], "task_sequence": [{"cmd": "stop", "params": {}}],
+                 "when_to_escalate": list(cur["when_to_escalate"])}
+        errors = contracts.validate_document("lease", lease)
+        if errors:
+            raise InvalidLeaseError(errors)
+        try:
+            self.repo.commit(lease, [f"robot:{r}" for r in lease["assigned_robots"]], now=self.clock.now())
+        except Conflict as exc:
+            return Outcome("stand_down_failed", reason="; ".join(exc.reasons))
+        rows = [_row("cloud", {"lease_id": cur["lease_id"], "reason": reason},
+                     {"decision": "stand_down", "lease_id": lease["lease_id"], "parked_at": zone, "reason": reason,
+                      "sha256": _sha(lease)}, lease["version"])]
+        return Outcome("stood_down", rows=rows, lease=lease, publish=[(f"nimbus/{lease['cluster_id']}/lease", lease)])
+
     # -- C2: the edge is a thin relay and asks the cloud before every non-reflex step ----------------
 
     def decide_step(self, task_id: str, version: int, cluster_id: str, event: dict) -> dict:
