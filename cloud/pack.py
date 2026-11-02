@@ -26,7 +26,8 @@ import contracts
 PACKS_DIR = Path(__file__).resolve().parents[1] / "packs"
 CORE_TOOLS = {"submit_task_spec", "submit_task_specs", "announce_restriction", "ask_clarification", "propose_allocation", "decide_step",
               "get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map",
-              "replan", "hand_over", "answer_clarification", "ask_requester", "no_action"}
+              "replan", "hand_over", "answer_clarification", "ask_requester", "no_action",
+              "get_robot", "get_task", "eta", "escalate_operator", "wait_and_retry"}
 
 
 class PackError(Exception):

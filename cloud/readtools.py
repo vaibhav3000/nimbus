@@ -14,9 +14,10 @@ CAP_CHARS = 2000
 
 
 class ReadTools:
-    def __init__(self, *, topo, fleet, policies, mapstate, clock, task_log: Callable[[str], list] = lambda tid: []):
+    def __init__(self, *, topo, fleet, policies, mapstate, clock, task_log: Callable[[str], list] = lambda tid: [],
+                 load_task: Callable[[str], dict | None] = lambda tid: None, repo=None):
         self.topo, self.fleet, self.policies, self.mapstate, self.clock = topo, fleet, policies, mapstate, clock
-        self.task_log = task_log
+        self.task_log, self.load_task, self.repo = task_log, load_task, repo
 
     def run(self, name: str, args: dict) -> dict:
         fn = getattr(self, "_" + name, None)
@@ -51,6 +52,30 @@ class ReadTools:
 
     def _get_task_log(self, task_id: str) -> dict:
         return {"task_id": task_id, "lines": self.task_log(task_id)[-12:]}
+
+    def _get_robot(self, robot_id: str) -> dict:
+        for c in self.fleet.snapshot():
+            for r in c["robots"]:
+                if r["id"] == robot_id:
+                    held = next((l for l in (self.repo.live_leases() if self.repo else []) if robot_id in l["assigned_robots"]), None)
+                    return {"robot_id": robot_id, "cluster": c["cluster_id"], "state": r["state"], "zone": r["zone"],
+                            "battery": r.get("battery"), "task": held["lease_id"] if held else None}
+        return {"error": f"unknown robot {robot_id!r}"}
+
+    def _get_task(self, task_id: str) -> dict:
+        t = self.load_task(task_id)
+        if not t:
+            return {"error": f"unknown task {task_id!r}"}
+        lease = t.get("lease") or {}
+        return {"task_id": task_id, "status": t["status"], "asked": t["request_text"][:200], "spec": t.get("spec"),
+                "lease": {"cluster": lease.get("cluster_id"), "version": lease.get("version"), "expires": lease.get("expiry_ts")} if lease else None,
+                "leg": (t.get("leg_index", 0) + 1, len(t["legs"])) if t.get("legs") else None}
+
+    def _eta(self, src: str, dst: str, speed: float = 0.3, avoid: list | None = None) -> dict:
+        r = self._get_route(src, dst, avoid)
+        if not r.get("path"):
+            return r
+        return {**r, "seconds": round(r["length"] / speed), "speed_m_s": speed}
 
     def _get_map(self) -> dict:
         return {"closed": self.mapstate.closed(self.clock.now()),

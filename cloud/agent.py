@@ -43,24 +43,31 @@ def run_agent(llm, *, system: str, user: str, tools: list[str], registry, read, 
         out.calls += 1
         out.tokens_in += res.input_tokens
         out.tokens_out += res.output_tokens
-        call = res.tool_calls[0] if res.tool_calls else None
-        if call is None:
+        if not res.tool_calls:
             messages.append({"role": "user", "text": "Call one of the tools."})
             continue
-        cid = call.get("id") or f"turn{turn}"
-        messages.append({"role": "assistant", "tool_calls": [{"id": cid, "name": call["name"], "input": call["input"]}]})
-        errs = registry.validate(call["name"], call["input"])
-        if not errs and call["name"] in terminal and validate:
-            errs = validate(call)
-        if errs:
-            last = "; ".join(errs)
-            result = {"error": last}
-        elif call["name"] in terminal:
-            out.call = {"name": call["name"], "input": call["input"]}
+        calls = [dict(c, id=c.get("id") or f"turn{turn}-{i}") for i, c in enumerate(res.tool_calls)]
+        messages.append({"role": "assistant", "tool_calls": [{"id": c["id"], "name": c["name"], "input": c["input"]} for c in calls]})
+        results, accepted = [], None
+        for call in calls:             # look-ups the model asked for together are answered together: one turn, not many
+            errs = registry.validate(call["name"], call["input"])
+            if not errs and call["name"] in terminal and validate:
+                errs = validate(call)
+            if errs:
+                last = "; ".join(errs)
+                result = {"error": last}
+            elif call["name"] in terminal:
+                if accepted is None:
+                    accepted, result = call, {"accepted": True}
+                else:
+                    result = {"ignored": "only one final choice is taken per turn"}
+            else:
+                result = read.run(call["name"], call["input"])
+            out.trace.append({"turn": turn, "tool": call["name"], "input": call["input"], "result": result})
+            results.append({"id": call["id"], "content": result})
+        if accepted is not None:
+            out.call = {"name": accepted["name"], "input": accepted["input"]}
             return out
-        else:
-            result = read.run(call["name"], call["input"])
-        out.trace.append({"turn": turn, "tool": call["name"], "input": call["input"], "result": result})
-        messages.append({"role": "user", "tool_results": [{"id": cid, "content": result}]})
+        messages.append({"role": "user", "tool_results": results})
     out.error = f"no accepted answer in {max_turns} turns: {last}"
     return out

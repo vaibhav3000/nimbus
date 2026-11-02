@@ -109,7 +109,21 @@ class Ticker:
                     self._say(res, Notice("operator", f"{cid} is silent and {task['task_id']} could not be moved: {out.reason}",
                                           task_id=task["task_id"]), task)
 
-        res.apply += o.drain(lambda tid: by_id.get(tid))   # 5. queued work (only retried if capacity changed)
+        for tid, w in list(o.waits.items()):              # 5. "look again later" requests from the model
+            if parse_iso(w["until"]) > now:
+                continue
+            del o.waits[tid]
+            task, cur = by_id.get(tid), o.repo.current(tid)
+            if task and cur and cur["version"] == w["version"]:     # still the same lease: re-handle the event
+                react = o.react.on_event(task, w["payload"])
+                for topic, payload in react.publish:
+                    o.publish(topic, payload)
+                if react.outcome is not None:
+                    react.outcome.rows = react.rows + react.outcome.rows
+                    res.apply.append((task, react.outcome))
+                elif react.rows:
+                    res.apply.append((task, Outcome("noop", rows=react.rows)))
+        res.apply += o.drain(lambda tid: by_id.get(tid))   # 6. queued work (only retried if capacity changed)
         return res
 
 

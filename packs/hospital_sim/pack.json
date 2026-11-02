@@ -342,8 +342,8 @@
     "step": [
       "decide_step"
     ],
-    "react_event": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "replan", "hand_over", "no_action"],
-    "react_clarify": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "answer_clarification", "ask_requester"]
+    "react_event": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "get_robot", "get_task", "eta", "replan", "hand_over", "wait_and_retry", "escalate_operator", "no_action"],
+    "react_clarify": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "get_task", "answer_clarification", "ask_requester", "escalate_operator"]
   },
   "prompts": {
     "intent": "prompts/intent.txt",

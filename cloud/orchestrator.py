@@ -91,6 +91,7 @@ class Orchestrator:
         self.statements = Statements(self)
         self.ticker = Ticker(self)
         self.load_task = lambda task_id: None    # the HTTP layer plugs in its task store
+        self.waits: dict[str, dict] = {}         # task_id -> {"until", "payload", "version"}: "look again later" from the model
         self.react = Reactor(self)
         self.mode, self.allow_unknown = mode, allow_unknown
         self.publish = publish or (lambda topic, payload: None)
@@ -614,6 +615,24 @@ class Orchestrator:
         out.leg_index = idx
         out.rows.insert(0, _row("cloud", {"completed_leg": idx}, {"decision": "advance_leg", "next_leg": idx + 1,
                                                                   "result": out.kind}, None))
+        return out
+
+    def preview_options(self, task: dict, blocked: list[str], robot_zone: str | None) -> dict:
+        """What each way out of a blockage would do, computed without changing anything, so the model chooses among facts
+        instead of searching: staying in the cluster (replan) or giving the rest to another cluster (hand_over)."""
+        cur = self.repo.current(task["task_id"])
+        if cur is None or not task.get("spec"):
+            return {}
+        view = self.view(task["task_id"], {z: "blocked" for z in blocked})
+        prop = Proposal(cur["cluster_id"], list(cur["assigned_robots"]), "preview", "classical")
+        res = check(task["spec"], prop, view, holds_stock=True)
+        out = {"replan_in_cluster": {"feasible": res.ok, "route": res.routes[0] if res.routes else None,
+                                    "why_not": None if res.ok else "; ".join(v["detail"] for v in res.violations)[:160]}}
+        here = robot_zone if robot_zone in self.topo.nodes else self.fleet.robot_zone(cur["assigned_robots"][0])
+        if here in self.topo.nodes:
+            opts, _ = eligible_options({**task["spec"], "source": here}, self.view(task["task_id"], {z: "blocked" for z in blocked}))
+            out["hand_over_to"] = [{"cluster": o.cluster_id, "robot": o.robot_id, "distance_m": round(o.distance, 1)}
+                                   for o in opts if o.cluster_id != cur["cluster_id"]][:4]
         return out
 
     def reassign(self, task: dict, reason: str, *, only_cluster: str | None = None, robot_zone: str | None = None) -> Outcome:
