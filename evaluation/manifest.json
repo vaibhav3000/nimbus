@@ -1,0 +1,38 @@
+{
+ "note": "Every dataset used by the experiments. Only synthetic data is allowed (PRD NFR-5, checked by scripts/audit_data.py).",
+ "datasets": [
+  {
+   "path": "evaluation/e2/requests.json",
+   "synthetic": true,
+   "description": "50 staff requests, a quarter vague, template-generated"
+  },
+  {
+   "path": "evaluation/e2/rules.json",
+   "synthetic": true,
+   "description": "10 plain-language rule statements"
+  },
+  {
+   "path": "evaluation/e2/context.json",
+   "synthetic": true,
+   "description": "20 context-dependent requests with habit setup"
+  },
+  {
+   "path": "traces/iisc_basement.csv",
+   "kind": "network-measurement",
+   "description": "network RTT/loss traces recorded by the team on campus (no patient data)",
+   "contains_personal_data": false
+  },
+  {
+   "path": "traces/iisc_corridor.csv",
+   "kind": "network-measurement",
+   "description": "network RTT/loss traces recorded by the team on campus (no patient data)",
+   "contains_personal_data": false
+  },
+  {
+   "path": "traces/iisc_lift.csv",
+   "kind": "network-measurement",
+   "description": "network RTT/loss traces recorded by the team on campus (no patient data)",
+   "contains_personal_data": false
+  }
+ ]
+}

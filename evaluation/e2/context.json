@@ -1,0 +1,207 @@
+{
+ "status": "DRAFT: labels written from templates; a person must review before use as gold",
+ "synthetic": true,
+ "n": 20,
+ "cases": [
+  {
+   "id": "ctx-01",
+   "setup": 2,
+   "text": "a pump to 2B",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump_paediatric"
+   },
+   "kind": "habit"
+  },
+  {
+   "id": "ctx-02",
+   "setup": 2,
+   "text": "Need an infusion pump at 2B-12, urgent.",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump_paediatric"
+   },
+   "kind": "habit"
+  },
+  {
+   "id": "ctx-03",
+   "setup": 2,
+   "text": "infusion pump to 2B please",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump_paediatric"
+   },
+   "kind": "habit"
+  },
+  {
+   "id": "ctx-04",
+   "setup": 2,
+   "text": "a pump to 2B",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump_paediatric"
+   },
+   "kind": "habit"
+  },
+  {
+   "id": "ctx-05",
+   "setup": 2,
+   "text": "Need an infusion pump at 2B-12, urgent.",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump_paediatric"
+   },
+   "kind": "habit"
+  },
+  {
+   "id": "ctx-06",
+   "setup": 2,
+   "text": "infusion pump to 2B please",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump_paediatric"
+   },
+   "kind": "habit"
+  },
+  {
+   "id": "ctx-07",
+   "setup": 2,
+   "text": "a pump to 2B",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump_paediatric"
+   },
+   "kind": "habit"
+  },
+  {
+   "id": "ctx-08",
+   "setup": 2,
+   "text": "Need an infusion pump at 2B-12, urgent.",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump_paediatric"
+   },
+   "kind": "habit"
+  },
+  {
+   "id": "ctx-09",
+   "setup": 2,
+   "text": "infusion pump to 2B please",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump_paediatric"
+   },
+   "kind": "habit"
+  },
+  {
+   "id": "ctx-10",
+   "setup": 2,
+   "text": "a pump to 2B",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump_paediatric"
+   },
+   "kind": "habit"
+  },
+  {
+   "id": "ctx-11",
+   "setup": 0,
+   "text": "a pump to 2B",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   },
+   "kind": "control"
+  },
+  {
+   "id": "ctx-12",
+   "setup": 1,
+   "text": "Need an infusion pump at 2B-12, urgent.",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   },
+   "kind": "control"
+  },
+  {
+   "id": "ctx-13",
+   "setup": 0,
+   "text": "a pump to 2B",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   },
+   "kind": "control"
+  },
+  {
+   "id": "ctx-14",
+   "setup": 1,
+   "text": "Need an infusion pump at 2B-12, urgent.",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   },
+   "kind": "control"
+  },
+  {
+   "id": "ctx-15",
+   "setup": 0,
+   "text": "a pump to 2B",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   },
+   "kind": "control"
+  },
+  {
+   "id": "ctx-16",
+   "setup": 2,
+   "text": "A standard infusion pump to 2B, no paediatric needed.",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump"
+   },
+   "kind": "override"
+  },
+  {
+   "id": "ctx-17",
+   "setup": 2,
+   "text": "A standard infusion pump to 2B, no paediatric needed.",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump"
+   },
+   "kind": "override"
+  },
+  {
+   "id": "ctx-18",
+   "setup": 2,
+   "text": "A standard infusion pump to 2B, no paediatric needed.",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump"
+   },
+   "kind": "override"
+  },
+  {
+   "id": "ctx-19",
+   "setup": 2,
+   "text": "A standard infusion pump to 2B, no paediatric needed.",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump"
+   },
+   "kind": "override"
+  },
+  {
+   "id": "ctx-20",
+   "setup": 2,
+   "text": "A standard infusion pump to 2B, no paediatric needed.",
+   "gold": {
+    "ask": false,
+    "item": "infusion_pump"
+   },
+   "kind": "override"
+  }
+ ]
+}

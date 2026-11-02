@@ -249,6 +249,7 @@
               "child",
               "\\b(?:not|no)\\s+(?:a\\s+)?(?:standard|adult|regular|normal)"
             ],
+        "exclude": ["\\b(?:no|not|without)\\s+(?:a\\s+)?(?:paediatric|pediatric|paeds?)\\b"],
             "set": {
               "item": "infusion_pump_paediatric"
             }
