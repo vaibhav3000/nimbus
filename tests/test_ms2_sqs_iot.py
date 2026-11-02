@@ -109,6 +109,7 @@ def test_consumer_against_an_emulated_queue(monkeypatch):
     import boto3
     for k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
         monkeypatch.setenv(k, "x")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "ap-south-1")     # without it boto probes the metadata endpoint and waits
     with moto.mock_aws():
         sqs = boto3.client("sqs", region_name="ap-south-1")
         url = sqs.create_queue(QueueName="nimbus-escalations")["QueueUrl"]
