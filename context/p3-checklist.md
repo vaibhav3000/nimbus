@@ -1,4 +1,4 @@
-# P3 checklist: milestones, FR, NFR (as of 2 Nov 2026)
+# P3 checklist: milestones, FR, NFR (as of 2 Nov 2026, branch p3-ms2)
 
 Legend: DONE = built and tested. PART = partly built. TODO = not built. N/A = owned by someone else (named).
 "Tested" means the offline suite (255 tests) and/or emulated DynamoDB. Only MS1 has been run on real AWS.
@@ -8,9 +8,9 @@ Legend: DONE = built and tested. PART = partly built. TODO = not built. N/A = ow
 | MS | Date | P3's part | Status |
 |---|---|---|---|
 | MS1 | 18 Oct | Request -> clarify -> rule check -> lease -> check-in -> OUTPUT_READY (T1) | **DONE**, shown live on Bedrock + DynamoDB |
-| MS2 | 1 Nov | SC-1 (vague urgent request) | **DONE** |
-|     |       | SC-2 (blocked corridor, re-plan, cross-cluster hand-over) | **PART**: re-plan v2 works; hand-over TODO |
-|     |       | SC-3 ("Ward 2C is now isolation": hold routine, admit urgent, move pumps out) | **PART**: restriction engine works; the sentence -> restriction and extraction tasks TODO |
+| MS2 | 1 Nov | SC-1 (vague urgent request) | **DONE** (re-tested in C1, C3, model-down) |
+|     |       | SC-2 (blocked corridor, re-plan, cross-cluster hand-over) | **DONE** on the cloud side, on both maps; needs P2 to honour the stop lease and send map-node zones |
+|     |       | SC-3 ("Ward 2C is now isolation": hold routine, admit urgent, move pumps out) | **DONE**: sentence -> restriction, in-flight recall, extraction tasks, notices |
 |     |       | No-LLM fallback (FR-18) | **DONE** |
 | MS3 | 6 Nov | C1/C2/C3 flags | **DONE** (C2 relay added) |
 |     |       | T1-T8 run and plotted | **PART**: T1-T4, T6, T8 run; T5 (needs hand-over) and T7 (needs survey template) TODO; T6 only holds/admits, in-flight recall TODO |
@@ -25,14 +25,14 @@ So MS1 is complete; MS2 is **not** complete (SC-2 hand-over and SC-3 language ar
 |---|---|---|
 | FR-5 | Stay within the lease (cloud side: zones, expiry, version in the lease) | DONE |
 | FR-8 | No duplicate actions: message ids, versions, stale refused | DONE (cloud side) |
-| FR-9 | Handle the 3 escalations | PART: OUTPUT_READY done; UNEXPECTED_EVENT only avoids named zones; CLARIFY from the edge not answered by the LLM |
-| FR-11 | Selective sharing (only affected clusters told) | TODO |
+| FR-9 | Handle the 3 escalations | DONE: OUTPUT_READY (per leg), UNEXPECTED_EVENT (agent + rules), CLARIFY (answer or ask the requester) |
+| FR-11 | Selective sharing (only affected clusters told) | DONE (MAP/WARNING notices to clusters whose area or live leases include the zone) |
 | FR-12 | Reconnection: reconcile and renew/replace leases; no robot under two leases | PART: one-holder-per-robot transaction done; edge summary reconcile and silent-cluster monitor TODO |
-| FR-13 | Understand requests (ask when unsure) | PART: one delivery per message; several items dropped. 50-request accuracy test (E2) TODO |
+| FR-13 | Understand requests (ask when unsure) | PART: several items per message now work; 50-request accuracy test (E2) TODO |
 | FR-14 | Scheduling: urgent first, deadlines | DONE |
 | FR-15 | Checked assignment, rule fallback after 2 failures | DONE |
-| FR-16 | Re-plan and cross-cluster hand-over | PART: re-plan done; hand-over TODO; re-plan from the robot's current zone TODO |
-| FR-17 | Shared map, plain-language rules | PART: runtime restrictions work; merging robot reports and sentence -> rule TODO |
+| FR-16 | Re-plan and cross-cluster hand-over | DONE (re-plan from the robot's zone, legs, re-assignment); the 30 s budget is measured in E3 |
+| FR-17 | Shared map, plain-language rules | PART: closures from robot reports + sentence -> rule done; persistence across restarts and the 10-rule test TODO |
 | FR-18 | Works without Bedrock | DONE (circuit breaker, rules path, "reduced autonomy" notice) |
 | FR-19 | Long-term memory as context | TODO (per-task log only) |
 | FR-20 | Decision log (cloud rows) | DONE (P4 owns the log; P3 writes cloud/rule rows) |
@@ -65,5 +65,6 @@ So MS1 is complete; MS2 is **not** complete (SC-2 hand-over and SC-3 language ar
 ## Other P3 TODO
 
 - SQS consumer and a tested IoT Core publish (code is P3, deployment is P4).
-- Review findings not yet fixed: re-plan route from the robot's current zone; stock reservation leak on a non-Conflict commit error.
+- E3: add T5 (hand-over) and T6 recall to `scripts/run_e3.py`; T7 needs a survey template.
+- Review findings: all fixed.
 - Hand to P4 (their files): Fargate env vars for `NIMBUS_*`, the cost counter `llm_calls`, and the check-in/control guards in `server.py`.
