@@ -31,5 +31,6 @@
       },
       "area": "west"
     }
-  }
+  },
+  "places": {"west_waiting_approach": {"infusion_pump": 2}}
 }

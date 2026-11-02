@@ -5,6 +5,7 @@ UNEXPECTED_EVENT, which is how re-planning is exercised without a real edge.
 
     python scripts/edge_sim.py --api http://127.0.0.1:8000 --cluster east-wing --complete
     python scripts/edge_sim.py --cluster east-wing --block E3 --once
+    python scripts/edge_sim.py --cluster east-wing --close W0 --robot-zone E4 --once   # SC-2: a gate shuts, robot parked at E4
 
 Real edge (Person 2) replaces this; the messages are the contract's.
 
@@ -43,9 +44,12 @@ class EdgeSim:
     TOPIC_CHECKIN = "nimbus/{cluster}/checkin"
 
     def __init__(self, api: str, cluster: str, *, complete: bool = False, block: str | None = None,
-                 robots: list | None = None):
+                 robots: list | None = None, state: str = "blocked", robot_zone: str | None = None):
         self.api, self.cluster = api.rstrip("/"), cluster
-        self.complete, self.block = complete, block
+        self.complete, self.block, self.state = complete, block, state
+        self.robot_zone = robot_zone      # where the robot is parked when it reports; sent as a map node, as the contract says
+        self.robot_id: str | None = None  # learned from the first lease
+        self.stopped: set[str] = set()    # tasks the cloud told this cluster to stop (a lease whose only step is `stop`)
         self.robots = robots
         self.seen: set[str] = set()   # lease ids already answered
         self.log: list[tuple[str, int, dict]] = []
@@ -101,6 +105,8 @@ class EdgeSim:
 
     def heartbeat(self):
         body = {"cluster_id": self.cluster}
+        if self.robot_zone and not self.robots:
+            body["robots"] = [{"id": self.robot_id or "R1", "state": "busy", "zone": self.robot_zone}]
         if self.robots:
             body["robots"] = self.robots
         return self._call("POST", "/fleet/heartbeat", body)
@@ -154,12 +160,18 @@ class EdgeSim:
                     elif topic == f"nimbus/{self.cluster}/lease" and payload.get("lease_id") not in self.seen:
                         self.seen.add(payload["lease_id"])
                         handled += 1
+                        self.robot_id = self.robot_id or payload["assigned_robots"][0]
+                        if [s.get("cmd") for s in payload.get("task_sequence", [])] == ["stop"]:
+                            self.stopped.add(payload["lease_id"])      # park and stay quiet: the cloud ended this task here
+                            continue
                         self.checkin(payload)
                         if self.block and payload.get("version") == 1:
+                            self.heartbeat()   # report where the robot is parked before the cloud has to plan around it
+                            extra = {"robot_zone": self.robot_zone} if self.robot_zone else {}
                             self.escalate("UNEXPECTED_EVENT", payload, {
-                                "what_happened": f"corridor {self.block} blocked by a cart", "where": self.block,
-                                "robots_saw": [f"{payload.get('assigned_robots', ['R1'])[0]}: {self.block} blocked"],
-                                "segments": [{"segment_id": self.block, "state": "blocked"}]})
+                                "what_happened": f"{self.block} is {self.state}", "where": self.block,
+                                "robots_saw": [f"{payload.get('assigned_robots', ['R1'])[0]}: {self.block} {self.state}"],
+                                "segments": [{"segment_id": self.block, "state": self.state}], **extra})
                         elif self.complete:
                             lid = payload["lease_id"]
                             task = lid[len("lease-"):lid.rindex("-v")]
@@ -178,6 +190,8 @@ def main() -> None:
     ap.add_argument("--cluster", default="east-wing")
     ap.add_argument("--complete", action="store_true", help="send OUTPUT_READY for each lease")
     ap.add_argument("--block", help="send UNEXPECTED_EVENT blocking this zone for each first-version lease")
+    ap.add_argument("--close", help="like --block, but the zone is reported closed (a gate or door), not blocked")
+    ap.add_argument("--robot-zone", help="map node where the robot is parked when it reports (heartbeat and event)")
     ap.add_argument("--once", action="store_true", help="process the outbox once and exit")
     ap.add_argument("--interval", type=float, default=2.0)
     ap.add_argument(
@@ -216,7 +230,8 @@ def main() -> None:
         print(f"[{a.cluster}] In-process FaultProxy active on {target_api} -> {target_host}:{target_port} (profile: {a.fault_profile})")
 
     try:
-        sim = EdgeSim(target_api, a.cluster, complete=a.complete, block=a.block)
+        sim = EdgeSim(target_api, a.cluster, complete=a.complete, block=a.close or a.block,
+                      state="closed" if a.close else "blocked", robot_zone=a.robot_zone)
         try:
             sim.heartbeat()
         except Exception:

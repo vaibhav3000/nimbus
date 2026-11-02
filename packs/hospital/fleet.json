@@ -35,5 +35,6 @@
       },
       "area": "west"
     }
-  }
+  },
+  "places": {"2C": {"infusion_pump": 2}}
 }

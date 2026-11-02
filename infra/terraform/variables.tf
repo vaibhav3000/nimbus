@@ -38,3 +38,15 @@ variable "budget_usd" {
   type        = number
   default     = 50
 }
+
+variable "bedrock_model_id" {
+  description = "Bedrock model or inference-profile id the orchestrator calls (NIMBUS_BEDROCK_MODEL)."
+  type        = string
+  default     = "apac.amazon.nova-lite-v1:0"
+}
+
+variable "nimbus_mode" {
+  description = "Evaluation configuration the service runs: C1 (proposed), C2 (cloud-only) or C3 (no LLM)."
+  type        = string
+  default     = "C1"
+}

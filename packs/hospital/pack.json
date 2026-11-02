@@ -43,7 +43,8 @@
     "affirm": ["^\\s*(?:yes|yeah|yep|yup|correct|right|sure|ok|okay)\\b"],
     "deny": ["^\\s*(?:no|nope|nah)\\b"],
     "source": [{"pattern": "\\b(?:from|out of)\\s+((?:ward\\s+)?[\\w][\\w\\-]*)", "group": 1}],
-    "default_destination": "area_source"
+    "default_destination": "area_source",
+    "extract": ["\\b(?:get|move|take|bring|clear|remove)\\b[^.]*\\bout\\b"]
   },
   "questions": {
     "missing_item": {"text": "Which {item_noun} do you need?", "readings": "items"},
@@ -82,7 +83,11 @@
     }
   ],
   "restrictions": {
-    "isolation": {"policy_id": "SOP-ISO-02", "effect": "hold", "exempt_priorities": ["urgent"]}
+    "isolation": {"policy_id": "SOP-ISO-02", "effect": "hold", "exempt_priorities": ["urgent"],
+    "phrases": ["\\b((?:ward\\s+)?[\\w\\-]+)\\s+is\\s+(?:now\\s+)?(?:in\\s+)?(?:an?\\s+)?(?:isolation|infectious|quarantined?)\\b",
+                "\\b(?:isolate|quarantine)\\s+((?:ward\\s+)?[\\w\\-]+)"],
+    "lift_phrases": ["\\b((?:ward\\s+)?[\\w\\-]+)\\s+is\\s+(?:no\\s+longer|not)\\s+(?:in\\s+)?(?:isolation|infectious|quarantined?)\\b",
+                     "\\bisolation\\s+(?:is\\s+)?(?:over|lifted|ended)\\s+(?:in|for|on)\\s+((?:ward\\s+)?[\\w\\-]+)"]}
   },
   "task_templates": {
     "delivery": [
@@ -101,8 +106,11 @@
     "when_to_escalate": ["door_closed", "deadline_at_risk", "robot_failed", "route_blocked_no_alternative"]
   },
   "steps": {
-    "intent": ["submit_task_spec", "ask_clarification"],
-    "allocation": ["propose_allocation"]
+    "intent": ["submit_task_spec", "submit_task_specs", "announce_restriction", "ask_clarification"],
+    "allocation": ["propose_allocation"],
+    "step": ["decide_step"],
+    "react_event": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "replan", "hand_over", "no_action"],
+    "react_clarify": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "answer_clarification", "ask_requester"]
   },
-  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt"}
+  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt", "step": "prompts/step.txt", "react": "prompts/react.txt"}
 }

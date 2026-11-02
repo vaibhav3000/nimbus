@@ -28,6 +28,7 @@ class FleetRegistry:
         self.healthy_s = healthy_s
         self.down_s = down_s
         self._lock = threading.RLock()
+        self._held: dict[tuple, int] = {}   # (cluster, item) -> leased but not yet delivered
         self.clusters: dict[str, dict] = {}
         for cid, c in seed["clusters"].items():
             self.clusters[cid] = {
@@ -37,8 +38,11 @@ class FleetRegistry:
                 "stock": dict(c["stock"]),
                 "last_seen": None,  # datetime | None
             }
+        # Equipment that sits in a place other than a store (e.g. spare units kept in a room). Durable rows use the
+        # pseudo-cluster id "@<place>" so the stock table needs no new shape.
+        self.places: dict[str, dict] = {p: dict(items) for p, items in seed.get("places", {}).items()}
         if self.stock_store is not None:
-            self.stock_store.seed(self.clusters)   # rows that are missing only: a restart keeps real counts
+            self.stock_store.seed({**self.clusters, **{"@" + p: {"stock": i} for p, i in self.places.items()}})   # rows that are missing only: a restart keeps real counts
             self.sync_stock()
 
     @classmethod
@@ -63,7 +67,11 @@ class FleetRegistry:
                     if self.zones is not None and known.get("zone") not in self.zones:
                         known.pop("zone", None)   # not a map node: keep the last zone we could route from
                     c["robots"][r["id"]].update(known)
-            self._write_stock(cluster_id, digest.get("stock") or {})
+            # The edge counts what is on its shelves; items already leased out are still there until
+            # delivered, so its digest must not hand them back to the allocator.
+            self._write_stock(cluster_id, {i: max(0, q - self._held.get((cluster_id, i), 0))
+                                           for i, q in (digest.get("stock") or {}).items()
+                                           if isinstance(q, int) and not isinstance(q, bool)})
             return True
 
     def health(self, cluster_id: str) -> str:
@@ -98,6 +106,33 @@ class FleetRegistry:
             for cid, items in self.stock_store.load().items():
                 if cid in self.clusters:
                     self.clusters[cid]["stock"].update(items)
+                elif cid.startswith("@") and cid[1:] in self.places:
+                    self.places[cid[1:]].update(items)
+
+    def robot_zone(self, robot_id: str) -> str | None:
+        """Where the edge last said this robot is (a map node), or None if it never has."""
+        with self._lock:
+            for c in self.clusters.values():
+                if robot_id in c["robots"]:
+                    return c["robots"][robot_id].get("zone")
+        return None
+
+    def place_stock(self, place: str) -> dict:
+        with self._lock:
+            return {i: q for i, q in self.places.get(place, {}).items() if q > 0}
+
+    def move_stock(self, place: str, cluster_id: str, item: str, n: int = 1) -> bool:
+        """Equipment carried from a place into a cluster's store. False (and nothing moves) if the place holds fewer than n."""
+        with self._lock:
+            held = self.places.get(place, {})
+            if n < 1 or held.get(item, 0) < n:
+                return False
+            held[item] -= n
+            self.clusters[cluster_id]["stock"][item] = self.clusters[cluster_id]["stock"].get(item, 0) + n
+            if self.stock_store is not None:
+                self.stock_store.add("@" + place, item, -n)
+                self.stock_store.add(cluster_id, item, n)
+            return True
 
     def return_stock(self, cluster_id: str, item: str) -> None:
         """Give an item back for good (a cancelled task): memory and the durable row."""
@@ -112,12 +147,24 @@ class FleetRegistry:
             if stock.get(item, 0) < 1:
                 return False
             stock[item] -= 1
+            self._held[(cluster_id, item)] = self._held.get((cluster_id, item), 0) + 1
             return True
 
     def release_stock(self, cluster_id: str, item: str) -> None:
         with self._lock:
             stock = self.clusters[cluster_id]["stock"]
             stock[item] = stock.get(item, 0) + 1
+            self._unhold(cluster_id, item)
+
+    def settle_stock(self, cluster_id: str, item: str) -> None:
+        """The item was delivered: it stays consumed, and the edge's own count will say so."""
+        with self._lock:
+            self._unhold(cluster_id, item)
+
+    def _unhold(self, cluster_id: str, item: str) -> None:
+        key = (cluster_id, item)
+        if self._held.get(key, 0) > 0:
+            self._held[key] -= 1
 
     # -- views -----------------------------------------------------------------------
 
@@ -139,3 +186,7 @@ class FleetRegistry:
                     "stock": dict(sorted(c["stock"].items())),
                 })
             return out
+
+    def place_snapshot(self) -> dict:
+        with self._lock:
+            return {p: dict(sorted(i.items())) for p, i in sorted(self.places.items())}

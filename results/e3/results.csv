@@ -1,0 +1,181 @@
+seed,task,config,success,llm_calls,tokens_in,tokens_out,cloud_decisions,cost_usd,modelled_latency_s,note
+0,T1,C1,1,2,1058,90,1,8.528e-05,5.08,
+0,T1,C2,1,8,3872,222,7,0.000287,20.56,
+0,T1,C3,1,0,0,0,1,2e-07,0.08,
+0,T2,C1,1,2,1002,86,1,8.096e-05,5.08,
+0,T2,C2,1,8,3786,218,7,0.00028088,20.56,
+0,T2,C3,1,0,0,0,1,2e-07,0.08,
+0,T3,C1,1,4,2084,217,2,0.00017752,10.16,
+0,T3,C2,1,10,4896,349,8,0.00037912,25.64,
+0,T3,C3,1,0,0,0,2,4e-07,0.16,
+0,T4,C1,1,2,1106,89,1,8.792e-05,5.08,detour zone present in the lease
+0,T4,C2,1,8,3942,267,7,0.000302,20.56,detour zone present in the lease
+0,T4,C3,1,0,0,0,1,2e-07,0.08,detour zone present in the lease
+0,T6,C1,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+0,T6,C2,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+0,T6,C3,1,0,0,0,2,4e-07,0.16,"routine held, urgent admitted; in-flight lease recall is not implemented"
+0,T8,C1,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+0,T8,C2,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+0,T8,C3,1,0,0,0,4,8e-07,0.32,"2 leased now, 1 queued, 1 released after a robot freed"
+1,T1,C1,1,2,1058,90,1,8.528e-05,5.08,
+1,T1,C2,1,8,3872,222,7,0.000287,20.56,
+1,T1,C3,1,0,0,0,1,2e-07,0.08,
+1,T2,C1,1,2,1002,86,1,8.096e-05,5.08,
+1,T2,C2,1,8,3786,218,7,0.00028088,20.56,
+1,T2,C3,1,0,0,0,1,2e-07,0.08,
+1,T3,C1,1,4,2084,217,2,0.00017752,10.16,
+1,T3,C2,1,10,4896,349,8,0.00037912,25.64,
+1,T3,C3,1,0,0,0,2,4e-07,0.16,
+1,T4,C1,1,2,1106,89,1,8.792e-05,5.08,detour zone present in the lease
+1,T4,C2,1,8,3942,267,7,0.000302,20.56,detour zone present in the lease
+1,T4,C3,1,0,0,0,1,2e-07,0.08,detour zone present in the lease
+1,T6,C1,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+1,T6,C2,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+1,T6,C3,1,0,0,0,2,4e-07,0.16,"routine held, urgent admitted; in-flight lease recall is not implemented"
+1,T8,C1,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+1,T8,C2,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+1,T8,C3,1,0,0,0,4,8e-07,0.32,"2 leased now, 1 queued, 1 released after a robot freed"
+2,T1,C1,1,2,1058,90,1,8.528e-05,5.08,
+2,T1,C2,1,8,3872,222,7,0.000287,20.56,
+2,T1,C3,1,0,0,0,1,2e-07,0.08,
+2,T2,C1,1,2,1002,86,1,8.096e-05,5.08,
+2,T2,C2,1,8,3786,218,7,0.00028088,20.56,
+2,T2,C3,1,0,0,0,1,2e-07,0.08,
+2,T3,C1,1,4,2084,217,2,0.00017752,10.16,
+2,T3,C2,1,10,4896,349,8,0.00037912,25.64,
+2,T3,C3,1,0,0,0,2,4e-07,0.16,
+2,T4,C1,1,2,1106,89,1,8.792e-05,5.08,detour zone present in the lease
+2,T4,C2,1,8,3942,267,7,0.000302,20.56,detour zone present in the lease
+2,T4,C3,1,0,0,0,1,2e-07,0.08,detour zone present in the lease
+2,T6,C1,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+2,T6,C2,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+2,T6,C3,1,0,0,0,2,4e-07,0.16,"routine held, urgent admitted; in-flight lease recall is not implemented"
+2,T8,C1,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+2,T8,C2,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+2,T8,C3,1,0,0,0,4,8e-07,0.32,"2 leased now, 1 queued, 1 released after a robot freed"
+3,T1,C1,1,2,1058,90,1,8.528e-05,5.08,
+3,T1,C2,1,8,3872,222,7,0.000287,20.56,
+3,T1,C3,1,0,0,0,1,2e-07,0.08,
+3,T2,C1,1,2,1002,86,1,8.096e-05,5.08,
+3,T2,C2,1,8,3786,218,7,0.00028088,20.56,
+3,T2,C3,1,0,0,0,1,2e-07,0.08,
+3,T3,C1,1,4,2084,217,2,0.00017752,10.16,
+3,T3,C2,1,10,4896,349,8,0.00037912,25.64,
+3,T3,C3,1,0,0,0,2,4e-07,0.16,
+3,T4,C1,1,2,1106,89,1,8.792e-05,5.08,detour zone present in the lease
+3,T4,C2,1,8,3942,267,7,0.000302,20.56,detour zone present in the lease
+3,T4,C3,1,0,0,0,1,2e-07,0.08,detour zone present in the lease
+3,T6,C1,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+3,T6,C2,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+3,T6,C3,1,0,0,0,2,4e-07,0.16,"routine held, urgent admitted; in-flight lease recall is not implemented"
+3,T8,C1,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+3,T8,C2,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+3,T8,C3,1,0,0,0,4,8e-07,0.32,"2 leased now, 1 queued, 1 released after a robot freed"
+4,T1,C1,1,2,1058,90,1,8.528e-05,5.08,
+4,T1,C2,1,8,3872,222,7,0.000287,20.56,
+4,T1,C3,1,0,0,0,1,2e-07,0.08,
+4,T2,C1,1,2,1002,86,1,8.096e-05,5.08,
+4,T2,C2,1,8,3786,218,7,0.00028088,20.56,
+4,T2,C3,1,0,0,0,1,2e-07,0.08,
+4,T3,C1,1,4,2084,217,2,0.00017752,10.16,
+4,T3,C2,1,10,4896,349,8,0.00037912,25.64,
+4,T3,C3,1,0,0,0,2,4e-07,0.16,
+4,T4,C1,1,2,1106,89,1,8.792e-05,5.08,detour zone present in the lease
+4,T4,C2,1,8,3942,267,7,0.000302,20.56,detour zone present in the lease
+4,T4,C3,1,0,0,0,1,2e-07,0.08,detour zone present in the lease
+4,T6,C1,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+4,T6,C2,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+4,T6,C3,1,0,0,0,2,4e-07,0.16,"routine held, urgent admitted; in-flight lease recall is not implemented"
+4,T8,C1,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+4,T8,C2,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+4,T8,C3,1,0,0,0,4,8e-07,0.32,"2 leased now, 1 queued, 1 released after a robot freed"
+5,T1,C1,1,2,1058,90,1,8.528e-05,5.08,
+5,T1,C2,1,8,3872,222,7,0.000287,20.56,
+5,T1,C3,1,0,0,0,1,2e-07,0.08,
+5,T2,C1,1,2,1002,86,1,8.096e-05,5.08,
+5,T2,C2,1,8,3786,218,7,0.00028088,20.56,
+5,T2,C3,1,0,0,0,1,2e-07,0.08,
+5,T3,C1,1,4,2084,217,2,0.00017752,10.16,
+5,T3,C2,1,10,4896,349,8,0.00037912,25.64,
+5,T3,C3,1,0,0,0,2,4e-07,0.16,
+5,T4,C1,1,2,1106,89,1,8.792e-05,5.08,detour zone present in the lease
+5,T4,C2,1,8,3942,267,7,0.000302,20.56,detour zone present in the lease
+5,T4,C3,1,0,0,0,1,2e-07,0.08,detour zone present in the lease
+5,T6,C1,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+5,T6,C2,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+5,T6,C3,1,0,0,0,2,4e-07,0.16,"routine held, urgent admitted; in-flight lease recall is not implemented"
+5,T8,C1,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+5,T8,C2,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+5,T8,C3,1,0,0,0,4,8e-07,0.32,"2 leased now, 1 queued, 1 released after a robot freed"
+6,T1,C1,1,2,1058,90,1,8.528e-05,5.08,
+6,T1,C2,1,8,3872,222,7,0.000287,20.56,
+6,T1,C3,1,0,0,0,1,2e-07,0.08,
+6,T2,C1,1,2,1002,86,1,8.096e-05,5.08,
+6,T2,C2,1,8,3786,218,7,0.00028088,20.56,
+6,T2,C3,1,0,0,0,1,2e-07,0.08,
+6,T3,C1,1,4,2084,217,2,0.00017752,10.16,
+6,T3,C2,1,10,4896,349,8,0.00037912,25.64,
+6,T3,C3,1,0,0,0,2,4e-07,0.16,
+6,T4,C1,1,2,1106,89,1,8.792e-05,5.08,detour zone present in the lease
+6,T4,C2,1,8,3942,267,7,0.000302,20.56,detour zone present in the lease
+6,T4,C3,1,0,0,0,1,2e-07,0.08,detour zone present in the lease
+6,T6,C1,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+6,T6,C2,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+6,T6,C3,1,0,0,0,2,4e-07,0.16,"routine held, urgent admitted; in-flight lease recall is not implemented"
+6,T8,C1,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+6,T8,C2,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+6,T8,C3,1,0,0,0,4,8e-07,0.32,"2 leased now, 1 queued, 1 released after a robot freed"
+7,T1,C1,1,2,1058,90,1,8.528e-05,5.08,
+7,T1,C2,1,8,3872,222,7,0.000287,20.56,
+7,T1,C3,1,0,0,0,1,2e-07,0.08,
+7,T2,C1,1,2,1002,86,1,8.096e-05,5.08,
+7,T2,C2,1,8,3786,218,7,0.00028088,20.56,
+7,T2,C3,1,0,0,0,1,2e-07,0.08,
+7,T3,C1,1,4,2084,217,2,0.00017752,10.16,
+7,T3,C2,1,10,4896,349,8,0.00037912,25.64,
+7,T3,C3,1,0,0,0,2,4e-07,0.16,
+7,T4,C1,1,2,1106,89,1,8.792e-05,5.08,detour zone present in the lease
+7,T4,C2,1,8,3942,267,7,0.000302,20.56,detour zone present in the lease
+7,T4,C3,1,0,0,0,1,2e-07,0.08,detour zone present in the lease
+7,T6,C1,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+7,T6,C2,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+7,T6,C3,1,0,0,0,2,4e-07,0.16,"routine held, urgent admitted; in-flight lease recall is not implemented"
+7,T8,C1,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+7,T8,C2,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+7,T8,C3,1,0,0,0,4,8e-07,0.32,"2 leased now, 1 queued, 1 released after a robot freed"
+8,T1,C1,1,2,1058,90,1,8.528e-05,5.08,
+8,T1,C2,1,8,3872,222,7,0.000287,20.56,
+8,T1,C3,1,0,0,0,1,2e-07,0.08,
+8,T2,C1,1,2,1002,86,1,8.096e-05,5.08,
+8,T2,C2,1,8,3786,218,7,0.00028088,20.56,
+8,T2,C3,1,0,0,0,1,2e-07,0.08,
+8,T3,C1,1,4,2084,217,2,0.00017752,10.16,
+8,T3,C2,1,10,4896,349,8,0.00037912,25.64,
+8,T3,C3,1,0,0,0,2,4e-07,0.16,
+8,T4,C1,1,2,1106,89,1,8.792e-05,5.08,detour zone present in the lease
+8,T4,C2,1,8,3942,267,7,0.000302,20.56,detour zone present in the lease
+8,T4,C3,1,0,0,0,1,2e-07,0.08,detour zone present in the lease
+8,T6,C1,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+8,T6,C2,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+8,T6,C3,1,0,0,0,2,4e-07,0.16,"routine held, urgent admitted; in-flight lease recall is not implemented"
+8,T8,C1,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+8,T8,C2,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+8,T8,C3,1,0,0,0,4,8e-07,0.32,"2 leased now, 1 queued, 1 released after a robot freed"
+9,T1,C1,1,2,1058,90,1,8.528e-05,5.08,
+9,T1,C2,1,8,3872,222,7,0.000287,20.56,
+9,T1,C3,1,0,0,0,1,2e-07,0.08,
+9,T2,C1,1,2,1002,86,1,8.096e-05,5.08,
+9,T2,C2,1,8,3786,218,7,0.00028088,20.56,
+9,T2,C3,1,0,0,0,1,2e-07,0.08,
+9,T3,C1,1,4,2084,217,2,0.00017752,10.16,
+9,T3,C2,1,10,4896,349,8,0.00037912,25.64,
+9,T3,C3,1,0,0,0,2,4e-07,0.16,
+9,T4,C1,1,2,1106,89,1,8.792e-05,5.08,detour zone present in the lease
+9,T4,C2,1,8,3942,267,7,0.000302,20.56,detour zone present in the lease
+9,T4,C3,1,0,0,0,1,2e-07,0.08,detour zone present in the lease
+9,T6,C1,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+9,T6,C2,1,5,2995,198,2,0.00022762,12.66,"routine held, urgent admitted; in-flight lease recall is not implemented"
+9,T6,C3,1,0,0,0,2,4e-07,0.16,"routine held, urgent admitted; in-flight lease recall is not implemented"
+9,T8,C1,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+9,T8,C2,1,7,3711,292,4,0.00029354,17.82,"2 leased now, 1 queued, 1 released after a robot freed"
+9,T8,C3,1,0,0,0,4,8e-07,0.32,"2 leased now, 1 queued, 1 released after a robot freed"

@@ -83,7 +83,8 @@
         "deny": {"type": "array", "items": {"type": "string"}},
         "source": {"type": "array", "items": {"type": "object", "required": ["pattern", "group"],
                    "properties": {"pattern": {"type": "string"}, "group": {"type": "integer"}}}},
-        "default_destination": {"enum": ["area_source", "none"]}
+        "default_destination": {"enum": ["area_source", "none"]},
+        "extract": {"type": "array", "items": {"type": "string"}}
       }
     },
     "questions": {
@@ -120,7 +121,9 @@
       "additionalProperties": {
         "type": "object", "additionalProperties": false, "required": ["policy_id", "effect"],
         "properties": {"policy_id": {"type": "string"}, "effect": {"enum": ["hold", "forbid"]},
-                       "exempt_priorities": {"type": "array", "items": {"type": "string"}}}
+                       "exempt_priorities": {"type": "array", "items": {"type": "string"}},
+                       "phrases": {"type": "array", "items": {"type": "string"}},
+                       "lift_phrases": {"type": "array", "items": {"type": "string"}}}
       }
     },
     "task_templates": {

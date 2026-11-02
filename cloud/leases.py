@@ -34,6 +34,8 @@ class LeaseRepo(Protocol):
     def release(self, task_id: str) -> list[str]: ...
     def holder(self, key: str, now: datetime) -> dict | None: ...
     def current(self, task_id: str) -> dict | None: ...
+    def live_leases(self) -> list[dict]: ...
+    def free_claims(self, task_id: str) -> list[str]: ...
 
 
 class MemoryLeaseRepo:
@@ -62,6 +64,10 @@ class MemoryLeaseRepo:
         with self._lock:
             rec = self.leases.get(task_id)
             return dict(rec["lease"]) if rec and rec["state"] == "live" else None
+
+    def live_leases(self) -> list[dict]:
+        with self._lock:
+            return [dict(r["lease"]) for r in self.leases.values() if r["state"] == "live"]
 
     def commit(self, lease: dict, claim_keys: list[str], *, now: datetime, stock: tuple | None = None) -> None:
         # `stock` is ignored here: in memory the fleet registry holds the counts (reserve_stock).
@@ -99,12 +105,27 @@ class MemoryLeaseRepo:
                 raise Conflict([f"version {version} is not current ({lease['version']})"])
             if parse_iso(new_expiry) <= parse_iso(lease["expiry_ts"]):
                 return dict(lease)  # never shorten authority by renewing
+            # as in the DynamoDB repo: renewing needs the claims to still be ours
+            stolen = [f"robot:{r}" for r in lease["assigned_robots"]
+                      if self.claims.get(f"robot:{r}", {"task_id": task_id})["task_id"] != task_id]
+            if stolen:
+                raise Conflict([f"{k} now held by another task" for k in stolen])
             lease["expiry_ts"] = new_expiry
             for c in self.claims.values():
                 if c["task_id"] == task_id:
                     c["until"] = new_expiry
             self._save()
             return dict(lease)
+
+    def free_claims(self, task_id: str) -> list[str]:
+        """Give up the task's robot and zone claims but keep its lease record live, so a later lease for the
+        same task continues the version sequence (a task held for a restriction, then re-leased)."""
+        with self._lock:
+            freed = [k for k, c in self.claims.items() if c["task_id"] == task_id]
+            for k in freed:
+                del self.claims[k]
+            self._save()
+            return freed
 
     def release(self, task_id: str) -> list[str]:
         with self._lock:

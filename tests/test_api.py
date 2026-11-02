@@ -238,8 +238,8 @@ def test_checkin_records_edge_row_and_dedupes(api):
     assert contracts.validate_document("decision_log_entry", edge_rows[0]) == []
 
 
-def test_checkin_unknown_cluster_still_records(api):
-    """The stand-in does no routing or cluster validation; that is Person 3's."""
+def test_checkin_from_wrong_cluster_is_refused(api):
+    """A check-in from a cluster that does not hold the lease must not extend it."""
     task_id = leased_task(api)
     status, body = http_json(
         "POST",
@@ -252,9 +252,9 @@ def test_checkin_unknown_cluster_still_records(api):
             "message_id": "msg-ci-2",
         },
     )
-    assert status == 201 and body["accepted"] is True
+    assert status == 409 and "another cluster" in body["error"]
     _, tl = http_json("GET", api + f"/tasks/{task_id}/timeline")
-    assert any(r["who"] == "edge" for r in tl["timeline"])
+    assert not any(r["who"] == "edge" for r in tl["timeline"])
 
 
 def test_failed_escalation_does_not_burn_message_id(api):

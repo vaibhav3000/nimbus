@@ -161,7 +161,10 @@
         "group": 1
       }
     ],
-    "default_destination": "area_source"
+    "default_destination": "area_source",
+    "extract": [
+      "\\b(?:get|move|take|bring|clear|remove)\\b[^.]*\\bout\\b"
+    ]
   },
   "questions": {
     "missing_item": {
@@ -267,6 +270,14 @@
   "restrictions": {
     "isolation": {
       "policy_id": "SOP-ISO-02",
+      "phrases": [
+        "\\b((?:ward\\s+)?[\\w\\-]+)\\s+is\\s+(?:now\\s+)?(?:in\\s+)?(?:an?\\s+)?(?:isolation|infectious|quarantined?)\\b",
+        "\\b(?:isolate|quarantine)\\s+((?:ward\\s+)?[\\w\\-]+)"
+      ],
+      "lift_phrases": [
+        "\\b((?:ward\\s+)?[\\w\\-]+)\\s+is\\s+(?:no\\s+longer|not)\\s+(?:in\\s+)?(?:isolation|infectious|quarantined?)\\b",
+        "\\bisolation\\s+(?:is\\s+)?(?:over|lifted|ended)\\s+(?:in|for|on)\\s+((?:ward\\s+)?[\\w\\-]+)"
+      ],
       "effect": "hold",
       "exempt_priorities": [
         "urgent"
@@ -324,16 +335,20 @@
     ]
   },
   "steps": {
-    "intent": [
-      "submit_task_spec",
-      "ask_clarification"
-    ],
+    "intent": ["submit_task_spec", "submit_task_specs", "announce_restriction", "ask_clarification"],
     "allocation": [
       "propose_allocation"
-    ]
+    ],
+    "step": [
+      "decide_step"
+    ],
+    "react_event": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "replan", "hand_over", "no_action"],
+    "react_clarify": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "answer_clarification", "ask_requester"]
   },
   "prompts": {
     "intent": "prompts/intent.txt",
-    "allocation": "prompts/allocation.txt"
+    "allocation": "prompts/allocation.txt",
+    "step": "prompts/step.txt",
+    "react": "prompts/react.txt"
   }
 }

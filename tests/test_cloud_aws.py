@@ -277,7 +277,7 @@ def test_bedrock_adapter_sends_a_converse_request_and_parses_tool_use():
     assert [t["toolSpec"]["name"] for t in req["toolConfig"]["tools"]] == ["submit_task_spec", "ask_clarification"]
     assert req["toolConfig"]["toolChoice"] == {"any": {}}
     assert req["inferenceConfig"]["temperature"] == 0.0
-    assert res.tool_calls == [{"name": "ask_clarification", "input": {"question": "q?", "possible_readings": ["a"]}}]
+    assert res.tool_calls == [{"id": "t1", "name": "ask_clarification", "input": {"question": "q?", "possible_readings": ["a"]}}]
     assert (res.input_tokens, res.output_tokens, res.estimated) == (321, 45, False)
     assert res.text == "thinking"
 
@@ -432,3 +432,12 @@ def test_in_memory_stock_is_unchanged_and_cancel_returns_it():
     assert orch.fleet.clusters["east-wing"]["stock"]["infusion_pump_paediatric"] == 1
     orch.cancel(task)
     assert orch.fleet.clusters["east-wing"]["stock"]["infusion_pump_paediatric"] == 2
+
+
+def test_live_leases_lists_only_live_ones(repo):
+    clock = FixedClock()
+    exp = iso(clock.now() + timedelta(minutes=5))
+    repo.commit(lease("task-000001", 1, ["R1"], exp), ["robot:R1"], now=clock.now())
+    repo.commit(lease("task-000002", 1, ["R2"], exp), ["robot:R2"], now=clock.now())
+    repo.release("task-000001")
+    assert [l["lease_id"] for l in repo.live_leases()] == ["lease-task-000002-v1"]

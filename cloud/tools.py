@@ -32,6 +32,10 @@ class ToolRegistry:
             "rationale": {"type": "string", "minLength": 1},
             **pack.doc.get("spec_extensions", {}),
         }
+        spec_item = {"type": "object", "additionalProperties": False,
+                     "required": ["item", "destination", "priority", "deadline_minutes"],
+                     "properties": {k: v for k, v in props.items() if k != "rationale"}}
+        kinds = sorted(pack.restrictions)
         self._tools = {
             "submit_task_spec": {
                 "class": "propose",
@@ -40,6 +44,25 @@ class ToolRegistry:
                 "schema": {"type": "object", "additionalProperties": False,
                            "required": ["item", "destination", "priority", "deadline_minutes", "rationale"],
                            "properties": props},
+            },
+            "submit_task_specs": {
+                "class": "propose",
+                "description": ("Record SEVERAL tasks from one message (for example two items to the same place). Each entry is "
+                                "a complete task; use submit_task_spec when there is only one."),
+                "schema": {"type": "object", "additionalProperties": False, "required": ["tasks", "rationale"],
+                           "properties": {"tasks": {"type": "array", "minItems": 2, "maxItems": 8, "items": spec_item},
+                                          "rationale": {"type": "string", "minLength": 1}}},
+            },
+            "announce_restriction": {
+                "class": "propose",
+                "description": ("The requester is not asking for a delivery but telling the system a rule about a place "
+                                "(for example that it is now restricted in some way, or no longer is). Give the place, the kind of "
+                                "restriction, which items to move out of it (only if they ask), and whether it is being lifted."),
+                "schema": {"type": "object", "additionalProperties": False, "required": ["zone", "kind", "rationale"],
+                           "properties": {"zone": {"type": "string", "minLength": 1}, "kind": {"enum": kinds or ["none"]},
+                                          "extract_items": {"type": "array", "items": {"enum": item_ids}},
+                                          "lift": {"type": "boolean"},
+                                          "rationale": {"type": "string", "minLength": 1}}},
             },
             "ask_clarification": {
                 "class": "propose",
@@ -61,6 +84,54 @@ class ToolRegistry:
                                           "robot_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
                                           "rationale": {"type": "string", "minLength": 1}}},
             },
+            "decide_step": {
+                "class": "propose",
+                "description": ("C2 only: the edge relay has no model, so it asks the cloud what to do next. Answer with "
+                                "proceed, wait, reroute (via zones inside the lease and not blocked) or abort."),
+                "schema": {"type": "object", "additionalProperties": False, "required": ["action", "rationale"],
+                           "properties": {"action": {"enum": ["proceed", "wait", "reroute", "abort"]},
+                                          "via_zones": {"type": "array", "items": {"type": "string"}},
+                                          "rationale": {"type": "string", "minLength": 1}}},
+            },
+            # -- look-ups the model may call while it thinks (class "read": no side effects, pure functions of state)
+            "get_fleet": {"class": "read", "description": "Clusters with health, robots (state, zone) and stock.",
+                          "schema": {"type": "object", "additionalProperties": False, "properties": {}}},
+            "get_stock": {"class": "read", "description": "Stock counts, for one cluster or all.",
+                          "schema": {"type": "object", "additionalProperties": False,
+                                     "properties": {"cluster_id": {"type": "string"}}}},
+            "get_route": {"class": "read", "description": "Cheapest route between two zones, optionally avoiding zones.",
+                          "schema": {"type": "object", "additionalProperties": False, "required": ["src", "dst"],
+                                     "properties": {"src": {"type": "string"}, "dst": {"type": "string"},
+                                                    "avoid": {"type": "array", "items": {"type": "string"}}}}},
+            "get_policies": {"class": "read", "description": "Rules relevant to a short query.",
+                             "schema": {"type": "object", "additionalProperties": False, "required": ["query"],
+                                        "properties": {"query": {"type": "string"}}}},
+            "get_task_log": {"class": "read", "description": "What has been decided so far for a task.",
+                             "schema": {"type": "object", "additionalProperties": False, "required": ["task_id"],
+                                        "properties": {"task_id": {"type": "string"}}}},
+            "get_map": {"class": "read", "description": "Zones currently closed or blocked, and active restrictions.",
+                        "schema": {"type": "object", "additionalProperties": False, "properties": {}}},
+            # -- terminal choices after an escalation (validated by code before anything happens)
+            "replan": {"class": "propose", "description": "Issue a new lease version for the same cluster that avoids these zones.",
+                       "schema": {"type": "object", "additionalProperties": False, "required": ["avoid_zones", "rationale"],
+                                  "properties": {"avoid_zones": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+                                                 "rationale": {"type": "string", "minLength": 1}}}},
+            "hand_over": {"class": "propose", "description": "Give the rest of the task to another cluster.",
+                          "schema": {"type": "object", "additionalProperties": False, "required": ["to_cluster", "rationale"],
+                                     "properties": {"to_cluster": {"type": "string", "minLength": 1},
+                                                    "rationale": {"type": "string", "minLength": 1}}}},
+            "answer_clarification": {"class": "propose", "description": "Answer the edge's question from the rules or the context.",
+                                     "schema": {"type": "object", "additionalProperties": False, "required": ["answer", "rationale"],
+                                                "properties": {"answer": {"type": "string", "minLength": 1},
+                                                               "rationale": {"type": "string", "minLength": 1}}}},
+            "ask_requester": {"class": "propose", "description": "The cloud cannot answer: ask the person who made the request.",
+                              "schema": {"type": "object", "additionalProperties": False, "required": ["question", "possible_readings"],
+                                         "properties": {"question": {"type": "string", "minLength": 1},
+                                                        "possible_readings": {"type": "array", "minItems": 1,
+                                                                              "items": {"type": "string", "minLength": 1}}}}},
+            "no_action": {"class": "propose", "description": "Nothing needs to change.",
+                          "schema": {"type": "object", "additionalProperties": False, "required": ["rationale"],
+                                     "properties": {"rationale": {"type": "string", "minLength": 1}}}},
         }
         for t in self._tools.values():
             Draft202012Validator.check_schema(t["schema"])

@@ -77,7 +77,11 @@ def check(spec: dict, proposal: Proposal, view: FleetView, *, holds_stock: bool 
     src_zone = spec.get("source")
     src = topo.anchor_of(src_zone) if src_zone else None
     res.anchor = dest
-    if dest is None or not topo.is_destination(spec["destination"]):
+    if proposal.cluster_id in view.excluded_clusters:
+        violate("cluster", f"{proposal.cluster_id} is excluded for this decision")
+        return res
+    # a hand-over leg ends at a hand-off zone, which need not be a place an item is normally delivered to
+    if dest is None or not (spec.get("leg") or topo.is_destination(spec["destination"])):
         violate("destination", f"unknown destination {spec['destination']!r}")
     elif src_zone and src is None:
         violate("destination", f"unknown source {src_zone!r}")
@@ -96,10 +100,12 @@ def check(spec: dict, proposal: Proposal, view: FleetView, *, holds_stock: bool 
             start = src if src is not None else topo.home_of(proposal.cluster_id)
             routes = topo.routes(start, dest, allowed=zones - set(restricted), avoid=set(restricted))
             approach: list = []
-            if routes and src is not None and not unknown:
+            if routes and not unknown:
                 here = cluster["robots"][proposal.robot_ids[0]]["zone"]
-                if here != start:   # the robot must be able to reach the pickup inside the lease
-                    approach = topo.shortest_path(here, start, allowed=zones - set(restricted), avoid=set(restricted)) or []
+                if here != start:   # the robot must be able to get from where it is to the start inside the lease
+                    # a robot standing in a zone that has just been shut may leave it, so `here` is not avoided
+                    shut = set(restricted) - {here}
+                    approach = topo.shortest_path(here, start, allowed=(zones - shut) | {here}, avoid=shut) or []
                     if not approach:
                         routes = []
             if routes:

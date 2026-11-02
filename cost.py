@@ -27,6 +27,7 @@ _LOCK = threading.Lock()
 COUNTERS = (
     "input_tokens",       # T_in
     "output_tokens",      # T_out
+    "llm_calls",          # cloud LLM round trips (NFR-4: C1 <= 50% of C2)
     "fargate_gbs",        # F, GB-seconds of always-on container time
     "iot_messages",       # M, leases/check-ins/escalations via IoT Core
     "dynamodb_ops",       # W, table reads/writes

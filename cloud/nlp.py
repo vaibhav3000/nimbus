@@ -120,3 +120,41 @@ def spec_from(parsed: Parsed, note: str = "deterministic parse") -> dict:
         spec["source"] = parsed.source["zone"]
     spec.update(parsed.fields)
     return spec
+
+
+def items_in(pack: Pack, text: str) -> list[str]:
+    """Item ids named in the text, a more specific variant replacing the item it varies."""
+    found = [i for i in pack.items if _any(i["patterns"], text)]
+    variants = {i["variant_of"] for i in found if i.get("variant_of")}
+    return [i["id"] for i in found if i["id"] not in variants]
+
+
+def parse_statement(pack: Pack, topo: Topology, text: str) -> dict | None:
+    """A rule about a place ("<place> is now <restricted>", with an optional "get the X out") instead of a delivery.
+    Returns {kind, zone, lift, extract_items} or {"unknown_zone": text} when the place is not on the map."""
+    for kind, r in pack.restrictions.items():
+        for lift, patterns in ((True, r.get("lift_phrases", [])), (False, r.get("phrases", []))):
+            for pat in patterns:
+                m = re.search(pat, text, re.IGNORECASE)
+                if not m:
+                    continue
+                zone = topo.anchor_of(m.group(1))
+                if zone is None:
+                    return {"unknown_zone": m.group(1)}
+                extract = (not lift) and _any(pack.doc["nlp"].get("extract", []), text)
+                return {"kind": kind, "zone": zone, "lift": lift, "extract_items": items_in(pack, text) if extract else []}
+    return None
+
+
+def split_items(pack: Pack, topo: Topology, text: str, parsed: Parsed) -> list[dict] | None:
+    """Several items in one message ("<item> and <item> to <place>"): one spec per item, sharing the
+    destination, source, priority and deadline. None when the text names at most one item."""
+    names = items_in(pack, text)
+    if len(names) < 2 or parsed.destination is None:
+        return None
+    specs = []
+    for item in names:
+        one = Parsed(item=item, destination=parsed.destination, source=parsed.source, priority=parsed.priority,
+                     deadline_minutes=parsed.deadline_minutes)
+        specs.append(spec_from(one, note="one of several items in the message"))
+    return specs

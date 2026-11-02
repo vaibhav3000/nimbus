@@ -199,6 +199,19 @@ class DynamoLeaseRepo:
             labels.append(STOCK_LABEL)
         self._transact(ops, labels)
 
+    def live_leases(self) -> list[dict]:
+        out: list[dict] = []
+        kw = {"TableName": self.t["state"], "ConsistentRead": True,
+              "FilterExpression": "begins_with(pk, :p) AND #s = :live",
+              "ExpressionAttributeNames": {"#s": "state"},
+              "ExpressionAttributeValues": {":p": _s("TASK#"), ":live": _s("live")}}
+        while True:
+            page = self.c.scan(**kw)
+            out += [json.loads(it["lease"]["S"]) for it in page.get("Items", [])]
+            if "LastEvaluatedKey" not in page:
+                return out
+            kw["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
     def renew(self, task_id: str, version: int, new_expiry: str, *, now: datetime) -> dict:
         cur = self._get(f"TASK#{task_id}")
         if not cur or cur["state"]["S"] != "live":
@@ -227,10 +240,27 @@ class DynamoLeaseRepo:
         self._transact(ops, ["task pointer"] + keys)
         return lease
 
+    def free_claims(self, task_id: str) -> list[str]:
+        cur = self._get(f"TASK#{task_id}")
+        if not cur or cur["state"]["S"] != "live":
+            return []
+        keys = [k["S"] for k in cur["claims"]["L"]]
+        ops = [{"Update": {"TableName": self.t["state"], "Key": {"pk": _s(f"TASK#{task_id}")},
+                           "UpdateExpression": "SET claims = :none", "ConditionExpression": "#s = :live",
+                           "ExpressionAttributeNames": {"#s": "state"},
+                           "ExpressionAttributeValues": {":none": {"L": []}, ":live": _s("live")}}}]
+        for k in keys:
+            kind, _, name = k.partition(":")
+            ops.append({"Delete": {"TableName": self.t["state"], "Key": {"pk": _s(f"{kind.upper()}#{name}")},
+                                   "ConditionExpression": "attribute_not_exists(pk) OR task_id = :me",
+                                   "ExpressionAttributeValues": {":me": _s(task_id)}}})
+        self._transact(ops, ["task pointer"] + keys)
+        return keys
+
     def release(self, task_id: str) -> list[str]:
         cur = self._get(f"TASK#{task_id}")
-        if not cur:
-            return []
+        if not cur or cur["state"]["S"] == "released":
+            return []   # idempotent: the claims may already belong to another task
         keys = [k["S"] for k in cur["claims"]["L"]]
         ops = [{"Update": {"TableName": self.t["state"], "Key": {"pk": _s(f"TASK#{task_id}")},
                            "UpdateExpression": "SET #s = :r", "ExpressionAttributeNames": {"#s": "state"},
