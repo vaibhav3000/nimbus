@@ -121,12 +121,14 @@ class Orchestrator:
         pack = Pack.load()
         topo = Topology(pack)
         tools = ToolRegistry(pack)
+        from .faults import FaultyLLM
         if os.environ.get("NIMBUS_LLM", "fake") == "bedrock":
             from .llm import BedrockLLM
-            llm = CircuitBreakerLLM(
-                BedrockLLM(os.environ["NIMBUS_BEDROCK_MODEL"], tools, os.environ.get("AWS_REGION", "ap-south-1")), clock)
+            faulty = FaultyLLM.from_env(BedrockLLM(os.environ["NIMBUS_BEDROCK_MODEL"], tools, os.environ.get("AWS_REGION", "ap-south-1")), clock)
+            llm = CircuitBreakerLLM(faulty, clock)         # the breaker sees injected outages exactly as it sees real ones
         else:
-            llm = RuleBasedLLM(pack, topo)
+            faulty = FaultyLLM.from_env(RuleBasedLLM(pack, topo), clock)
+            llm = faulty
         if os.environ.get("NIMBUS_CASSETTE"):  # record real calls once, replay them free
             from .llm import CassetteLLM
             mode = os.environ.get("NIMBUS_CASSETTE_MODE", "replay")
@@ -142,13 +144,15 @@ class Orchestrator:
             from .durable import FileDurable
             repo = MemoryLeaseRepo(Path(data_dir) / "claims.json")
             durable = FileDurable(Path(data_dir) / "durable.json")
-        return cls(pack=pack, topo=topo, fleet=FleetRegistry.load(clock, pack, stock_store=stock_store),
+        orch = cls(pack=pack, topo=topo, fleet=FleetRegistry.load(clock, pack, stock_store=stock_store),
                    policies=_with_kb(PolicyBook(pack, durable=durable)), repo=repo, durable=durable,
                    results=ResultStore.from_env(data_dir),
                    scheduler=Scheduler(pack.ranks), llm=llm, clock=clock,
                    mode=os.environ.get("NIMBUS_MODE", "C1"),
                    allow_unknown=os.environ.get("NIMBUS_ALLOW_UNKNOWN", "1") == "1",
                    publish=publish, probe_timeout_s=float(os.environ.get("NIMBUS_PROBE_TIMEOUT", "0")))
+        orch.faults = faulty                              # POST /llm/outage and the E5 tests reach it here
+        return orch
 
     # -- context + health check --------------------------------------------------
 

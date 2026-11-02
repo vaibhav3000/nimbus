@@ -344,6 +344,13 @@ class Handler(BaseHTTPRequestHandler):
             self._post_replan(path.split("/")[2], body)
         elif path == "/checkins":
             self._post_checkin(body)
+        elif path == "/llm/outage":       # E5: make the model unavailable for N seconds (0 ends it); the rules take over (FR-18)
+            seconds = body.get("seconds")
+            if not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or not 0 <= seconds <= 3600:
+                self._send_json(400, {"error": "seconds must be a number from 0 to 3600"})
+            else:
+                self.orch.faults.fail_for(seconds)
+                self._send_json(201, {"model_down": self.orch.faults.down, "seconds": seconds})
         elif path == "/map/reopen":
             zone = body.get("zone")
             node = self.orch.topo.resolve_node(zone) if isinstance(zone, str) else None
