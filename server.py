@@ -9,6 +9,7 @@ touching these routes. Endpoints are the public seam; see SPEC-P4.md.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import re
@@ -521,8 +522,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": f"unknown cluster {cluster_id}"})
                 return
             self.cost.record(iot_messages=1)
+        held = body.get("leases")      # optional (FR-12): the leases the edge still holds after an outage
+        reconcile = self.orch.reconcile(cluster_id, held) if isinstance(held, list) and held else None
         self._drain()  # a cluster coming back may unblock queued work (retries only if capacity really changed)
-        self._send_json(201, {"accepted": True, "health": self.orch.fleet.health(cluster_id)})
+        reply = {"accepted": True, "health": self.orch.fleet.health(cluster_id)}
+        if reconcile is not None:
+            reply["reconcile"] = reconcile
+        self._send_json(201, reply)
 
     def _post_relay_decide(self, body: dict):
         """C2 (cloud-only): the edge is a thin relay and asks the cloud before each non-reflex
@@ -1009,6 +1015,8 @@ class NimbusServer(ThreadingHTTPServer):
     data_dir = None
 
     def server_close(self):
+        if getattr(self, "ticker_stop", None):
+            self.ticker_stop.set()
         if self.transport:
             try:
                 self.transport.stop()
@@ -1085,6 +1093,31 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
     server_inst.cost = cost
     server_inst.orch = orch
     server_inst.data_dir = data_dir
+
+    def tick_once():
+        """One pass of the time-driven work (cloud/ticker.py): expiries, deadlines, silent clusters, queue."""
+        res = orch.ticker.tick(store.all_tasks())          # may plan (model calls): outside the lock
+        for task, outcome in res.apply:
+            apply_fn(task, outcome)
+        with _STATE_LOCK:
+            for task in res.touched:
+                store.put_task(task)
+        return res
+
+    server_inst.tick_once = tick_once
+    tick_s = float(os.environ.get("NIMBUS_TICK_S", "5"))
+    if tick_s > 0:
+        stop = threading.Event()
+
+        def loop():
+            while not stop.wait(tick_s):
+                try:
+                    tick_once()
+                except Exception as exc:       # a failed pass must never take the service down
+                    logging.getLogger("nimbus.tick").warning("tick failed: %s", exc)
+
+        threading.Thread(target=loop, name="nimbus-ticker", daemon=True).start()
+        server_inst.ticker_stop = stop
     return server_inst
 
 

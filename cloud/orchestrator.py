@@ -39,6 +39,7 @@ from .trace import Trace, TracingLLM, task_scope
 from .orchestrator_types import LLM_MODES, Outcome, row as _row
 from .react import Reactor
 from .statements import Statements
+from .ticker import Ticker
 from .legs import handover_options, make_legs
 from .leases import Conflict, MemoryLeaseRepo, _task_of, claim_keys_for
 from .llm import CircuitBreakerLLM, LLMError, RuleBasedLLM
@@ -88,6 +89,7 @@ class Orchestrator:
             self.llm = TracingLLM(llm, self.trace)
         self._freed = 0          # robots/claims given back by this process (finish, cancel, hold, expiry)
         self.statements = Statements(self)
+        self.ticker = Ticker(self)
         self.load_task = lambda task_id: None    # the HTTP layer plugs in its task store
         self.react = Reactor(self)
         self.mode, self.allow_unknown = mode, allow_unknown
@@ -221,6 +223,43 @@ class Orchestrator:
         ctx = self.build_context(task["request_text"], task["task_id"], [])
         info = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0}
         return self._allocate(task, spec, ctx, info, self.mode in LLM_MODES, None, request_text=task["request_text"], answer=None)
+
+    def expire(self, task: dict, reason: str) -> Outcome:
+        """The lease ran out with no completion and no renewal: the claim ends and the task goes back in the queue
+        (same mechanics as a hold: stop lease out, claims freed, the reserved item returned)."""
+        out = self.hold(task, reason)
+        if out.kind == "held":
+            out.rows.insert(0, _row("cloud", {"reason": reason}, {"decision": "lease_expired", "reason": reason}, out.lease["version"]))
+        return out
+
+    def reconcile(self, cluster_id: str, held: list[dict]) -> list[dict]:
+        """After an outage the edge says which leases it still holds (FR-12). Reply, per lease: ok; replaced (here is
+        the current version, re-sent); or stop (the task is finished, cancelled or lives on another cluster, and a
+        stop lease with a higher version is sent so a returning robot parks). No robot ends up under two leases."""
+        out = []
+        for h in held:
+            lid, ver = h.get("lease_id", ""), h.get("version")
+            try:
+                tid = lid[len("lease-"):lid.rindex("-v")]
+            except ValueError:
+                out.append({"lease_id": lid, "action": "unknown"}); continue
+            cur = self.repo.current(tid)
+            if cur and cur["cluster_id"] == cluster_id and cur["version"] == ver:
+                out.append({"lease_id": lid, "action": "ok"})
+            elif cur and cur["cluster_id"] == cluster_id and isinstance(ver, int) and cur["version"] > ver:
+                self.publish(f"nimbus/{cluster_id}/lease", cur)
+                out.append({"lease_id": lid, "action": "replaced", "current": cur["version"]})
+            else:
+                last = self.repo.last_lease(tid)
+                if last is None:
+                    out.append({"lease_id": lid, "action": "unknown"}); continue
+                version = max((ver or 0) + 1, (cur or last)["version"] if cur else last["version"] + 1)
+                zone = next((r.get("zone") for r in self.fleet.clusters[cluster_id]["robots"].values()
+                             if r.get("zone") in self.topo.nodes), last["allowed_zones"][0])
+                stop = self._stop_lease({**last, "cluster_id": cluster_id}, version, zone)
+                self.publish(f"nimbus/{cluster_id}/lease", stop)
+                out.append({"lease_id": lid, "action": "stop", "version": version})
+        return out
 
     def hold(self, task: dict, reason: str) -> Outcome:
         """Stop a task that a new restriction blocks and queue it until the restriction is lifted: stop lease out,

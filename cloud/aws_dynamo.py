@@ -199,6 +199,10 @@ class DynamoLeaseRepo:
             labels.append(STOCK_LABEL)
         self._transact(ops, labels)
 
+    def last_lease(self, task_id: str) -> dict | None:
+        cur = self._get(f"TASK#{task_id}")
+        return json.loads(cur["lease"]["S"]) if cur else None
+
     def live_leases(self) -> list[dict]:
         out: list[dict] = []
         kw = {"TableName": self.t["state"], "ConsistentRead": True,
