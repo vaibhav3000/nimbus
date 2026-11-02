@@ -33,6 +33,19 @@ python scripts/run_e3.py --seeds 10 # E3: T1-T8 under all three, writes results/
 -> `{action: proceed|wait|reroute|abort, via_zones, source: llm|rules}`. It returns 409 unless the service runs C2.
 E3 uses the offline stand-in model by default (token counts and latency are estimates); see the script header for a Bedrock run.
 
+## MS2 behaviour to try (offline)
+```bash
+NIMBUS_PACK=hospital_sim python server.py            # plan on P1's Gazebo map (default pack is the hand-made v0 map)
+python scripts/edge_sim.py --cluster east-wing --block east_mid_hall --robot-zone east_waiting_approach   # SC-2 corridor
+python scripts/edge_sim.py --cluster west-wing --close west_north_gate --robot-zone north_hall            # SC-2 gate
+curl -X POST localhost:8000/requests -H 'Content-Type: application/json' \
+  -d '{"text":"Ward 2C is now isolation. Get the spare pumps out, hold routine deliveries there, urgent ones can still go in.","message_id":"sc3-1"}'
+curl 'localhost:8000/notifications?audience=operator'      # also audience=place|cluster|requester
+```
+- A request across wings is split into legs (`legs`, `leg_index` on `GET /tasks/{id}`); the next leg starts on OUTPUT_READY.
+- Cancel and pause publish a stop lease (a lease whose only step is `stop`). Contract for the edge: `docs/p2-edge-contract-ms2.md`.
+- Hand-offs to P4: `docs/p4-note-ms2.md`.
+
 ## AWS mode (Bedrock + DynamoDB)
 ```bash
 export AWS_PROFILE=<profile> AWS_REGION=ap-south-1
@@ -51,4 +64,6 @@ python scripts/smoke_live.py --model $NIMBUS_BEDROCK_MODEL --teardown    # one l
 - **Tasks stay `queued`:** no free robot or no stock in the cluster that covers the destination. Check `/fleet`, or restock.
 - **`/relay/decide` returns 409:** the service is not in C2. Restart with `NIMBUS_MODE=C2`.
 - **Cancel/pause returns 409:** the task is already completed, cancelled or rejected.
+- **A task says `queued: ... hold by SOP-ISO-02`:** a restriction is active on its place. Send "Ward X is no longer in isolation" or mark it urgent.
+- **`replan_failed` / operator alert on a hand-over:** no route is left (both gates closed) or the robot's zone is not a map node.
 - **Clean slate:** stop everything and delete `data/`.
