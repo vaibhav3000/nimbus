@@ -111,6 +111,19 @@ class RuleBasedLLM:
             "rationale": f"{opt.robot_id} is nearest free robot in {opt.cluster_id}"}}
 
 
+def _bedrock_message(m: dict) -> dict:
+    """One conversation turn. Plain turns carry `text`; a multi-turn agent run also has assistant turns with
+    `tool_calls` [{id, name, input}] and user turns with `tool_results` [{id, content}]."""
+    blocks = []
+    if m.get("text"):
+        blocks.append({"text": m["text"]})
+    for c in m.get("tool_calls", []):
+        blocks.append({"toolUse": {"toolUseId": c["id"], "name": c["name"], "input": c["input"]}})
+    for r in m.get("tool_results", []):
+        blocks.append({"toolResult": {"toolUseId": r["id"], "content": [{"json": r["content"]}]}})
+    return {"role": m["role"], "content": blocks}
+
+
 class BedrockLLM:
     """Amazon Bedrock Converse API with forced tool use.
 
@@ -142,14 +155,15 @@ class BedrockLLM:
             resp = self.client.converse(
                 modelId=self.model_id,
                 system=[{"text": system}],
-                messages=[{"role": m["role"], "content": [{"text": m["text"]}]} for m in messages],
+                messages=[_bedrock_message(m) for m in messages],
                 toolConfig=self.registry.bedrock_config(tools),
                 inferenceConfig={"maxTokens": self.max_tokens, "temperature": self.temperature},
             )
         except Exception as exc:  # throttling, timeout, access denied: all mean "model unavailable"
             raise LLMError(f"bedrock call failed: {exc}") from exc
         blocks = resp["output"]["message"]["content"]
-        calls = [{"name": b["toolUse"]["name"], "input": b["toolUse"]["input"]} for b in blocks if "toolUse" in b]
+        calls = [{"id": b["toolUse"].get("toolUseId"), "name": b["toolUse"]["name"], "input": b["toolUse"]["input"]}
+                 for b in blocks if "toolUse" in b]
         usage = resp.get("usage", {})
         return LLMResult(
             tool_calls=calls, text=" ".join(b.get("text", "") for b in blocks if "text" in b),
