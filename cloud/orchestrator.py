@@ -400,8 +400,15 @@ class Orchestrator:
 
         if committed is None:
             ex = state.get("excluded", [])
+            restricted = view.restricted_for(spec["priority"])
+            bound = next((z for z in (self.topo.anchor_of(spec["destination"]),
+                                      self.topo.anchor_of(spec["source"]) if spec.get("source") else None) if z in restricted), None)
+            if bound and not spec.get("leg"):   # the real blocker is a restriction, not the clusters' areas: say so, and wait if it is a hold
+                r = restricted[bound]
+                state["excluded"] = [{"cluster_id": "-", "reason": f"{bound} is {r['effect']} by {r['reason']}",
+                                      "transient": r["effect"] == "hold"}]
             # legs only when no single cluster covers the whole job; a busy or out-of-stock cluster just means wait
-            if not spec.get("leg") and ex and all("hand-over" in e["reason"] for e in ex):
+            elif not spec.get("leg") and ex and all("hand-over" in e["reason"] for e in ex):
                 out = self._try_handover(task, spec, ctx, info, use_llm, state["notice"], request_text, answer, retry, exclude)
                 if out is not None:
                     return out
