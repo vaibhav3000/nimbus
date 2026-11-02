@@ -334,7 +334,7 @@
     "step": [
       "decide_step"
     ],
-    "react_event": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "replan", "no_action"],
+    "react_event": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "replan", "hand_over", "no_action"],
     "react_clarify": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "answer_clarification", "ask_requester"]
   },
   "prompts": {

@@ -66,7 +66,11 @@ class Reactor:
                                                                      "rationale": "the live lease already avoids these zones"},
                                    cur["version"]))
             return react
-        robot_zone = o.fleet.robot_zone(cur["assigned_robots"][0])
+        robot_zone = payload.get("robot_zone") or o.fleet.robot_zone(cur["assigned_robots"][0])
+        for z in zones:   # selective sharing (FR-11): tell only the clusters whose area or live leases include the zone
+            for c in o.mapstate.affected_clusters(z, o.repo, o.clock.now()):
+                self._notice(react, Notice("cluster", f"{z} is {states.get(z, 'blocked')}; routes through it are closed.",
+                                           type="MAP", cluster_id=c), None, task)
         choice = self._choose_event(task, payload, cur, zones, robot_zone, react)
         row_out = {"decision": "react", "action": choice["action"], "source": choice["source"],
                    "rationale": choice["rationale"], "blocked_zones": zones}
@@ -77,9 +81,27 @@ class Reactor:
         react.rows.append(_row("cloud" if choice["source"] == "llm" else "rule",
                                {"what_happened": payload["what_happened"], "where": payload["where"],
                                 "robot_zone": robot_zone}, row_out, cur["version"]))
+        reason = payload["what_happened"]
+        out = None
         if choice["action"] == "replan":
-            out = o.replan(task, blocked_zones=choice["avoid"], reason=payload["what_happened"])
+            out = o.replan(task, blocked_zones=choice["avoid"], reason=reason)
+            if out.kind != "leased":   # nothing inside this cluster's area works: another cluster takes the rest (SC-2)
+                react.rows += out.rows
+                out = o.reassign(task, reason, robot_zone=robot_zone)
+        elif choice["action"] == "hand_over":
+            out = o.reassign(task, reason, only_cluster=choice["to_cluster"], robot_zone=robot_zone)
+            if out.kind != "leased":
+                react.rows += out.rows
+                out = o.replan(task, blocked_zones=zones, reason=reason) if zones else out
+        if out is not None:
             react.outcome = out
+            if out.kind == "leased" and out.lease["cluster_id"] != cur["cluster_id"]:
+                self._notice(react, Notice("cluster", f"{task['task_id']} was handed to {out.lease['cluster_id']}: stop and park.",
+                                           type="WARNING", cluster_id=cur["cluster_id"], task_id=task["task_id"],
+                                           lease_version=out.lease["version"]), out.lease["version"], task)
+                self._notice(react, Notice("operator", f"{task['task_id']} re-assigned from {cur['cluster_id']} to "
+                                                       f"{out.lease['cluster_id']} ({reason}).", task_id=task["task_id"]),
+                             out.lease["version"], task)
             if out.kind != "leased":
                 react.rows.append(_row("rule", {"reason": out.reason}, {"decision": "alert_operator",
                                                                        "text": f"re-plan failed: {out.reason}"}, cur["version"]))
@@ -99,6 +121,9 @@ class Reactor:
                 f"LEASE: allowed={cur['allowed_zones']} forbidden={cur['forbidden_zones']} cluster={cur['cluster_id']}")
 
         def validate(call: dict) -> list[str]:
+            if call["name"] == "hand_over":
+                t = call["input"]["to_cluster"]
+                return [] if t in o.fleet.clusters and t != cur["cluster_id"] else [f"{t!r} is not another cluster"]
             if call["name"] != "replan":
                 return []
             bad = [z for z in call["input"]["avoid_zones"] if o.topo.resolve_node(z) is None]
@@ -106,7 +131,7 @@ class Reactor:
 
         res = run_agent(o.llm, system=o.pack.prompts["react"] + "\n\n" + ctx.to_prompt(), user=user,
                         tools=o.tools.names("react_event"), registry=o.tools, read=self._read(),
-                        terminal={"replan", "no_action"}, validate=validate, context=ctx, fleet_view=o.view(task["task_id"]))
+                        terminal={"replan", "hand_over", "no_action"}, validate=validate, context=ctx, fleet_view=o.view(task["task_id"]))
         react.llm_calls += res.calls
         react.tokens_in += res.tokens_in
         react.tokens_out += res.tokens_out
@@ -117,6 +142,9 @@ class Reactor:
             return {**fallback, "error": "model chose no_action although zones were reported", "trace": res.trace}
         if res.call["name"] == "no_action":
             return {"action": "no_action", "avoid": [], "source": "llm", "rationale": i["rationale"], "trace": res.trace}
+        if res.call["name"] == "hand_over":
+            return {"action": "hand_over", "to_cluster": i["to_cluster"], "avoid": zones, "source": "llm",
+                    "rationale": i["rationale"], "trace": res.trace}
         avoid = sorted({*zones, *(o.topo.resolve_node(z) for z in i["avoid_zones"])})
         return {"action": "replan", "avoid": avoid, "source": "llm", "rationale": i["rationale"], "trace": res.trace}
 

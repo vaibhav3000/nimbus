@@ -13,6 +13,10 @@ def leased(orch, text="Deliver a wheelchair to 2B-3, routine.", n=1):
     return t, out
 
 
+def react_row(r):
+    return next(x for x in r.rows if x["output"].get("decision") == "react")
+
+
 def event(where="corridor E3", segments=None):
     p = {"what_happened": "cart blocks the corridor", "where": where, "robots_saw": ["cart"]}
     if segments:
@@ -27,7 +31,7 @@ def test_blocked_corridor_replans_v2_and_records_the_closure():
     assert r.outcome.kind == "leased" and r.outcome.lease["version"] == 2
     assert "E3" not in r.outcome.lease["task_sequence"][2]["params"]["via"]
     assert "E3" in orch.mapstate.closed(orch.clock.now())
-    assert r.rows[0]["output"]["decision"] == "react" and r.rows[0]["output"]["action"] == "replan"
+    assert react_row(r)["output"]["decision"] == "react" and react_row(r)["output"]["action"] == "replan"
 
 
 def test_model_with_lookups_is_used_and_its_trace_is_logged():
@@ -35,7 +39,7 @@ def test_model_with_lookups_is_used_and_its_trace_is_logged():
     orch = make_orch(override=lambda tools, kw: next(calls) if "replan" in tools else None)
     task, _ = leased(orch)
     r = orch.react.on_event(task, event())
-    assert r.llm_calls == 2 and r.rows[0]["who"] == "cloud" and r.rows[0]["output"]["trace"][0]["tool"] == "get_route"
+    assert r.llm_calls == 2 and react_row(r)["who"] == "cloud" and react_row(r)["output"]["trace"][0]["tool"] == "get_route"
     assert r.outcome.lease["version"] == 2
 
 
@@ -62,7 +66,7 @@ def test_repeat_of_an_event_the_lease_already_avoids_does_not_replan_again():
     first = orch.react.on_event(task, event())
     task["lease"] = first.outcome.lease
     again = orch.react.on_event(task, event())
-    assert again.outcome is None and again.rows[0]["output"]["action"] == "no_action"
+    assert again.outcome is None and react_row(again)["output"]["action"] == "no_action"
     assert orch.repo.current(task["task_id"])["version"] == 2
 
 
@@ -70,7 +74,7 @@ def test_model_naming_an_unknown_zone_is_corrected_then_rules_take_over_if_it_pe
     orch = make_orch(override=lambda tools, kw: tool("replan", avoid_zones=["Narnia"], rationale="x") if "replan" in tools else None)
     task, _ = leased(orch)
     r = orch.react.on_event(task, event())
-    assert r.rows[0]["who"] == "rule" and "model_error" in r.rows[0]["output"] and r.outcome.lease["version"] == 2
+    assert react_row(r)["who"] == "rule" and "model_error" in react_row(r)["output"] and r.outcome.lease["version"] == 2
 
 
 def test_model_down_uses_the_rules():
@@ -80,7 +84,7 @@ def test_model_down_uses_the_rules():
     orch = make_orch(override=down)
     task, _ = leased(orch)
     r = orch.react.on_event(task, event())
-    assert r.rows[0]["who"] == "rule" and r.outcome.kind == "leased"
+    assert react_row(r)["who"] == "rule" and r.outcome.kind == "leased"
 
 
 def test_c3_never_calls_a_model():

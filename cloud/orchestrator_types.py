@@ -21,6 +21,8 @@ class Outcome:
     tokens_out: int = 0
     llm_calls: int = 0                     # model round trips this decision used (NFR-4)
     reservation: dict | None = None
+    legs: list | None = None               # hand-over: one spec per leg, in order
+    leg_index: int | None = None           # which leg this outcome's lease (or queue entry) is for
     timings: dict = field(default_factory=dict)  # telemetry only; never in the decision log
 
 

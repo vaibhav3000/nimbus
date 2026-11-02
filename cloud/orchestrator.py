@@ -37,7 +37,8 @@ from .mapstate import MapState
 from .notify import Notifier
 from .orchestrator_types import LLM_MODES, Outcome, row as _row
 from .react import Reactor
-from .leases import Conflict, MemoryLeaseRepo, claim_keys_for
+from .legs import handover_options, make_legs
+from .leases import Conflict, MemoryLeaseRepo, _task_of, claim_keys_for
 from .llm import CircuitBreakerLLM, LLMError, RuleBasedLLM
 from .pack import Pack
 from .policy import PolicyBook
@@ -117,9 +118,9 @@ class Orchestrator:
 
     # -- context + health check --------------------------------------------------
 
-    def view(self, task_id: str | None = None, extra_forbidden: dict | None = None) -> FleetView:
+    def view(self, task_id: str | None = None, extra_forbidden: dict | None = None, exclude=()) -> FleetView:
         return FleetView(self.topo, self.fleet, self.repo, self.policies, self.clock, self.pack,
-                         self.allow_unknown, task_id, extra_forbidden or {}, self.mapstate)
+                         self.allow_unknown, task_id, extra_forbidden or {}, self.mapstate, frozenset(exclude))
 
     def health_check(self) -> list[str]:
         """Quick pre-delegation check: probe clusters that were alive and went
@@ -177,7 +178,7 @@ class Orchestrator:
 
     def retry_queued(self, task: dict) -> Outcome:
         ctx = self.build_context(task["request_text"], task["task_id"], [])
-        return self._allocate(task, task["spec"], ctx,
+        return self._allocate(task, self.current_spec(task), ctx,
                               {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0},
                               self.mode in LLM_MODES, None, request_text=task["request_text"], answer=None, retry=True)
 
@@ -279,9 +280,10 @@ class Orchestrator:
         for opt in options:
             yield Proposal(opt.cluster_id, [opt.robot_id], "nearest free robot", "classical")
 
-    def _allocate(self, task, spec, ctx, info, use_llm, notice, *, request_text, answer, retry=False) -> Outcome:
+    def _allocate(self, task, spec, ctx, info, use_llm, notice, *, request_text, answer, retry=False,
+                  exclude=()) -> Outcome:
         task_id = task["task_id"]
-        view = self.view(task_id)
+        view = self.view(task_id, exclude=exclude)
         attempts: list = []
         state: dict = {"notice": notice}
         committed = None
@@ -300,8 +302,10 @@ class Orchestrator:
                 if not res.ok:
                     state["feedback"] = "; ".join(f"{v['rule']}: {v['detail']}" for v in res.violations)
                     continue
+                live = self.repo.current(task_id)   # a later leg or a re-assignment is the next version of the same task
                 lease = leasebuilder.build_lease(task_id, spec, prop, res, topo=self.topo, clock=self.clock,
-                                                 pack=self.pack, restricted_zones=list(view.restricted_for(spec["priority"])))
+                                                 pack=self.pack, restricted_zones=list(view.restricted_for(spec["priority"])),
+                                                 version=live["version"] + 1 if live else 1)
                 errors = contracts.validate_document("lease", lease)
                 if errors:
                     raise InvalidLeaseError(errors)
@@ -329,6 +333,12 @@ class Orchestrator:
                 break
 
         if committed is None:
+            ex = state.get("excluded", [])
+            # legs only when no single cluster covers the whole job; a busy or out-of-stock cluster just means wait
+            if not spec.get("leg") and ex and all("hand-over" in e["reason"] for e in ex):
+                out = self._try_handover(task, spec, ctx, info, use_llm, state["notice"], request_text, answer, retry, exclude)
+                if out is not None:
+                    return out
             return self._no_lease(task, spec, attempts, state, ctx, info, request_text, retry)
 
         prop, res, lease = committed
@@ -418,6 +428,90 @@ class Orchestrator:
         return Outcome("leased", rows=rows, lease=lease, spec=spec,
                        publish=[(f"nimbus/{lease['cluster_id']}/lease", lease)])
 
+    # -- hand-over between clusters: legs, and re-assignment after a closure (SC-2, FR-16) ----------------
+
+    @staticmethod
+    def current_spec(task: dict) -> dict:
+        """The spec the task is working on now: its current leg, or the whole task when it has none."""
+        legs = task.get("legs")
+        return legs[task.get("leg_index", 0)] if legs else task["spec"]
+
+    @staticmethod
+    def has_next_leg(task: dict) -> bool:
+        return bool(task.get("legs")) and task.get("leg_index", 0) < len(task["legs"]) - 1
+
+    def _try_handover(self, task, spec, ctx, info, use_llm, notice, request_text, answer, retry, exclude):
+        options = handover_options(spec, self.view(task["task_id"], exclude=exclude))
+        if not options:
+            return None
+        legs = make_legs(spec, options[0])
+        out = self._allocate(task, legs[0], ctx, info, use_llm, notice, request_text=request_text, answer=answer,
+                             retry=retry, exclude=exclude)
+        if out.kind not in ("leased", "queued"):
+            return None
+        note = _row("cloud", {"spec": spec}, {"decision": "plan_handover", "handoff": options[0].handoff,
+                                              "legs": [{"from": options[0].cluster_a}, {"to": options[0].cluster_b}]},
+                    out.lease["version"] if out.lease else None)
+        out.rows.insert(0, note)
+        out.spec, out.legs, out.leg_index = spec, legs, 0
+        return out
+
+    def advance_leg(self, task: dict) -> Outcome:
+        """The edge finished a leg that is not the last one: lease the next leg as version n+1 (to the cluster
+        that can finish the job). If no robot is free it queues, and the earlier leg's lease runs out on its own."""
+        idx = task.get("leg_index", 0) + 1
+        ctx = self.build_context(task["request_text"], task["task_id"], [])
+        info = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0}
+        out = self._allocate(task, task["legs"][idx], ctx, info, self.mode in LLM_MODES, None,
+                             request_text=task["request_text"], answer=None, retry=True)
+        out.leg_index = idx
+        out.rows.insert(0, _row("cloud", {"completed_leg": idx}, {"decision": "advance_leg", "next_leg": idx + 1,
+                                                                  "result": out.kind}, None))
+        return out
+
+    def reassign(self, task: dict, reason: str, *, only_cluster: str | None = None, robot_zone: str | None = None) -> Outcome:
+        """The cluster holding the task cannot continue (a passage shut and no route inside its area): plan the
+        rest of the job from where the robot is parked, as the next lease version. The planner may pick another
+        cluster, whose robot collects the item at the parked robot's zone, or split the rest into new legs (a
+        different hand-off). A cluster that is cut off simply has no route and drops out of the ranking. The old
+        cluster gets a stop lease at the same version when the task moves away from it."""
+        cur = self.repo.current(task["task_id"])
+        if cur is None:
+            return Outcome("replan_failed", reason="no live lease to reassign")
+        here = robot_zone if robot_zone in self.topo.nodes else self.fleet.robot_zone(cur["assigned_robots"][0])
+        if here not in self.topo.nodes:
+            return Outcome("replan_failed", reason="the robot's position is unknown, so nobody can collect the item",
+                           rows=[_row("cloud", {"reason": reason}, {"decision": "reassign_failed", "why": "robot position unknown"},
+                                      cur["version"])])
+        old = cur["cluster_id"]
+        exclude = {c for c in self.fleet.clusters if c != only_cluster} if only_cluster else set()
+        rest = {**task["spec"], "source": here}
+        ctx = self.build_context(task["request_text"], task["task_id"], [])
+        info = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0}
+        out = self._allocate(task, rest, ctx, info, False, None, request_text=task["request_text"], answer=None,
+                             retry=True, exclude=exclude)
+        if out.kind != "leased":
+            why = out.reason or out.kind
+            return Outcome("replan_failed", reason=why, spec=task["spec"],
+                           rows=[_row("cloud", {"reason": reason}, {"decision": "reassign_failed", "why": why}, cur["version"])])
+        if out.lease["cluster_id"] != old:
+            out.publish.append((f"nimbus/{old}/lease", self._stop_lease(cur, out.lease["version"], here)))
+        out.rows.insert(0, _row("cloud", {"reason": reason, "from_cluster": old, "parked_at": here},
+                                {"decision": "reassign", "to_cluster": out.lease["cluster_id"],
+                                 "replaces_version": cur["version"]}, out.lease["version"]))
+        out.spec = task["spec"]
+        if out.legs is None:
+            out.legs, out.leg_index = [], 0
+        return out
+
+    def _stop_lease(self, cur: dict, version: int, zone: str) -> dict:
+        lease = {**cur, "version": version, "lease_id": f"lease-{_task_of(cur)}-v{version}", "allowed_zones": [zone],
+                 "task_sequence": [{"cmd": "stop", "params": {}}], "when_to_escalate": list(cur["when_to_escalate"])}
+        errors = contracts.validate_document("lease", lease)
+        if errors:
+            raise InvalidLeaseError(errors)
+        return lease
+
     # -- stand-down: stop work without changing the lease contract ----------------------------------
 
     def stand_down(self, task: dict, reason: str) -> Outcome:
@@ -432,12 +526,7 @@ class Orchestrator:
             return Outcome("stand_down_failed", reason="no live lease")
         here = self.fleet.robot_zone(cur["assigned_robots"][0])
         zone = here if here in self.topo.nodes else cur["allowed_zones"][0]
-        lease = {**cur, "version": cur["version"] + 1, "lease_id": f"lease-{task['task_id']}-v{cur['version'] + 1}",
-                 "allowed_zones": [zone], "task_sequence": [{"cmd": "stop", "params": {}}],
-                 "when_to_escalate": list(cur["when_to_escalate"])}
-        errors = contracts.validate_document("lease", lease)
-        if errors:
-            raise InvalidLeaseError(errors)
+        lease = self._stop_lease(cur, cur["version"] + 1, zone)
         try:
             self.repo.commit(lease, [f"robot:{r}" for r in lease["assigned_robots"]], now=self.clock.now())
         except Conflict as exc:

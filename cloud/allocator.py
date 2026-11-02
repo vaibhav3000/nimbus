@@ -30,6 +30,7 @@ class FleetView:
     task_id: str | None = None
     extra_forbidden: dict = field(default_factory=dict)  # zone -> reason (e.g. a blocked passage)
     mapstate: object = None                              # MapState: zones the edge reported shut (FR-17)
+    excluded_clusters: frozenset = frozenset()           # clusters that must not take this task (e.g. the one that just failed)
 
     def robot_free(self, robot_id: str) -> bool:
         held = self.repo.holder(f"robot:{robot_id}", self.clock.now())
@@ -90,6 +91,9 @@ def eligible_options(spec: dict, view: FleetView) -> tuple[list[Option], list[Ex
     options: list[Option] = []
     excluded: list[Exclusion] = []
     for cid, c in sorted(fleet.clusters.items()):
+        if cid in view.excluded_clusters:
+            excluded.append(Exclusion(cid, "cluster is excluded for this decision", False))
+            continue
         zones = topo.cluster_zones(cid)
         if dest not in zones or (src is not None and src not in zones):
             excluded.append(Exclusion(cid, f"destination {spec['destination']} is outside {cid}'s area (hand-over needed)", False))

@@ -77,7 +77,11 @@ def check(spec: dict, proposal: Proposal, view: FleetView, *, holds_stock: bool 
     src_zone = spec.get("source")
     src = topo.anchor_of(src_zone) if src_zone else None
     res.anchor = dest
-    if dest is None or not topo.is_destination(spec["destination"]):
+    if proposal.cluster_id in view.excluded_clusters:
+        violate("cluster", f"{proposal.cluster_id} is excluded for this decision")
+        return res
+    # a hand-over leg ends at a hand-off zone, which need not be a place an item is normally delivered to
+    if dest is None or not (spec.get("leg") or topo.is_destination(spec["destination"])):
         violate("destination", f"unknown destination {spec['destination']!r}")
     elif src_zone and src is None:
         violate("destination", f"unknown source {src_zone!r}")

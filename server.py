@@ -54,6 +54,10 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
         task["notice"] = outcome.notice
         if outcome.spec:
             task["spec"] = outcome.spec
+        if outcome.legs is not None:
+            task["legs"] = outcome.legs
+        if outcome.leg_index is not None:
+            task["leg_index"] = outcome.leg_index
         if outcome.kind == "clarify":
             task["status"], task["question"] = "needs_clarification", outcome.question
         elif outcome.kind == "leased":
@@ -131,6 +135,8 @@ class Handler(BaseHTTPRequestHandler):
             "spec": task.get("spec"),
             "notice": task.get("notice"),
             "reason": task.get("reason"),
+            "legs": task.get("legs"),           # P3, additive: hand-over legs and which one is live
+            "leg_index": task.get("leg_index"),
         }
 
     # -- routes ----------------------------------------------------------
@@ -813,7 +819,10 @@ def process_escalation(
         if body["lease_version"] < current:
             return 409, {"error": "outdated lease_version", "current": current}
 
-        if esc_type == "OUTPUT_READY" and task["status"] != "cancelled":
+        if esc_type == "OUTPUT_READY" and task["status"] != "cancelled" and orch.has_next_leg(task):
+            task.setdefault("leg_results", []).append(body["payload"]["result_ref"])
+            apply_fn(task, orch.advance_leg(task))   # a hand-over: the next leg is the next lease version
+        elif esc_type == "OUTPUT_READY" and task["status"] != "cancelled":
             task["status"] = "completed"
             task["result_ref"] = body["payload"]["result_ref"]
             orch.finish(task)  # robots and zones are free again

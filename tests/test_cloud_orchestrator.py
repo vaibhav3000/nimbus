@@ -282,12 +282,12 @@ def test_out_of_stock_waits_instead_of_rejecting():
     assert out.kind == "queued" and "no monitor in stock" in out.reason
 
 
-def test_cross_wing_request_is_rejected_until_hand_over_exists():
+def test_a_serving_cluster_that_is_out_of_stock_makes_the_task_wait_rather_than_borrow_from_the_other_wing():
     orch = make_orch()
     orch.fleet.clusters["west-wing"]["stock"]["iv_pole"] = 0   # west cannot serve its own ward
     orch.fleet.clusters["east-wing"]["stock"]["iv_pole"] = 3
     out = orch.handle_request(new_task(), "iv pole to ward 5")
-    assert out.kind == "queued"  # west is out of stock (transient); east's wing excludes ward 5 (hand-over: next slice)
+    assert out.kind == "queued"  # west covers ward 5 but is out of stock (transient): wait; legs are only for jobs no single cluster covers
 
 
 # -- re-plan (lease v2) ------------------------------------------------------------------------------------------
