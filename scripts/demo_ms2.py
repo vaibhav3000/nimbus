@@ -131,6 +131,11 @@ def sc2(EdgeSim, pack: str) -> None:
     show("status", t["status"])
     show("legs", " | ".join(f"leg{i + 1}: {l.get('source', '(store)')} -> {l['destination']}" for i, l in enumerate(t["legs"] or [])))
     show("lease", lease_line(t["lease"]))
+    if not t["legs"]:
+        say(f"\n  {RED}No legs: the request was read as one delivery inside a single wing (the source 'from 2B' was not "
+            f"picked up), so there is no hand-over to show. Check the spec below.{OFF}")
+        show("spec", t["spec"])
+        return
     if not sim:
         say(f"\n  {YELLOW}Note: on the hand-made map one corridor block plus one closed gate cuts every route, so the cloud will "
             f"raise an operator alert instead of finding a way. Use --pack hospital_sim for the full story.{OFF}")

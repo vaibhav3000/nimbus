@@ -164,3 +164,34 @@ def test_a_commit_error_other_than_conflict_does_not_leak_the_reserved_item():
     with pytest.raises(RuntimeError):
         orch.handle_request(new_task(), "Deliver a wheelchair to 2B-3, routine.")
     assert orch.fleet.clusters["east-wing"]["stock"]["wheelchair"] == before
+
+
+# -- the model's reading of the request is checked against the request's own words ------------------------------
+
+def _spec_call(**kw):
+    base = {"item": "monitor", "destination": "2C", "priority": "routine", "deadline_minutes": 60, "rationale": "r"}
+    return lambda tools, kwargs: tool("submit_task_spec", **{**base, **kw}) if "submit_task_spec" in tools else None
+
+
+def test_a_named_source_the_model_dropped_is_restored_so_the_job_gets_legs():
+    orch = make_orch(override=_spec_call())
+    out = orch.handle_request(new_task(), "Move a monitor from 2A to 2C, routine")
+    assert out.spec["source"] == "2A" and out.legs is not None and len(out.legs) == 2
+
+
+def test_urgent_wording_the_model_missed_is_restored():
+    orch = make_orch(override=_spec_call())
+    out = orch.handle_request(new_task(), "Deliver a monitor to 2C, urgent")
+    assert out.spec["priority"] == "urgent" and out.spec["deadline_minutes"] == 12
+
+
+def test_an_unstated_deadline_takes_the_priority_default_not_the_models_guess():
+    orch = make_orch(override=_spec_call(priority="urgent", deadline_minutes=60, item="wheelchair", destination="ward-3"))
+    out = orch.handle_request(new_task(), "wheelchair to ward 3, urgent")
+    assert out.spec["deadline_minutes"] == 12
+
+
+def test_a_stated_deadline_is_kept():
+    orch = make_orch(override=_spec_call(deadline_minutes=60))
+    out = orch.handle_request(new_task(), "Deliver a monitor to 2C within 20 minutes")
+    assert out.spec["deadline_minutes"] == 20

@@ -178,11 +178,26 @@ class Orchestrator:
             out = self.statements.apply(task, {**payload, "zone": self.topo.anchor_of(payload["zone"])}, text)
             out.notice = f"{notice} {out.notice}" if notice else out.notice
             return out
-        specs = [self._complete_spec(s) for s in (payload if kind == "specs" else [payload])]
+        specs = [self._complete_spec(self._ground(s, text, answer)) for s in (payload if kind == "specs" else [payload])]
         out = self._allocate(task, specs[0], ctx, info, use_llm, notice, request_text=text, answer=answer)
         if out.kind != "clarify":   # after a question the whole message is read again, so extras would be duplicated
             out.children = specs[1:]
         return out
+
+    def _ground(self, spec: dict, text: str, answer: str | None) -> dict:
+        """Check the model's task against the words the requester used. The model may misread or drop a detail
+        the text states plainly, so code restores it: a named source, an urgent wording, an unstated deadline
+        (which takes the priority's default, not whatever number the model liked) or a stated one."""
+        spec = dict(spec)
+        p = nlp.parse(self.pack, self.topo, text, answer=answer)
+        if p.source and not spec.get("source"):
+            spec["source"] = p.source["zone"]
+        default = self.pack.doc["default_priority"]
+        if p.priority != default and spec["priority"] == default:
+            spec["priority"] = p.priority
+        stated = p.deadline_minutes != self.pack.priority(p.priority)["default_deadline_minutes"]
+        spec["deadline_minutes"] = p.deadline_minutes if stated else self.pack.priority(spec["priority"])["default_deadline_minutes"]
+        return spec
 
     def _complete_spec(self, spec: dict) -> dict:
         spec = dict(spec)
