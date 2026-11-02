@@ -330,10 +330,14 @@
     ],
     "allocation": [
       "propose_allocation"
+    ],
+    "step": [
+      "decide_step"
     ]
   },
   "prompts": {
     "intent": "prompts/intent.txt",
-    "allocation": "prompts/allocation.txt"
+    "allocation": "prompts/allocation.txt",
+    "step": "prompts/step.txt"
   }
 }

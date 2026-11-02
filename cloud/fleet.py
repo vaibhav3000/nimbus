@@ -28,6 +28,7 @@ class FleetRegistry:
         self.healthy_s = healthy_s
         self.down_s = down_s
         self._lock = threading.RLock()
+        self._held: dict[tuple, int] = {}   # (cluster, item) -> leased but not yet delivered
         self.clusters: dict[str, dict] = {}
         for cid, c in seed["clusters"].items():
             self.clusters[cid] = {
@@ -63,7 +64,11 @@ class FleetRegistry:
                     if self.zones is not None and known.get("zone") not in self.zones:
                         known.pop("zone", None)   # not a map node: keep the last zone we could route from
                     c["robots"][r["id"]].update(known)
-            self._write_stock(cluster_id, digest.get("stock") or {})
+            # The edge counts what is on its shelves; items already leased out are still there until
+            # delivered, so its digest must not hand them back to the allocator.
+            self._write_stock(cluster_id, {i: max(0, q - self._held.get((cluster_id, i), 0))
+                                           for i, q in (digest.get("stock") or {}).items()
+                                           if isinstance(q, int) and not isinstance(q, bool)})
             return True
 
     def health(self, cluster_id: str) -> str:
@@ -112,12 +117,24 @@ class FleetRegistry:
             if stock.get(item, 0) < 1:
                 return False
             stock[item] -= 1
+            self._held[(cluster_id, item)] = self._held.get((cluster_id, item), 0) + 1
             return True
 
     def release_stock(self, cluster_id: str, item: str) -> None:
         with self._lock:
             stock = self.clusters[cluster_id]["stock"]
             stock[item] = stock.get(item, 0) + 1
+            self._unhold(cluster_id, item)
+
+    def settle_stock(self, cluster_id: str, item: str) -> None:
+        """The item was delivered: it stays consumed, and the edge's own count will say so."""
+        with self._lock:
+            self._unhold(cluster_id, item)
+
+    def _unhold(self, cluster_id: str, item: str) -> None:
+        key = (cluster_id, item)
+        if self._held.get(key, 0) > 0:
+            self._held[key] -= 1
 
     # -- views -----------------------------------------------------------------------
 

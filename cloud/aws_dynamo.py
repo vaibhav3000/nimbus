@@ -229,8 +229,8 @@ class DynamoLeaseRepo:
 
     def release(self, task_id: str) -> list[str]:
         cur = self._get(f"TASK#{task_id}")
-        if not cur:
-            return []
+        if not cur or cur["state"]["S"] == "released":
+            return []   # idempotent: the claims may already belong to another task
         keys = [k["S"] for k in cur["claims"]["L"]]
         ops = [{"Update": {"TableName": self.t["state"], "Key": {"pk": _s(f"TASK#{task_id}")},
                            "UpdateExpression": "SET #s = :r", "ExpressionAttributeNames": {"#s": "state"},

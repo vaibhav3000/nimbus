@@ -99,6 +99,11 @@ class MemoryLeaseRepo:
                 raise Conflict([f"version {version} is not current ({lease['version']})"])
             if parse_iso(new_expiry) <= parse_iso(lease["expiry_ts"]):
                 return dict(lease)  # never shorten authority by renewing
+            # as in the DynamoDB repo: renewing needs the claims to still be ours
+            stolen = [f"robot:{r}" for r in lease["assigned_robots"]
+                      if self.claims.get(f"robot:{r}", {"task_id": task_id})["task_id"] != task_id]
+            if stolen:
+                raise Conflict([f"{k} now held by another task" for k in stolen])
             lease["expiry_ts"] = new_expiry
             for c in self.claims.values():
                 if c["task_id"] == task_id:

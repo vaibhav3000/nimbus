@@ -80,6 +80,6 @@
   },
   "default_template": "delivery",
   "lease": {"speed_limit": 0.6, "expiry_grace_seconds": 120, "when_to_escalate": ["sector_unsafe", "robot_lost", "deadline_at_risk"]},
-  "steps": {"intent": ["submit_task_spec", "ask_clarification"], "allocation": ["propose_allocation"]},
-  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt"}
+  "steps": {"intent": ["submit_task_spec", "ask_clarification"], "allocation": ["propose_allocation"], "step": ["decide_step"]},
+  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt", "step": "prompts/step.txt"}
 }

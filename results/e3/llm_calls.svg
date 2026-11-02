@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 360" font-family="sans-serif" font-size="11">
+<rect width="760" height="360" fill="white"/><text x="60" y="22" font-size="14" font-weight="bold">Cloud LLM calls per task</text>
+<line x1="60" y1="310" x2="740" y2="310" stroke="#999"/>
+<rect x="74.2" y="256.0" width="26.3" height="54.0" fill="#2563eb"><title>T1 C1: 2.0</title></rect>
+<rect x="102.5" y="94.0" width="26.3" height="216.0" fill="#dc2626"><title>T1 C2: 8.0</title></rect>
+<rect x="130.8" y="310.0" width="26.3" height="0.0" fill="#6b7280"><title>T1 C3: 0.0</title></rect>
+<text x="116.7" y="326" text-anchor="middle">T1</text>
+<rect x="187.5" y="256.0" width="26.3" height="54.0" fill="#2563eb"><title>T2 C1: 2.0</title></rect>
+<rect x="215.8" y="94.0" width="26.3" height="216.0" fill="#dc2626"><title>T2 C2: 8.0</title></rect>
+<rect x="244.2" y="310.0" width="26.3" height="0.0" fill="#6b7280"><title>T2 C3: 0.0</title></rect>
+<text x="230.0" y="326" text-anchor="middle">T2</text>
+<rect x="300.8" y="202.0" width="26.3" height="108.0" fill="#2563eb"><title>T3 C1: 4.0</title></rect>
+<rect x="329.2" y="40.0" width="26.3" height="270.0" fill="#dc2626"><title>T3 C2: 10.0</title></rect>
+<rect x="357.5" y="310.0" width="26.3" height="0.0" fill="#6b7280"><title>T3 C3: 0.0</title></rect>
+<text x="343.3" y="326" text-anchor="middle">T3</text>
+<rect x="414.2" y="256.0" width="26.3" height="54.0" fill="#2563eb"><title>T4 C1: 2.0</title></rect>
+<rect x="442.5" y="94.0" width="26.3" height="216.0" fill="#dc2626"><title>T4 C2: 8.0</title></rect>
+<rect x="470.8" y="310.0" width="26.3" height="0.0" fill="#6b7280"><title>T4 C3: 0.0</title></rect>
+<text x="456.7" y="326" text-anchor="middle">T4</text>
+<rect x="527.5" y="175.0" width="26.3" height="135.0" fill="#2563eb"><title>T6 C1: 5.0</title></rect>
+<rect x="555.8" y="175.0" width="26.3" height="135.0" fill="#dc2626"><title>T6 C2: 5.0</title></rect>
+<rect x="584.2" y="310.0" width="26.3" height="0.0" fill="#6b7280"><title>T6 C3: 0.0</title></rect>
+<text x="570.0" y="326" text-anchor="middle">T6</text>
+<rect x="640.8" y="121.0" width="26.3" height="189.0" fill="#2563eb"><title>T8 C1: 7.0</title></rect>
+<rect x="669.2" y="121.0" width="26.3" height="189.0" fill="#dc2626"><title>T8 C2: 7.0</title></rect>
+<rect x="697.5" y="310.0" width="26.3" height="0.0" fill="#6b7280"><title>T8 C3: 0.0</title></rect>
+<text x="683.3" y="326" text-anchor="middle">T8</text>
+<text x="54" y="44" text-anchor="end">10</text><text x="54" y="310" text-anchor="end">0</text>
+<text x="60" y="352" fill="#555">median over seeds</text>
+<rect x="590" y="12" width="10" height="10" fill="#2563eb"/><text x="604" y="21">C1</text>
+<rect x="640" y="12" width="10" height="10" fill="#dc2626"/><text x="654" y="21">C2</text>
+<rect x="690" y="12" width="10" height="10" fill="#6b7280"/><text x="704" y="21">C3</text>
+</svg>

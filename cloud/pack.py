@@ -24,7 +24,7 @@ from jsonschema import Draft202012Validator
 import contracts
 
 PACKS_DIR = Path(__file__).resolve().parents[1] / "packs"
-CORE_TOOLS = {"submit_task_spec", "ask_clarification", "propose_allocation"}
+CORE_TOOLS = {"submit_task_spec", "ask_clarification", "propose_allocation", "decide_step"}
 
 
 class PackError(Exception):

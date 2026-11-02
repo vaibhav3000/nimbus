@@ -44,6 +44,7 @@ from .topology import Topology
 
 RENEW_TTL_S = 180        # a renewal extends authority to now + 3 min
 MAX_OVERRUN_S = 600      # but never beyond deadline + 10 min; past that the cloud must re-decide
+LLM_MODES = ("C1", "C2")   # C3 is the no-LLM baseline; C2 differs from C1 only in who decides at the edge
 REDUCED_AUTONOMY = "Reduced autonomy: the cloud model is unavailable, so deterministic rules are deciding."
 
 
@@ -71,6 +72,7 @@ class Outcome:
     publish: list = field(default_factory=list)  # [(topic, payload)]
     tokens_in: int = 0
     tokens_out: int = 0
+    llm_calls: int = 0                     # model round trips this decision used (NFR-4)
     reservation: dict | None = None
     timings: dict = field(default_factory=dict)  # telemetry only; never in the decision log
 
@@ -171,7 +173,7 @@ class Orchestrator:
         ctx = self.build_context(text + (" " + answer if answer else ""), task["task_id"], probes, history)
         info: dict = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0}
         notice = None
-        use_llm = self.mode == "C1"
+        use_llm = self.mode in LLM_MODES
         parsed = None
         if use_llm:
             try:
@@ -193,7 +195,7 @@ class Orchestrator:
         ctx = self.build_context(task["request_text"], task["task_id"], [])
         return self._allocate(task, task["spec"], ctx,
                               {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0},
-                              self.mode == "C1", None, request_text=task["request_text"], answer=None, retry=True)
+                              self.mode in LLM_MODES, None, request_text=task["request_text"], answer=None, retry=True)
 
     # -- intent -------------------------------------------------------------------
 
@@ -251,7 +253,7 @@ class Orchestrator:
                        {"decision": "ask_clarify", "question": question,
                         "missing_fields": q.get("missing_fields", []), **({"rule": q["rule"]} if q.get("rule") else {}),
                         "llm": _public(info)})],
-            tokens_in=info["input_tokens"], tokens_out=info["output_tokens"],
+            tokens_in=info["input_tokens"], tokens_out=info["output_tokens"], llm_calls=info["calls"],
             timings={"llm_ms": info["_latency_ms"]})
 
     # -- allocation + check + commit ----------------------------------------------
@@ -356,13 +358,13 @@ class Orchestrator:
         ]
         return Outcome("leased", rows=rows, lease=lease, spec=spec, notice=state["notice"],
                        publish=[(f"nimbus/{lease['cluster_id']}/lease", lease)],
-                       tokens_in=info["input_tokens"], tokens_out=info["output_tokens"],
+                       tokens_in=info["input_tokens"], tokens_out=info["output_tokens"], llm_calls=info["calls"],
                        reservation={"cluster": lease["cluster_id"], "item": spec["item"]} if uses_stock else None,
                        timings={"llm_ms": info["_latency_ms"]})
 
     def _no_lease(self, task, spec, attempts, state, ctx, info, request_text, retry) -> Outcome:
         excluded = state.get("excluded", [])
-        extra = {"tokens_in": info["input_tokens"], "tokens_out": info["output_tokens"],
+        extra = {"tokens_in": info["input_tokens"], "tokens_out": info["output_tokens"], "llm_calls": info["calls"],
                  "timings": {"llm_ms": info["_latency_ms"]}}
         if state.get("conflict"):
             excluded = excluded + [{"cluster_id": "-", "reason": "capacity contended by concurrent requests", "transient": True}]
@@ -410,7 +412,13 @@ class Orchestrator:
         errors = contracts.validate_document("lease", lease)
         if errors:
             raise InvalidLeaseError(errors)
-        self.repo.commit(lease, claim_keys_for(lease, self.topo.exclusive_zones()), now=self.clock.now())
+        try:
+            self.repo.commit(lease, claim_keys_for(lease, self.topo.exclusive_zones()), now=self.clock.now())
+        except Conflict as exc:   # the version moved or a claim was taken meanwhile: the caller answers 409
+            why = "; ".join(exc.reasons)
+            return Outcome("replan_failed", reason=why, spec=spec,
+                           rows=[_row("cloud", {"reason": reason, "blocked_zones": blocked_zones},
+                                      {"decision": "replan_failed", "why": why}, cur["version"])])
         pv = {"cluster": lease["cluster_id"], "robots": lease["assigned_robots"], "zones": lease["allowed_zones"]}
         rows = [
             _row("cloud", {"reason": reason, "blocked_zones": blocked_zones, "replaces_version": cur["version"]},
@@ -421,6 +429,83 @@ class Orchestrator:
         ]
         return Outcome("leased", rows=rows, lease=lease, spec=spec,
                        publish=[(f"nimbus/{lease['cluster_id']}/lease", lease)])
+
+    # -- C2: the edge is a thin relay and asks the cloud before every non-reflex step ----------------
+
+    def decide_step(self, task_id: str, version: int, cluster_id: str, event: dict) -> dict:
+        """One cloud round trip for a relayed edge event (configuration C2 only).
+
+        The model answers; deterministic code verifies it stays inside the live
+        lease. If the model is down or answers outside the lease, the C3 rules
+        (retry, then detour, then operator) decide, so the robot is never left
+        waiting on a bad answer. Returns the decision plus what the call cost.
+        """
+        cur = self.repo.current(task_id)
+        if cur is None:
+            return {"error": "no live lease", "status": 404}
+        if version < cur["version"]:
+            raise StaleVersion(cur["version"])
+        if cur["cluster_id"] != cluster_id:
+            return {"error": "lease belongs to another cluster", "status": 409}
+        info: dict = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0}
+        event = dict(event)
+        for key in ("zone", "target"):   # a sub-place is reached through the zone that contains it
+            if event.get(key):
+                event[key] = self.topo.anchor_of(event[key]) or event[key]
+        decision, source, error = None, "llm", None
+        text = ("LEASE: " + json.dumps({k: cur[k] for k in ("allowed_zones", "forbidden_zones", "speed_limit",
+                                                             "assigned_robots", "deadline_ts", "expiry_ts")}, sort_keys=True)
+                + "\nSITUATION: " + json.dumps(event, sort_keys=True))
+        ctx = self.build_context(event.get("situation", ""), task_id, [])
+        try:
+            res = self.llm.converse(system=self.pack.prompts["step"] + "\n\n" + ctx.to_prompt(),
+                                    messages=[{"role": "user", "text": text}], tools=self.tools.names("step"),
+                                    tool_choice="any", context=ctx)
+            self._tally(info, res)
+            call = res.tool_calls[0] if res.tool_calls else None
+            errs = ["no tool call"] if call is None else self.tools.validate(call["name"], call["input"])
+            if not errs:
+                errs = self._step_errors(call["input"], cur, event)
+            if errs:
+                error = "; ".join(errs)
+            else:
+                decision = call["input"]
+        except LLMError as exc:
+            error = str(exc)
+        if decision is None:
+            decision, source = self._step_rules(cur, event), "rules"
+        out = {"action": decision["action"], "via_zones": decision.get("via_zones", []),
+               "rationale": decision["rationale"], "source": source, "lease_version": cur["version"]}
+        row = _row("cloud" if source == "llm" else "rule", {"lease_id": cur["lease_id"], "event": event},
+                   {"decision": "step_" + out["action"], "via_zones": out["via_zones"], "rationale": out["rationale"],
+                    "source": source, **({"rejected_model_answer": error} if error else {}), "llm": _public(info)},
+                   cur["version"])
+        return {"decision": out, "rows": [row], "tokens_in": info["input_tokens"], "tokens_out": info["output_tokens"],
+                "calls": info["calls"], "timings": {"llm_ms": info["_latency_ms"]}}
+
+    @staticmethod
+    def _step_errors(ans: dict, lease: dict, event: dict) -> list[str]:
+        if ans["action"] != "reroute":
+            return []
+        usable = set(lease["allowed_zones"]) - set(lease["forbidden_zones"]) - set(event.get("blocked_zones") or [])
+        via = ans.get("via_zones") or []
+        outside = [z for z in via if z not in usable]
+        return ([f"reroute zones outside the lease or blocked: {outside}"] if outside else []) + \
+               (["reroute needs via_zones"] if not via else [])
+
+    def _step_rules(self, lease: dict, event: dict) -> dict:
+        """C3's finite-state rule: retry once, then detour inside the lease, then hand to the operator."""
+        blocked = set(event.get("blocked_zones") or [])
+        if not blocked:
+            return {"action": "proceed", "rationale": "rules: nothing in the way"}
+        if event.get("attempt", 0) == 0:
+            return {"action": "wait", "rationale": "rules: retry once before detouring"}
+        usable = set(lease["allowed_zones"]) - set(lease["forbidden_zones"])
+        path = self.topo.shortest_path(event["zone"], event["target"], allowed=usable, avoid=blocked) \
+            if event.get("zone") and event.get("target") else None
+        if path:
+            return {"action": "reroute", "via_zones": path, "rationale": "rules: detour inside the lease"}
+        return {"action": "abort", "rationale": "rules: no detour inside the lease, operator decides"}
 
     # -- renewal: LLM-free (FR-6, "no LLM is involved in renewal") -------------------
 
@@ -448,7 +533,7 @@ class Orchestrator:
             return None
         self.publish(f"nimbus/{lease['cluster_id']}/renewal", {
             "lease_id": lease["lease_id"], "version": lease["version"], "expiry_ts": lease["expiry_ts"],
-            "message_id": f"renew-{lease['lease_id']}-{int(now.timestamp())}"})
+            "message_id": f"renew-{lease['lease_id']}-{lease['expiry_ts']}"})
         return lease
 
     # -- lifecycle ------------------------------------------------------------------
@@ -457,12 +542,17 @@ class Orchestrator:
         """Task delivered: free robots and zones; the item stays consumed."""
         self.repo.release(task["task_id"])
         self.scheduler.remove(task["task_id"])
+        res = task.get("reservation")
+        if res and not task.get("stock_released") and not task.get("stock_settled"):
+            self.fleet.settle_stock(res["cluster"], res["item"])
+            task["stock_settled"] = True
 
     def cancel(self, task: dict) -> None:
         """Task cancelled: free robots and zones and give the item back once."""
-        self.finish(task)
+        self.repo.release(task["task_id"])
+        self.scheduler.remove(task["task_id"])
         res = task.get("reservation")
-        if res and not task.get("stock_released"):
+        if res and not task.get("stock_released") and not task.get("stock_settled"):
             self.fleet.return_stock(res["cluster"], res["item"])
             task["stock_released"] = True
 

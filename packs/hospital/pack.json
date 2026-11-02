@@ -102,7 +102,8 @@
   },
   "steps": {
     "intent": ["submit_task_spec", "ask_clarification"],
-    "allocation": ["propose_allocation"]
+    "allocation": ["propose_allocation"],
+    "step": ["decide_step"]
   },
-  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt"}
+  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt", "step": "prompts/step.txt"}
 }

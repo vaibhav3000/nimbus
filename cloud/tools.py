@@ -61,6 +61,15 @@ class ToolRegistry:
                                           "robot_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
                                           "rationale": {"type": "string", "minLength": 1}}},
             },
+            "decide_step": {
+                "class": "propose",
+                "description": ("C2 only: the edge relay has no model, so it asks the cloud what to do next. Answer with "
+                                "proceed, wait, reroute (via zones inside the lease and not blocked) or abort."),
+                "schema": {"type": "object", "additionalProperties": False, "required": ["action", "rationale"],
+                           "properties": {"action": {"enum": ["proceed", "wait", "reroute", "abort"]},
+                                          "via_zones": {"type": "array", "items": {"type": "string"}},
+                                          "rationale": {"type": "string", "minLength": 1}}},
+            },
         }
         for t in self._tools.values():
             Draft202012Validator.check_schema(t["schema"])

@@ -61,7 +61,10 @@ class RuleBasedLLM:
                  context: Context | None = None, fleet_view=None) -> LLMResult:
         t0 = time.perf_counter()
         prompt = system + "\n" + "\n".join(m["text"] for m in messages)
-        call = self._allocate(messages, fleet_view) if "propose_allocation" in tools else self._intent(messages)
+        if "decide_step" in tools:
+            call = self._step(messages)
+        else:
+            call = self._allocate(messages, fleet_view) if "propose_allocation" in tools else self._intent(messages)
         out = json.dumps(call)
         return LLMResult(
             tool_calls=[call], input_tokens=_est_tokens(prompt), output_tokens=_est_tokens(out),
@@ -81,6 +84,21 @@ class RuleBasedLLM:
             if v["kind"] == "clarify":  # a model reads the rule in its context and asks
                 return {"name": "ask_clarification", "input": v["question"]}
         return {"name": "submit_task_spec", "input": spec}
+
+    def _step(self, messages: list) -> dict:
+        """What a model would do with a relayed event: carry on unless the way ahead is blocked."""
+        ev = json.loads(messages[-1]["text"].split("SITUATION:", 1)[1].strip().splitlines()[0])
+        lease = json.loads(messages[-1]["text"].split("LEASE:", 1)[1].split("SITUATION:", 1)[0].strip())
+        blocked = set(ev.get("blocked_zones") or [])
+        if not blocked:
+            return {"name": "decide_step", "input": {"action": "proceed", "rationale": "nothing in the way"}}
+        usable = set(lease["allowed_zones"]) - set(lease["forbidden_zones"])
+        path = self.topo.shortest_path(ev["zone"], ev["target"], allowed=usable, avoid=blocked) \
+            if ev.get("zone") and ev.get("target") else None
+        if path:
+            return {"name": "decide_step", "input": {"action": "reroute", "via_zones": path,
+                                                     "rationale": "shortest route inside the lease that avoids the blocked zones"}}
+        return {"name": "decide_step", "input": {"action": "abort", "rationale": "no route inside the lease"}}
 
     def _allocate(self, messages: list, fleet_view) -> dict:
         spec = json.loads(messages[-1]["text"].split("TASK_SPEC:", 1)[1].strip().splitlines()[0])
