@@ -127,7 +127,8 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
         elif path == "/fleet":
-            self._send_json(200, {"fleet": self.orch.fleet.snapshot(), "mode": self.orch.mode,
+            self._send_json(200, {"fleet": self.orch.fleet.snapshot(), "places": self.orch.fleet.place_snapshot(),
+                                  "mode": self.orch.mode,
                                   "llm": getattr(self.orch.llm, "model_id", "?"), "pack": self.orch.pack.id})
         elif path == "/pack":
             pk = self.orch.pack

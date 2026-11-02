@@ -38,8 +38,11 @@ class FleetRegistry:
                 "stock": dict(c["stock"]),
                 "last_seen": None,  # datetime | None
             }
+        # Equipment that sits in a place other than a store (e.g. spare pumps in a ward). Durable rows use the
+        # pseudo-cluster id "@<place>" so the stock table needs no new shape.
+        self.places: dict[str, dict] = {p: dict(items) for p, items in seed.get("places", {}).items()}
         if self.stock_store is not None:
-            self.stock_store.seed(self.clusters)   # rows that are missing only: a restart keeps real counts
+            self.stock_store.seed({**self.clusters, **{"@" + p: {"stock": i} for p, i in self.places.items()}})   # rows that are missing only: a restart keeps real counts
             self.sync_stock()
 
     @classmethod
@@ -103,6 +106,25 @@ class FleetRegistry:
             for cid, items in self.stock_store.load().items():
                 if cid in self.clusters:
                     self.clusters[cid]["stock"].update(items)
+                elif cid.startswith("@") and cid[1:] in self.places:
+                    self.places[cid[1:]].update(items)
+
+    def place_stock(self, place: str) -> dict:
+        with self._lock:
+            return {i: q for i, q in self.places.get(place, {}).items() if q > 0}
+
+    def move_stock(self, place: str, cluster_id: str, item: str, n: int = 1) -> bool:
+        """Equipment carried from a place into a cluster's store. False (and nothing moves) if the place holds fewer than n."""
+        with self._lock:
+            held = self.places.get(place, {})
+            if n < 1 or held.get(item, 0) < n:
+                return False
+            held[item] -= n
+            self.clusters[cluster_id]["stock"][item] = self.clusters[cluster_id]["stock"].get(item, 0) + n
+            if self.stock_store is not None:
+                self.stock_store.add("@" + place, item, -n)
+                self.stock_store.add(cluster_id, item, n)
+            return True
 
     def return_stock(self, cluster_id: str, item: str) -> None:
         """Give an item back for good (a cancelled task): memory and the durable row."""
@@ -156,3 +178,7 @@ class FleetRegistry:
                     "stock": dict(sorted(c["stock"].items())),
                 })
             return out
+
+    def place_snapshot(self) -> dict:
+        with self._lock:
+            return {p: dict(sorted(i.items())) for p, i in sorted(self.places.items())}
