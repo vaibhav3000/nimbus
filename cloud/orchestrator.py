@@ -22,7 +22,6 @@ import hashlib
 import json
 import os
 import time
-from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 
@@ -35,6 +34,9 @@ from .clock import Clock, iso, parse_iso
 from .context import Context
 from .fleet import FleetRegistry
 from .mapstate import MapState
+from .notify import Notifier
+from .orchestrator_types import LLM_MODES, Outcome, row as _row
+from .react import Reactor
 from .leases import Conflict, MemoryLeaseRepo, claim_keys_for
 from .llm import CircuitBreakerLLM, LLMError, RuleBasedLLM
 from .pack import Pack
@@ -45,7 +47,6 @@ from .topology import Topology
 
 RENEW_TTL_S = 180        # a renewal extends authority to now + 3 min
 MAX_OVERRUN_S = 600      # but never beyond deadline + 10 min; past that the cloud must re-decide
-LLM_MODES = ("C1", "C2")   # C3 is the no-LLM baseline; C2 differs from C1 only in who decides at the edge
 REDUCED_AUTONOMY = "Reduced autonomy: the cloud model is unavailable, so deterministic rules are deciding."
 
 
@@ -59,27 +60,6 @@ class StaleVersion(Exception):
     def __init__(self, current: int):
         super().__init__(f"current lease version is {current}")
         self.current = current
-
-
-@dataclass
-class Outcome:
-    kind: str                              # clarify | leased | queued | rejected | replan_failed
-    rows: list = field(default_factory=list)   # {"who","inputs","output","lease_version"}
-    question: dict | None = None
-    lease: dict | None = None
-    spec: dict | None = None
-    reason: str | None = None
-    notice: str | None = None
-    publish: list = field(default_factory=list)  # [(topic, payload)]
-    tokens_in: int = 0
-    tokens_out: int = 0
-    llm_calls: int = 0                     # model round trips this decision used (NFR-4)
-    reservation: dict | None = None
-    timings: dict = field(default_factory=dict)  # telemetry only; never in the decision log
-
-
-def _row(who, inputs, output, version=None) -> dict:
-    return {"who": who, "inputs": inputs, "output": output, "lease_version": version}
 
 
 def _sha(lease: dict) -> str:
@@ -99,6 +79,8 @@ class Orchestrator:
         self.scheduler, self.llm, self.clock = scheduler, llm, clock
         self.tools = ToolRegistry(pack)
         self.mapstate = MapState(topo)
+        self.notifier = Notifier(clock)
+        self.react = Reactor(self)
         self.mode, self.allow_unknown = mode, allow_unknown
         self.publish = publish or (lambda topic, payload: None)
         self.probe_timeout_s = probe_timeout_s
@@ -337,6 +319,10 @@ class Orchestrator:
                     attempts[-1]["conflict"] = exc.reasons
                     state["feedback"], state["conflict"] = "; ".join(exc.reasons), True
                     continue
+                except Exception:   # a throttle or network error must not leak the reserved item
+                    if uses_stock:
+                        self.fleet.release_stock(prop.cluster_id, spec["item"])
+                    raise
                 committed = (prop, res, lease)
                 break
             if committed or not state["conflict"]:

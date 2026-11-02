@@ -15,11 +15,12 @@ import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import threading
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from typing import Any, Callable
 
 import contracts
 from cloud.clock import iso
+from cloud.notify import Notice
 from cloud.orchestrator import InvalidLeaseError, Orchestrator, StaleVersion
 from cost import CostBook
 from mqtt_transport import is_mqtt_enabled, make_mqtt_transport_from_env
@@ -130,6 +131,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"fleet": self.orch.fleet.snapshot(), "places": self.orch.fleet.place_snapshot(),
                                   "mode": self.orch.mode,
                                   "llm": getattr(self.orch.llm, "model_id", "?"), "pack": self.orch.pack.id})
+        elif path == "/notifications":
+            q = parse_qs(urlparse(self.path).query)
+            self._send_json(200, {"notifications": self.orch.notifier.for_audience(
+                (q.get("audience") or [None])[0], (q.get("task_id") or [None])[0])})
         elif path == "/pack":
             pk = self.orch.pack
             self._send_json(200, {"id": pk.id, "name": pk.name, "version": pk.doc["version"],
@@ -340,6 +345,9 @@ class Handler(BaseHTTPRequestHandler):
         if dup:
             return
 
+        if task.get("edge_question"):   # the edge asked (CLARIFY) and the cloud passed it on: relay the answer back
+            self._relay_edge_answer(task, text, message_id)
+            return
         with _STATE_LOCK:
             task["message_id"] = message_id
             question = task["question"]
@@ -416,6 +424,23 @@ class Handler(BaseHTTPRequestHandler):
             if action == "cancel":
                 self._drain()
         self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
+
+    def _relay_edge_answer(self, task: dict, text: str, message_id: str) -> None:
+        """P3: the requester answered a question the edge asked. Log it, tell the cluster, resume the task."""
+        lease = task.get("lease") or {}
+        with _STATE_LOCK:
+            self.store.append_decision(self._row("requester", {"text": text, "question": task["question"]},
+                                                 {"event": "clarification_answered"}, lease.get("version"), task["task_id"]))
+            entry, pub = self.orch.notifier.send(Notice("cluster", text, type="ANSWER", cluster_id=lease.get("cluster_id"),
+                                                        task_id=task["task_id"], lease_version=lease.get("version")))
+            if pub:
+                self.publish(*pub)
+            task["status"], task["question"], task["edge_question"] = "leased", None, False
+            self.store.put_task(task)
+            self.store.see_message_id(message_id)
+            self.cost.record(iot_messages=1 if pub else 0, dynamodb_ops=2)
+        self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"],
+                              "relayed_to": lease.get("cluster_id")})
 
     def _post_heartbeat(self, body: dict):
         """Cluster-level liveness with no lease attached (an idle cluster has
@@ -740,15 +765,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"accepted": True, "fault": state})
 
 
-def _blocked_zones(topo, payload: dict) -> list[str]:
-    """Zones an UNEXPECTED_EVENT says are unusable: structured segments first,
-    otherwise any known zone id named in its 'where' text."""
-    zones = [s["segment_id"] for s in payload.get("segments", [])
-             if isinstance(s, dict) and s.get("state") in ("blocked", "closed", "crowded")
-             and s.get("segment_id") in topo.nodes]
-    if not zones:
-        zones = [n for n in topo.nodes if re.search(rf"(?<![\w-]){re.escape(n)}(?![\w-])", payload.get("where", ""), re.I)]
-    return sorted(set(zones))
+def _blocked_zones(topo, payload: dict) -> list[str]:  # kept for callers; the logic lives in cloud/react.py
+    from cloud.react import blocked_zones
+    return blocked_zones(topo, payload)
 
 
 def process_escalation(
@@ -808,12 +827,23 @@ def process_escalation(
         cost.record(**cost_map)
 
         replanned = None
-        if esc_type == "UNEXPECTED_EVENT" and task.get("spec") and task.get("lease"):
-            blocked = _blocked_zones(orch.topo, body["payload"])
-            if blocked:
-                outcome = orch.replan(task, blocked_zones=blocked, reason=body["payload"]["what_happened"])
-                apply_fn(task, outcome)
-                replanned = outcome.kind == "leased"
+        answer = None
+        if esc_type in ("UNEXPECTED_EVENT", "CLARIFY") and task.get("lease"):
+            react = (orch.react.on_event(task, body["payload"]) if esc_type == "UNEXPECTED_EVENT"
+                     else orch.react.on_clarify(task, body["payload"], body["lease_version"]))
+            for r in react.rows:
+                store.append_decision(make_decision_row(orch, r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
+            cost.record(llm_calls=react.llm_calls, input_tokens=react.tokens_in, output_tokens=react.tokens_out,
+                        iot_messages=len(react.publish), dynamodb_ops=len(react.rows))
+            for topic, payload in react.publish:
+                orch.publish(topic, payload)
+            if react.outcome is not None:
+                apply_fn(task, react.outcome)
+                replanned = react.outcome.kind == "leased"
+            if react.question:
+                task["status"], task["question"], task["edge_question"] = "needs_clarification", react.question, True
+                store.put_task(task)
+            answer = react.answer
 
         if esc_type == "OUTPUT_READY":
             drain_fn()
@@ -821,6 +851,8 @@ def process_escalation(
         reply = {"duplicate": False, "accepted": True, "status": task["status"]}
         if replanned is not None:
             reply.update(replanned=replanned, lease_version=task["lease"]["version"])
+        if answer is not None:
+            reply["answer"] = answer
         return 201, reply
 
 

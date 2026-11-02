@@ -109,6 +109,14 @@ class FleetRegistry:
                 elif cid.startswith("@") and cid[1:] in self.places:
                     self.places[cid[1:]].update(items)
 
+    def robot_zone(self, robot_id: str) -> str | None:
+        """Where the edge last said this robot is (a map node), or None if it never has."""
+        with self._lock:
+            for c in self.clusters.values():
+                if robot_id in c["robots"]:
+                    return c["robots"][robot_id].get("zone")
+        return None
+
     def place_stock(self, place: str) -> dict:
         with self._lock:
             return {i: q for i, q in self.places.get(place, {}).items() if q > 0}

@@ -96,10 +96,12 @@ def check(spec: dict, proposal: Proposal, view: FleetView, *, holds_stock: bool 
             start = src if src is not None else topo.home_of(proposal.cluster_id)
             routes = topo.routes(start, dest, allowed=zones - set(restricted), avoid=set(restricted))
             approach: list = []
-            if routes and src is not None and not unknown:
+            if routes and not unknown:
                 here = cluster["robots"][proposal.robot_ids[0]]["zone"]
-                if here != start:   # the robot must be able to reach the pickup inside the lease
-                    approach = topo.shortest_path(here, start, allowed=zones - set(restricted), avoid=set(restricted)) or []
+                if here != start:   # the robot must be able to get from where it is to the start inside the lease
+                    # a robot standing in a zone that has just been shut may leave it, so `here` is not avoided
+                    shut = set(restricted) - {here}
+                    approach = topo.shortest_path(here, start, allowed=(zones - shut) | {here}, avoid=shut) or []
                     if not approach:
                         routes = []
             if routes:

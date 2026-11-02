@@ -14,6 +14,7 @@ All return LLMResult with token usage, which feeds the PRD cost formula.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -63,6 +64,10 @@ class RuleBasedLLM:
         prompt = system + "\n" + "\n".join(m["text"] for m in messages)
         if "decide_step" in tools:
             call = self._step(messages)
+        elif "replan" in tools:
+            call = self._react_event(messages[0]["text"])
+        elif "ask_requester" in tools:
+            call = self._react_clarify(messages[0]["text"])
         else:
             call = self._allocate(messages, fleet_view) if "propose_allocation" in tools else self._intent(messages)
         out = json.dumps(call)
@@ -84,6 +89,21 @@ class RuleBasedLLM:
             if v["kind"] == "clarify":  # a model reads the rule in its context and asks
                 return {"name": "ask_clarification", "input": v["question"]}
         return {"name": "submit_task_spec", "input": spec}
+
+    @staticmethod
+    def _react_event(text: str) -> dict:
+        """A model reading BLOCKED_ZONES would avoid them; with none named there is nothing to change."""
+        zones = ast.literal_eval(text.split("BLOCKED_ZONES:", 1)[1].splitlines()[0].strip())
+        if zones:
+            return {"name": "replan", "input": {"avoid_zones": zones, "rationale": "route around the reported zones"}}
+        return {"name": "no_action", "input": {"rationale": "no zone was reported"}}
+
+    @staticmethod
+    def _react_clarify(text: str) -> dict:
+        """The stand-in has no knowledge to answer from, so it passes the question to the requester."""
+        question = text.split("CLARIFY from the edge:", 1)[1].splitlines()[0].strip()
+        readings = ast.literal_eval(text.split("POSSIBLE_READINGS:", 1)[1].splitlines()[0].strip())
+        return {"name": "ask_requester", "input": {"question": question, "possible_readings": readings}}
 
     def _step(self, messages: list) -> dict:
         """What a model would do with a relayed event: carry on unless the way ahead is blocked."""
