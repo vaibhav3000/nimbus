@@ -25,6 +25,11 @@ class Topology:
         self.destination_kinds = set(pack.ontology["destination_kinds"])
         self.source_kinds = set(pack.ontology["source_kinds"])
         self._locators = [dict(l, _rx=re.compile(l["pattern"], re.IGNORECASE)) for l in pack.doc["locators"]]
+        # Optional per-node "aliases": other names a node answers to (case-insensitive).
+        self._alias: dict[str, str] = {}
+        for node_id, attrs in self.nodes.items():
+            for name in attrs.get("aliases", []):
+                self._alias[name.lower()] = node_id
         self.adj: dict[str, dict[str, float]] = {n: {} for n in self.nodes}
         for a, b, w in doc["edges"]:
             self.adj[a][b] = w
@@ -38,8 +43,28 @@ class Topology:
     def exclusive_zones(self) -> set[str]:
         return {n for n, d in self.nodes.items() if d.get("exclusive")}
 
+    def resolve_node(self, name: str) -> str | None:
+        """A node id, or the node an alias names; None when it is neither."""
+        if name in self.nodes:
+            return name
+        return self._alias.get(name.lower())
+
     def source_of(self, area: str) -> str:
+        """Where stock is kept for an area: the home of a cluster that covers it,
+        else a source node placed in that area."""
+        for cid, a in sorted(self.cluster_area.items()):
+            if a == area and (home := self._fleet_home(cid)):
+                return home
         return next(n for n, d in self.nodes.items() if d["kind"] in self.source_kinds and d["area"] == area)
+
+    def home_of(self, cluster_id: str) -> str:
+        """The store a cluster's robots start from and collect items at: the
+        fleet's declared home, falling back to a source node in its area."""
+        return self._fleet_home(cluster_id) or self.source_of(self.cluster_area[cluster_id])
+
+    def _fleet_home(self, cluster_id: str) -> str | None:
+        home = self.pack.fleet_doc["clusters"].get(cluster_id, {}).get("home")
+        return home if home in self.nodes else None
 
     def cluster_zones(self, cluster_id: str) -> set[str]:
         """Zones a cluster's robots may use: its area plus the shared passages."""
@@ -47,9 +72,10 @@ class Topology:
         return {n for n, d in self.nodes.items() if d["area"] in (area, "shared")}
 
     def anchor_of(self, zone: str) -> str | None:
-        """The routable node a zone belongs to (a node is its own anchor)."""
-        if zone in self.nodes:
-            return zone
+        """The routable node a zone belongs to (a node is its own anchor, then an
+        alias, then a locator)."""
+        if (node := self.resolve_node(zone)):
+            return node
         hit = self.locate(zone)
         return hit["anchor"] if hit else None
 
@@ -70,10 +96,18 @@ class Topology:
         anchor = self.anchor_of(zone)
         if anchor is None:
             return {"zone": zone}
-        label = self.nodes[anchor].get("noun") or self.nodes[anchor]["kind"]
+        label = self.nodes[anchor].get("label") or self.nodes[anchor].get("noun") or self.nodes[anchor]["kind"]
         if zone not in self.nodes and (hit := self.locate(zone)):
             label = hit["label"]
         return {**self.nodes[anchor], "zone": zone, "anchor": anchor, "label": label}
+
+    def canonical_zone(self, zone: str) -> str:
+        """The name a lease should use for a zone: a node id when the text is a
+        node or an alias (or a locator that resolves to one), else unchanged."""
+        if (node := self.resolve_node(zone)):
+            return node
+        hit = self.locate(zone)
+        return hit["zone"] if hit else zone
 
     def speed_cap(self, zone: str) -> float | None:
         a = self.anchor_of(zone)
@@ -97,6 +131,8 @@ class Topology:
                         vals[f"n{i}"] = int(g)
                 if loc["type"] == "child":
                     parent = loc["parent"].format(**vals)
+                    parent = self.resolve_node(parent) or parent
+                    vals["parent"] = parent
                     pn = self.nodes.get(parent)
                     if not pn or pn["kind"] not in loc["parent_kinds"]:
                         continue
@@ -104,6 +140,7 @@ class Topology:
                         return {"zone": loc["id"].format(**vals), "anchor": parent, "label": loc["label"]}
                     return None
                 node = loc["id"].format(**vals)
+                node = self.resolve_node(node) or node
                 n = self.nodes.get(node)
                 if n and (not loc.get("kinds") or n["kind"] in loc["kinds"]):
                     return {"zone": node, "anchor": node, "label": loc["label"]}

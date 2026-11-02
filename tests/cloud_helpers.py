@@ -38,13 +38,14 @@ def tool(name, **inp):
     return LLMResult(tool_calls=[{"name": name, "input": inp}], input_tokens=10, output_tokens=5, model_id="scripted")
 
 
-def make_orch(*, clock=None, override=None, mode="C1", allow_unknown=True, published=None, repo=None, pack=None):
+def make_orch(*, clock=None, override=None, mode="C1", allow_unknown=True, published=None, repo=None, pack=None,
+              fleet=None):
     clock = clock or FixedClock()
     pack = pack or Pack.load("hospital")
     topo = Topology(pack)
     published = published if published is not None else []
     orch = Orchestrator(
-        pack=pack, topo=topo, fleet=FleetRegistry.load(clock, pack), policies=PolicyBook(pack),
+        pack=pack, topo=topo, fleet=fleet or FleetRegistry.load(clock, pack), policies=PolicyBook(pack),
         repo=repo or MemoryLeaseRepo(), scheduler=Scheduler(pack.ranks), llm=ScriptedLLM(pack, topo, override),
         clock=clock, mode=mode, allow_unknown=allow_unknown,
         publish=lambda topic, payload: published.append((topic, payload)))

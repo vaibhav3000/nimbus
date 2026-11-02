@@ -169,8 +169,12 @@ class Pack:
         for cid, area in self.topology_doc["clusters"].items():
             if area not in areas:
                 problems.append(f"cluster {cid}: area {area!r} has no nodes")
-            elif not any(n["kind"] in d["ontology"]["source_kinds"] and n["area"] == area for n in nodes.values()):
-                problems.append(f"cluster {cid}: area {area!r} has no source node")
+            else:
+                home = self.fleet_doc["clusters"].get(cid, {}).get("home")
+                home_is_source = home in nodes and nodes[home]["kind"] in d["ontology"]["source_kinds"]
+                if not home_is_source and not any(
+                        n["kind"] in d["ontology"]["source_kinds"] and n["area"] == area for n in nodes.values()):
+                    problems.append(f"cluster {cid}: area {area!r} has no source node")
         for cid, c in self.fleet_doc["clusters"].items():
             if cid not in self.topology_doc["clusters"]:
                 problems.append(f"fleet cluster {cid!r} is not in topology.json clusters")

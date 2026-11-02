@@ -20,7 +20,7 @@ from cloud.tools import ToolRegistry
 from cloud_helpers import make_orch, new_task
 from datetime import timedelta
 
-PACK_NAMES = ["hospital", "rescue"]
+PACK_NAMES = ["hospital", "hospital_sim", "rescue"]
 SCENARIOS = [(n, s) for n in PACK_NAMES for s in Pack.load(n).scenarios]
 
 
