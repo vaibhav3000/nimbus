@@ -69,7 +69,7 @@ def simulate(robots: int, arr: list[dict], seed: int) -> dict:
         os.environ["NIMBUS_PACK"] = str(Path(d) / "scale10")
         os.environ["NIMBUS_MODE"] = "C1"
         clock = FixedClock()
-        orch = Orchestrator.from_env(Path(d), clock=clock)
+        orch = Orchestrator.from_env(Path(d), clock=clock, backend="local")
         for cid in orch.fleet.clusters:
             orch.fleet.heartbeat(cid, {})
         tasks, events, rows = {}, [], []

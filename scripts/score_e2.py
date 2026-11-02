@@ -39,7 +39,7 @@ def make_orch(config: str) -> Orchestrator:
     os.environ["NIMBUS_MODE"] = config
     tmp = tempfile.TemporaryDirectory()          # kept alive with the orchestrator, which writes its state there
     try:
-        orch = Orchestrator.from_env(Path(tmp.name), clock=FixedClock())
+        orch = Orchestrator.from_env(Path(tmp.name), clock=FixedClock(), backend="local")
         orch._tmp = tmp
     finally:
         os.environ.pop("NIMBUS_MODE", None) if previous is None else os.environ.__setitem__("NIMBUS_MODE", previous)

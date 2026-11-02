@@ -116,7 +116,9 @@ class Orchestrator:
         self.probe_timeout_s = probe_timeout_s
 
     @classmethod
-    def from_env(cls, data_dir: Path, publish=None, clock: Clock | None = None) -> "Orchestrator":
+    def from_env(cls, data_dir: Path, publish=None, clock: Clock | None = None, backend: str | None = None) -> "Orchestrator":
+        """Build from the environment. `backend="local"` forces in-process storage whatever NIMBUS_BACKEND says (experiment
+        tools must be hermetic: two runs must not share a DynamoDB prefix)."""
         clock = clock or Clock()
         pack = Pack.load()
         topo = Topology(pack)
@@ -134,7 +136,7 @@ class Orchestrator:
             mode = os.environ.get("NIMBUS_CASSETTE_MODE", "replay")
             llm = CassetteLLM(llm if mode == "record" else None, Path(os.environ["NIMBUS_CASSETTE"]), mode)
         stock_store = None
-        if os.environ.get("NIMBUS_BACKEND", "local") == "aws":
+        if (backend or os.environ.get("NIMBUS_BACKEND", "local")) == "aws":
             from .aws_dynamo import DynamoLeaseRepo, DynamoStockStore
             from .durable import DynamoDurable
             repo = DynamoLeaseRepo.from_env()

@@ -37,7 +37,7 @@ def scenario(seed: int) -> list[dict]:
     clock = FixedClock()
     with tempfile.TemporaryDirectory() as d:
         os.environ["NIMBUS_MODE"] = "C1"
-        orch = Orchestrator.from_env(Path(d), clock=clock)
+        orch = Orchestrator.from_env(Path(d), clock=clock, backend="local")
         for cid in orch.fleet.clusters:
             orch.fleet.heartbeat(cid, {})
         rows, tasks = [], {}

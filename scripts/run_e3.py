@@ -74,7 +74,7 @@ def new_orch(config: str, workdir: Path, clock: FixedClock) -> Orchestrator:
     previous = os.environ.get("NIMBUS_MODE")
     os.environ["NIMBUS_MODE"] = config          # read once, at construction; restored so nothing else in the process is affected
     try:
-        orch = Orchestrator.from_env(workdir, clock=clock)
+        orch = Orchestrator.from_env(workdir, clock=clock, backend="local")
     finally:
         if previous is None:
             os.environ.pop("NIMBUS_MODE", None)
