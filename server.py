@@ -9,6 +9,7 @@ touching these routes. Endpoints are the public seam; see SPEC-P4.md.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -57,7 +58,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- helpers ---------------------------------------------------------
 
     def _send_json(self, status: int, body: dict) -> None:
-        data = json.dumps(body).encode("utf-8")
+        data = json.dumps(body, allow_nan=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
@@ -138,6 +139,8 @@ class Handler(BaseHTTPRequestHandler):
                                   "tools": {s: self.orch.tools.names(s) for s in pk.doc["steps"]}})
         elif path == "/outbox":
             self._send_json(200, {"outbox": self.store.outbox()})
+        elif path == "/fault":
+            self._send_json(200, self._fault_view())
         elif path.startswith("/schemas/"):
             self._send_schema(path[len("/schemas/"):])
         else:
@@ -197,6 +200,8 @@ class Handler(BaseHTTPRequestHandler):
             self._post_checkin(body)
         elif path.startswith("/tasks/") and path.endswith("/control"):
             self._post_control(path.split("/")[2], body)
+        elif path == "/fault":
+            self._post_fault(body)
         else:
             self._send_json(404, {"error": f"no route for {path}"})
 
@@ -470,6 +475,228 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_json(201, {"duplicate": False, "task_id": task_id, "lease": task["lease"]})
 
+    def _fault_view(self) -> dict:
+        """Returns active network fault state for operator UI / diagnostics."""
+        with _STATE_LOCK:
+            state = None
+            # 1. Server in-memory state (set via POST /fault or tests)
+            if getattr(self.server, "fault_state", None):
+                state = dict(self.server.fault_state)
+                state.setdefault("active", True)
+
+            # 2. Check data_dir / fault_status.json
+            if state is None:
+                data_dir = getattr(self, "data_dir", None) or Path("data")
+                status_file = data_dir / "fault_status.json"
+                if not status_file.exists():
+                    status_file = Path("data/fault_status.json")
+                if status_file.exists():
+                    try:
+                        data = json.loads(status_file.read_text(encoding="utf-8"))
+                        if isinstance(data, dict):
+                            state = dict(data)
+                    except Exception:
+                        pass
+
+            # 3. Environment variable fallback (NIMBUS_FAULT_PROFILE)
+            if state is None:
+                env_profile = os.environ.get("NIMBUS_FAULT_PROFILE", "").lower().strip()
+                if env_profile:
+                    try:
+                        from scripts.fault_harness import PRESET_PROFILES
+                        if env_profile in PRESET_PROFILES:
+                            p = PRESET_PROFILES[env_profile]
+                            state = {
+                                "active": env_profile != "healthy",
+                                "profile": p.name,
+                                "latency_ms": p.latency_ms,
+                                "jitter_ms": p.jitter_ms,
+                                "loss_rate": p.loss_rate,
+                                "disconnected": p.disconnected,
+                            }
+                    except Exception:
+                        pass
+
+            # 4. Default: healthy / no fault active
+            if state is None:
+                state = {
+                    "active": False,
+                    "profile": "healthy",
+                    "latency_ms": 0.0,
+                    "jitter_ms": 0.0,
+                    "loss_rate": 0.0,
+                    "disconnected": False,
+                }
+
+            # Normalize telemetry metrics & strictly ensure finite numbers
+            def _clean_float(val, default=0.0):
+                if isinstance(val, (int, float)) and not isinstance(val, bool):
+                    f = float(val)
+                    if math.isfinite(f):
+                        return max(0.0, f)
+                return default
+
+            def _clean_int(val, default=0):
+                if isinstance(val, int) and not isinstance(val, bool):
+                    return max(0, min(val, 2_147_483_647))
+                return default
+
+            state["latency_ms"] = _clean_float(state.get("latency_ms"), 0.0)
+            state["jitter_ms"] = _clean_float(state.get("jitter_ms"), 0.0)
+            state["loss_rate"] = max(0.0, min(1.0, _clean_float(state.get("loss_rate"), 0.0)))
+            state["packets_dropped"] = _clean_int(state.get("packets_dropped"), 0)
+            state["packets_forwarded"] = _clean_int(state.get("packets_forwarded"), 0)
+            state["bytes_forwarded"] = _clean_int(state.get("bytes_forwarded"), 0)
+            state["disconnected"] = bool(state.get("disconnected", False))
+            state["active"] = bool(state.get("active", False))
+            state["profile"] = str(state.get("profile", "healthy"))
+
+            lat = state["latency_ms"]
+            loss_pct = round(state["loss_rate"] * 100, 1)
+            fwd = state["packets_forwarded"]
+            drop = state["packets_dropped"]
+            if state.get("disconnected"):
+                state["summary"] = f"PARTITIONED (100% loss) | pkts: {fwd} fwd / {drop} drop"
+            elif state.get("active"):
+                state["summary"] = f"{lat:.1f}ms latency, {loss_pct}% loss | pkts: {fwd} fwd / {drop} drop"
+            else:
+                state["summary"] = "healthy (0ms, 0% loss)"
+
+            return state
+
+    def _post_fault(self, body: dict) -> None:
+        """Set or clear active network fault state (local-only endpoint)."""
+        if not isinstance(body, dict):
+            self._send_json(400, {"error": "body must be a json object"})
+            return
+        with _STATE_LOCK:
+            data_dir = getattr(self, "data_dir", None) or Path("data")
+            status_file = data_dir / "fault_status.json"
+            MAX_INT = 2_147_483_647
+
+            # 1. Strict validation of body field types
+            if "profile" in body:
+                if not isinstance(body["profile"], str):
+                    self._send_json(400, {"error": "profile must be a string"})
+                    return
+                profile_name = body["profile"].lower().strip()
+            else:
+                profile_name = "custom"
+
+            if "active" in body and not isinstance(body["active"], bool):
+                self._send_json(400, {"error": "active must be a boolean"})
+                return
+
+            if "disconnected" in body and not isinstance(body["disconnected"], bool):
+                self._send_json(400, {"error": "disconnected must be a boolean"})
+                return
+
+            # Integer counters: reject bools, non-ints, non-finite, and negatives; cap large integers
+            for k in ("packets_forwarded", "packets_dropped", "bytes_forwarded"):
+                if k in body:
+                    val = body[k]
+                    if isinstance(val, bool) or not isinstance(val, int):
+                        self._send_json(400, {"error": f"{k} must be an integer (no bools or strings allowed)"})
+                        return
+                    if val < 0:
+                        self._send_json(400, {"error": f"{k} must be non-negative"})
+                        return
+
+            # Float parameters: reject bools, non-numbers, non-finite (NaN/Inf), and out-of-range
+            for k in ("latency_ms", "jitter_ms"):
+                if k in body:
+                    val = body[k]
+                    if isinstance(val, bool) or not isinstance(val, (int, float)):
+                        self._send_json(400, {"error": f"{k} must be a number (no bools or strings allowed)"})
+                        return
+                    if not math.isfinite(val):
+                        self._send_json(400, {"error": f"{k} must be a finite number (NaN and Infinity not allowed)"})
+                        return
+                    if val < 0:
+                        self._send_json(400, {"error": f"{k} must be non-negative"})
+                        return
+
+            if "loss_rate" in body:
+                val = body["loss_rate"]
+                if isinstance(val, bool) or not isinstance(val, (int, float)):
+                    self._send_json(400, {"error": "loss_rate must be a number (no bools or strings allowed)"})
+                    return
+                if not math.isfinite(val):
+                    self._send_json(400, {"error": "loss_rate must be a finite number (NaN and Infinity not allowed)"})
+                    return
+                if not (0.0 <= val <= 1.0):
+                    self._send_json(400, {"error": "loss_rate must be between 0.0 and 1.0"})
+                    return
+
+            # 2. Handle clear / healthy profile
+            if profile_name in ("none", "healthy", "clear") or body.get("active") is False:
+                self.server.fault_state = None
+                for p in (status_file, Path("data/fault_status.json")):
+                    try:
+                        if p.exists():
+                            p.unlink()
+                    except Exception:
+                        pass
+                self._send_json(200, {"accepted": True, "fault": self._fault_view()})
+                return
+
+            # 3. Preset profile resolution
+            try:
+                from scripts.fault_harness import PRESET_PROFILES
+                p = PRESET_PROFILES.get(profile_name)
+            except Exception:
+                p = None
+                PRESET_PROFILES = {}
+
+            if p is None and profile_name not in ("custom",):
+                valid = list(PRESET_PROFILES.keys()) if PRESET_PROFILES else ["healthy", "mild_wan", "shielded_room", "severe", "basement_outage"]
+                self._send_json(400, {"error": f"unknown fault profile: '{profile_name}'. Expected one of {valid} or 'custom'"})
+                return
+
+            def_lat = p.latency_ms if p else 0.0
+            def_jit = p.jitter_ms if p else 0.0
+            def_loss = p.loss_rate if p else 0.0
+            def_disc = p.disconnected if p else False
+
+            lat = float(body.get("latency_ms", def_lat))
+            jit = float(body.get("jitter_ms", def_jit))
+            loss = float(body.get("loss_rate", def_loss))
+            disc = bool(body.get("disconnected", def_disc))
+
+            prev = getattr(self.server, "fault_state", {}) or {}
+            fwd = min(MAX_INT, int(body.get("packets_forwarded", prev.get("packets_forwarded", 0))))
+            drop = min(MAX_INT, int(body.get("packets_dropped", prev.get("packets_dropped", 0))))
+            bytes_fwd = min(MAX_INT, int(body.get("bytes_forwarded", prev.get("bytes_forwarded", 0))))
+
+            state = {
+                "active": profile_name != "healthy",
+                "profile": p.name if p else profile_name,
+                "latency_ms": lat,
+                "jitter_ms": jit,
+                "loss_rate": loss,
+                "disconnected": disc,
+                "packets_forwarded": fwd,
+                "packets_dropped": drop,
+                "bytes_forwarded": bytes_fwd,
+            }
+
+            loss_pct = round(state["loss_rate"] * 100, 1)
+            if state["disconnected"]:
+                state["summary"] = f"PARTITIONED (100% loss) | pkts: {fwd} fwd / {drop} drop"
+            elif state["active"]:
+                state["summary"] = f"{lat:.1f}ms latency, {loss_pct}% loss | pkts: {fwd} fwd / {drop} drop"
+            else:
+                state["summary"] = "healthy (0ms, 0% loss)"
+
+            self.server.fault_state = state
+            try:
+                data_dir.mkdir(parents=True, exist_ok=True)
+                status_file.write_text(json.dumps(state, allow_nan=False), encoding="utf-8")
+            except Exception:
+                pass
+
+            self._send_json(200, {"accepted": True, "fault": state})
+
 
 def _blocked_zones(topo, payload: dict) -> list[str]:
     """Zones an UNEXPECTED_EVENT says are unusable: structured segments first,
@@ -619,6 +846,8 @@ def process_checkin(
 
 class NimbusServer(ThreadingHTTPServer):
     transport = None
+    fault_state = None
+    data_dir = None
 
     def server_close(self):
         if self.transport:
@@ -715,13 +944,14 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
     handler = type(
         "BoundHandler",
         (Handler,),
-        {"store": store, "cost": cost, "orch": orch, "publish": staticmethod(publish)},
+        {"store": store, "cost": cost, "orch": orch, "publish": staticmethod(publish), "data_dir": data_dir},
     )
     server_inst = NimbusServer((host, port), handler)
     server_inst.transport = transport
     server_inst.store = store
     server_inst.cost = cost
     server_inst.orch = orch
+    server_inst.data_dir = data_dir
     return server_inst
 
 
