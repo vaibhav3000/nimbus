@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import http.client
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -54,6 +55,7 @@ class EdgeSim:
         self.api, self.cluster = api.rstrip("/"), cluster
         self.complete, self.block, self.state = complete, block, state
         self.robot_zone = robot_zone      # where the robot is parked when it reports; sent as a map node, as the contract says
+        self.token = os.environ.get("NIMBUS_EDGE_TOKEN")   # sent as a Bearer token when the cloud requires one
         self.pace = pace                  # 0: instant (old behaviour). > 0: drive leases at lease speed x pace
         self.robot_id: str | None = None  # learned from the first lease
         self.stopped: set[str] = set()    # tasks the cloud told this cluster to stop (a lease whose only step is `stop`)
@@ -67,6 +69,8 @@ class EdgeSim:
         req = urlreq.Request(self.api + path, data=data, method=method)
         if data:
             req.add_header("Content-Type", "application/json")
+        if self.token:
+            req.add_header("Authorization", f"Bearer {self.token}")
         try:
             with urlreq.urlopen(req, timeout=timeout) as resp:
                 raw = resp.read().decode("utf-8")

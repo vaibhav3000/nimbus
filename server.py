@@ -8,6 +8,7 @@ touching these routes. Endpoints are the public seam; see SPEC-P4.md.
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import math
@@ -16,6 +17,7 @@ import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import threading
+import time
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Callable
 
@@ -44,6 +46,29 @@ def make_decision_row(orch: Orchestrator, who: str, inputs: dict, output: dict, 
         "timestamp": iso(orch.clock.now()),
         "task_id": task_id,
     }
+
+
+_EMF_STATE = {"last": 0.0, "calls": 0}
+
+
+def emit_metrics(orch, tasks: list) -> None:
+    """CloudWatch Embedded Metric Format line every NIMBUS_EMF_EVERY_S seconds (default 60) when NIMBUS_EMF=1."""
+    if os.environ.get("NIMBUS_EMF") != "1" or time.time() - _EMF_STATE["last"] < float(os.environ.get("NIMBUS_EMF_EVERY_S", "60")):
+        return
+    from cloud.metrics import emf_line
+    snap = orch.metrics.snapshot()
+    calls = snap["counters"].get("llm_calls", 0)
+    r2l = snap["latency"].get("request_to_lease_s", {})
+    llm = snap["latency"].get("llm_latency_ms", {})
+    values = {"QueueDepth": (len(orch.scheduler.ordered()), "Count"), "LiveLeases": (len(orch.repo.live_leases()), "Count"),
+              "LlmCallsSinceLast": (calls - _EMF_STATE["calls"], "Count"),
+              "HealthyClusters": (sum(c["health"] == "healthy" for c in orch.fleet.snapshot()), "Count")}
+    if r2l:
+        values["RequestToLeaseP95"] = (r2l["p95"], "Seconds")
+    if llm:
+        values["LlmLatencyP95"] = (llm["p95"], "Milliseconds")
+    print(emf_line("Nimbus", {"Service": "nimbus-cloud", "Pack": orch.pack.name}, values, int(time.time() * 1000)), flush=True)
+    _EMF_STATE["last"], _EMF_STATE["calls"] = time.time(), calls
 
 
 def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
@@ -113,6 +138,9 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
             apply_outcome(orch, store, cost, publish, queued, out)
 
 
+EDGE_PATHS = ("/checkins", "/escalations", "/fleet/heartbeat", "/outbox", "/relay/decide")
+
+
 class Handler(BaseHTTPRequestHandler):
     store: Store  # injected per server instance
     cost: CostBook
@@ -171,8 +199,22 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- routes ----------------------------------------------------------
 
+    def _edge_authorised(self, path: str) -> bool:
+        """NFR-5: when NIMBUS_EDGE_TOKEN is set, the edge-facing endpoints need `Authorization: Bearer <token>`.
+        (Requester and operator pages are protected in front by API Gateway; MQTT and SQS by IAM.)"""
+        token = os.environ.get("NIMBUS_EDGE_TOKEN")
+        if not token or path not in EDGE_PATHS:
+            return True
+        given = self.headers.get("Authorization", "")
+        ok = given.startswith("Bearer ") and hmac.compare_digest(given[7:].encode(), token.encode())
+        if not ok:
+            self._send_json(401, {"error": "edge token required"})
+        return ok
+
     def do_GET(self):
         path = urlparse(self.path).path
+        if not self._edge_authorised(path):
+            return
         if path == "/":
             self._send_static("index.html")
         elif path == "/app.js":
@@ -201,6 +243,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(
                 200, {"tasks": [self._task_view(t) for t in self.store.all_tasks()]}
             )
+        elif path == "/metrics":
+            tasks = self.store.all_tasks()
+            snap = self.orch.metrics.snapshot()
+            snap["gauges"] = {"queue_depth": len(self.orch.scheduler.ordered()), "live_leases": len(self.orch.repo.live_leases()),
+                              "tasks_by_status": {s: sum(t["status"] == s for t in tasks) for s in sorted({t["status"] for t in tasks})},
+                              "clusters": {c["cluster_id"]: c["health"] for c in self.orch.fleet.snapshot()}}
+            snap["cost"] = self.cost.snapshot()
+            self._send_json(200, snap)
         elif path == "/trace":
             q = parse_qs(urlparse(self.path).query)
             self._send_json(200, {"events": self.orch.trace.events(after=int((q.get("after") or ["0"])[0]),
@@ -273,6 +323,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if not self._edge_authorised(path):
+            return
         try:
             body = self._read_json()
         except ValueError as exc:
@@ -363,6 +415,7 @@ class Handler(BaseHTTPRequestHandler):
     def _decide(self, task: dict, run, *, created: bool = False) -> bool:
         """Run one orchestrator decision and answer the caller. Returns False
         after sending an error, in which case nothing more may be sent."""
+        started = time.perf_counter()
         try:
             outcome = run()          # may call the model: not under the state lock
         except InvalidLeaseError as exc:
@@ -372,6 +425,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.store.put_task(task)
             self._send_json(500, {"error": "orchestrator produced an invalid lease", "detail": exc.errors})
             return False
+        self.orch.metrics.inc("requests")
+        self.orch.metrics.inc(f"outcome_{outcome.kind}")
+        if outcome.kind == "leased":      # NFR-1: a request becomes a lease within 30 s (p95)
+            self.orch.metrics.observe("request_to_lease_s", time.perf_counter() - started)
         with _STATE_LOCK:
             self._apply(task, outcome)
             view = {"duplicate": False, "task_id": task["task_id"], "status": task["status"]}
@@ -1129,7 +1186,9 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
 
     def tick_once():
         """One pass of the time-driven work (cloud/ticker.py): expiries, deadlines, silent clusters, queue."""
-        res = orch.ticker.tick(store.all_tasks())          # may plan (model calls): outside the lock
+        tasks = store.all_tasks()
+        res = orch.ticker.tick(tasks)                      # may plan (model calls): outside the lock
+        emit_metrics(orch, tasks)
         for task, outcome in res.apply:
             apply_fn(task, outcome)
         with _STATE_LOCK:

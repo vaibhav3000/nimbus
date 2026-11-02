@@ -81,3 +81,39 @@ def test_over_http_a_finished_task_has_a_summary_a_notice_and_an_archive(api):
     assert any(tid in n["text"] for n in http_json("GET", api + "/notifications?audience=requester")[1]["notifications"])
     _, tl = http_json("GET", api + f"/tasks/{tid}/timeline")
     assert any(r["output"].get("decision") == "summarise_result" for r in tl["timeline"])
+
+
+# -- the lease bundle (data and rules the edge needs, beside the unchanged lease) -----------------------------------------------
+
+def test_every_lease_comes_with_a_small_bundle_on_the_notice_topic(api):
+    import json
+    _, b = http_json("POST", api + "/requests", {"text": "Deliver a wheelchair to 2B-3, routine.", "message_id": "bd1"})
+    out = http_json("GET", api + "/outbox")[1]["outbox"]
+    lease = next(r for r in out if r["topic"].endswith("/lease"))
+    bundle = next(r for r in out if r["topic"] == "nimbus/east-wing/notice" and r["payload"].get("type") == "BUNDLE")["payload"]
+    assert bundle["lease_id"] == lease["payload"]["lease_id"] and bundle["lease_version"] == 1
+    m = bundle["bundle"]
+    assert m["map"]["nodes"] and set(m["map"]["nodes"]) <= set(lease["payload"]["allowed_zones"]) and m["guidance"]["escalate_when"] == lease["payload"]["when_to_escalate"]
+    assert m["map"]["edges"] and len(json.dumps(bundle)) <= 4600
+    assert set(lease["payload"]) == {"lease_id", "version", "priority", "deadline_ts", "expiry_ts", "allowed_zones", "forbidden_zones",
+                                     "speed_limit", "assigned_robots", "task_sequence", "cluster_id", "when_to_escalate"}   # still 12 fields
+
+
+def test_bundle_carries_rules_restrictions_and_closures_in_force():
+    from cloud.bundle import build_bundle
+    orch = make_orch()
+    orch.policies.declare("2A", "isolation"); orch.mapstate.report("E3", "blocked", "east-wing", orch.clock.now())
+    t = new_task(1, "x"); out = orch.handle_request(t, "Deliver a wheelchair to 2B-3, routine.")
+    b = build_bundle(orch, out.lease, out.spec)
+    assert b["restrictions"].get("2A", {}).get("kind") == "isolation" or "2A" not in out.lease["allowed_zones"]
+    assert "E3" not in b["map"]["nodes"] or b["closed"].get("E3") == "blocked"
+    assert any(r["id"] for r in b["rules"])
+
+
+def test_bundle_is_stored_in_s3_when_a_bucket_is_configured_and_can_be_switched_off(monkeypatch):
+    orch = make_orch(); s3 = FakeS3(); orch.results = ResultStore(bucket="mine", client=s3)
+    t = new_task(1, "x"); out = orch.handle_request(t, "Deliver a wheelchair to 2B-3, routine.")
+    topic, msg = out.publish[1]
+    assert msg["bundle_ref"] == f"s3://mine/bundles/{out.lease['lease_id']}.json" and ("mine", f"bundles/{out.lease['lease_id']}.json") in s3.objects
+    monkeypatch.setenv("NIMBUS_BUNDLES", "0")
+    assert len(make_orch().handle_request(new_task(2, "x"), "Deliver a wheelchair to 2B-3, routine.").publish) == 1

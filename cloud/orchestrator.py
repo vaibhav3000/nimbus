@@ -30,10 +30,12 @@ import contracts
 from . import leasebuilder, nlp
 from .allocator import FleetView, eligible_options, needs_stock
 from .checker import Proposal, check
+from .bundle import bundle_publish
 from .clock import Clock, iso, parse_iso
 from .context import Context
 from .fleet import FleetRegistry
 from .mapstate import MapState
+from .metrics import Metrics
 from .memory import Memory
 from .notify import Notifier
 from .trace import Trace, TracingLLM, task_scope
@@ -97,8 +99,9 @@ class Orchestrator:
         if durable is not None:
             fleet.status_sink = durable.put_robot
         self.trace = Trace()
+        self.metrics = Metrics()
         if not isinstance(llm, TracingLLM):
-            self.llm = TracingLLM(llm, self.trace)
+            self.llm = TracingLLM(llm, self.trace, self.metrics)
         self._freed = 0          # robots/claims given back by this process (finish, cancel, hold, expiry)
         self.statements = Statements(self)
         self.ticker = Ticker(self)
@@ -146,6 +149,12 @@ class Orchestrator:
                    publish=publish, probe_timeout_s=float(os.environ.get("NIMBUS_PROBE_TIMEOUT", "0")))
 
     # -- context + health check --------------------------------------------------
+
+    def _lease_publish(self, lease: dict, spec: dict) -> list:
+        """The lease, then (if enabled) the bundle of data and rules the edge needs for it (cloud/bundle.py)."""
+        out = [(f"nimbus/{lease['cluster_id']}/lease", lease)]
+        extra = bundle_publish(self, lease, spec)
+        return out + ([extra] if extra else [])
 
     def epoch(self) -> int:
         """A number that changes whenever something a queued task could be waiting on changes: a robot freed, a
@@ -575,7 +584,7 @@ class Orchestrator:
                  {"decision": "issue_lease", "lease_id": lease["lease_id"], "sha256": _sha(lease)}, lease["version"]),
         ]
         return Outcome("leased", rows=rows, lease=lease, spec=spec, notice=state["notice"],
-                       publish=[(f"nimbus/{lease['cluster_id']}/lease", lease)],
+                       publish=self._lease_publish(lease, spec),
                        tokens_in=info["input_tokens"], tokens_out=info["output_tokens"], llm_calls=info["calls"],
                        reservation={"cluster": lease["cluster_id"], "item": spec["item"]} if uses_stock else None,
                        timings={"llm_ms": info["_latency_ms"]})
@@ -646,7 +655,7 @@ class Orchestrator:
                  {"decision": "issue_lease", "lease_id": lease["lease_id"], "sha256": _sha(lease)}, lease["version"]),
         ]
         return Outcome("leased", rows=rows, lease=lease, spec=spec,
-                       publish=[(f"nimbus/{lease['cluster_id']}/lease", lease)])
+                       publish=self._lease_publish(lease, spec))
 
     # -- hand-over between clusters: legs, and re-assignment after a closure (SC-2, FR-16) ----------------
 

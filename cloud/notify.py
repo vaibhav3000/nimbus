@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass
 from .clock import Clock, iso
 
 AUDIENCES = ("requester", "operator", "cluster", "place")
-TYPES = ("ANSWER", "WARNING", "MAP", "STOP")
+TYPES = ("ANSWER", "WARNING", "MAP", "STOP", "BUNDLE")
 
 
 @dataclass

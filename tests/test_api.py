@@ -209,7 +209,7 @@ def test_sc1_answer_publishes_lease_to_outbox(api):
     )
     status, out = http_json("GET", api + "/outbox")
     assert status == 200
-    rows = out["outbox"]
+    rows = [r for r in out["outbox"] if r["topic"].endswith("/lease")]     # a bundle for the lease rides on the notice topic
     assert len(rows) == 1
     assert rows[0]["topic"] == "nimbus/east-wing/lease"
     assert contracts.validate_document("lease", rows[0]["payload"]) == []
@@ -300,7 +300,7 @@ def test_concurrent_requests_all_survive(api):
     # wait their turn. No robot may ever hold two live leases (Person 3).
     assert statuses.count("leased") == 3 and statuses.count("queued") == 9
     _, out = http_json("GET", api + "/outbox")
-    robots = [r["payload"]["assigned_robots"][0] for r in out["outbox"]]
+    robots = [r["payload"]["assigned_robots"][0] for r in out["outbox"] if r["topic"].endswith("/lease")]
     assert len(robots) == len(set(robots)) == 3
 
 

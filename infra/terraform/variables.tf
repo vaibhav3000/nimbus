@@ -50,3 +50,9 @@ variable "nimbus_mode" {
   type        = string
   default     = "C1"
 }
+
+variable "knowledge_base_id" {
+  description = "Bedrock Knowledge Base id for rule retrieval (FR-19). Empty keeps keyword retrieval from the pack."
+  type        = string
+  default     = ""
+}

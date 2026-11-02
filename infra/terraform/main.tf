@@ -110,6 +110,10 @@ resource "aws_ecs_task_definition" "app" {
         { name = "NIMBUS_BEDROCK_MODEL", value = var.bedrock_model_id },
         { name = "NIMBUS_MODE", value = var.nimbus_mode },
         { name = "NIMBUS_DDB_PREFIX", value = local.name_prefix },
+        { name = "NIMBUS_RESULTS_BUCKET", value = aws_s3_bucket.outputs.bucket },
+        { name = "NIMBUS_SQS_QUEUE_URL", value = aws_sqs_queue.escalations.url },
+        { name = "NIMBUS_EMF", value = "1" },
+        { name = "NIMBUS_KB_ID", value = var.knowledge_base_id },
       ]
       logConfiguration = {
         logDriver = "awslogs"

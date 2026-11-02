@@ -59,8 +59,8 @@ def _step_of(tools: list[str]) -> str:
 class TracingLLM:
     """Wraps any model object and records each call: what it was asked, what it answered, how long it took."""
 
-    def __init__(self, inner, trace: Trace):
-        self.inner, self.trace = inner, trace
+    def __init__(self, inner, trace: Trace, metrics=None):
+        self.inner, self.trace, self.metrics = inner, trace, metrics
 
     def __getattr__(self, name):          # tests and the cost code reach through to the wrapped model
         return getattr(self.inner, name)
@@ -73,10 +73,15 @@ class TracingLLM:
         try:
             res = self.inner.converse(**kw)
         except Exception as exc:
+            if self.metrics is not None:
+                self.metrics.inc("llm_errors")
             self.trace.add("cloud", "model", "llm-error", f"{step}: {type(exc).__name__}: {exc}",
                            detail={"step": step, "tools": kw.get("tools", [])})
             raise
         ms = int((time.perf_counter() - t0) * 1000)
+        if self.metrics is not None:
+            self.metrics.inc("llm_calls"); self.metrics.inc("llm_tokens_in", res.input_tokens); self.metrics.inc("llm_tokens_out", res.output_tokens)
+            self.metrics.observe("llm_latency_ms", ms)
         calls = [{"name": c["name"], "input": c["input"]} for c in res.tool_calls]
         self.trace.add("cloud", "model", "llm", f"{step}: {', '.join(c['name'] for c in calls) or 'no tool call'}  "
                        f"({res.input_tokens} in / {res.output_tokens} out tokens, {ms} ms)",
