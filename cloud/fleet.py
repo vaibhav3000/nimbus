@@ -38,7 +38,7 @@ class FleetRegistry:
                 "stock": dict(c["stock"]),
                 "last_seen": None,  # datetime | None
             }
-        # Equipment that sits in a place other than a store (e.g. spare pumps in a ward). Durable rows use the
+        # Equipment that sits in a place other than a store (e.g. spare units kept in a room). Durable rows use the
         # pseudo-cluster id "@<place>" so the stock table needs no new shape.
         self.places: dict[str, dict] = {p: dict(items) for p, items in seed.get("places", {}).items()}
         if self.stock_store is not None:
