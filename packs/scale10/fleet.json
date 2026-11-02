@@ -1,0 +1,57 @@
+{
+ "note": "Generated seed fleet.",
+ "clusters": {
+  "wing0-cluster": {
+   "home": "store",
+   "area": "wing0",
+   "robots": [
+    "r00",
+    "r01",
+    "r02",
+    "r03"
+   ],
+   "stock": {
+    "wheelchair": 40,
+    "iv_pole": 40,
+    "monitor": 40,
+    "blanket": 200,
+    "infusion_pump": 40,
+    "infusion_pump_paediatric": 20
+   }
+  },
+  "wing1-cluster": {
+   "home": "store",
+   "area": "wing1",
+   "robots": [
+    "r10",
+    "r11",
+    "r12"
+   ],
+   "stock": {
+    "wheelchair": 40,
+    "iv_pole": 40,
+    "monitor": 40,
+    "blanket": 200,
+    "infusion_pump": 40,
+    "infusion_pump_paediatric": 20
+   }
+  },
+  "wing2-cluster": {
+   "home": "store",
+   "area": "wing2",
+   "robots": [
+    "r20",
+    "r21",
+    "r22"
+   ],
+   "stock": {
+    "wheelchair": 40,
+    "iv_pole": 40,
+    "monitor": 40,
+    "blanket": 200,
+    "infusion_pump": 40,
+    "infusion_pump_paediatric": 20
+   }
+  }
+ }
+}
