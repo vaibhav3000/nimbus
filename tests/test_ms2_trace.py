@@ -17,7 +17,7 @@ def test_a_request_leaves_a_readable_conversation_with_model_calls_and_the_lease
     _, b = http_json("POST", api + "/requests", {"text": "Deliver a wheelchair to ward 3, routine.", "message_id": "tr1"})
     ev = http_json("GET", api + f"/tasks/{b['task_id']}/trace")[1]["events"]
     kinds = [e["kind"] for e in ev]
-    assert kinds.count("llm") == 2 and "lease" in kinds and ev[0]["from"] == "requester"
+    assert kinds.count("llm") == 1 and "lease" in kinds and ev[0]["from"] == "requester"
     assert [e["seq"] for e in ev] == sorted(e["seq"] for e in ev)
     llm = next(e for e in ev if e["kind"] == "llm" and e["detail"]["step"] == "intent")
     assert "submit_task_spec" in llm["summary"] and llm["detail"]["asked"].startswith("Deliver a wheelchair")

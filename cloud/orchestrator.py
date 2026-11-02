@@ -86,6 +86,7 @@ class Orchestrator:
         self.trace = Trace()
         if not isinstance(llm, TracingLLM):
             self.llm = TracingLLM(llm, self.trace)
+        self._freed = 0          # robots/claims given back by this process (finish, cancel, hold, expiry)
         self.statements = Statements(self)
         self.load_task = lambda task_id: None    # the HTTP layer plugs in its task store
         self.react = Reactor(self)
@@ -124,6 +125,11 @@ class Orchestrator:
                    publish=publish, probe_timeout_s=float(os.environ.get("NIMBUS_PROBE_TIMEOUT", "0")))
 
     # -- context + health check --------------------------------------------------
+
+    def epoch(self) -> int:
+        """A number that changes whenever something a queued task could be waiting on changes: a robot freed, a
+        cluster's health, robots or stock, a restriction or a closure. A queued task is retried only when it moved."""
+        return self._freed + self.fleet.version + self.policies.version + self.mapstate.version
 
     def view(self, task_id: str | None = None, extra_forbidden: dict | None = None, exclude=()) -> FleetView:
         return FleetView(self.topo, self.fleet, self.repo, self.policies, self.clock, self.pack,
@@ -222,6 +228,7 @@ class Orchestrator:
         stop = self.stand_down(task, reason)
         if stop.kind != "stood_down":
             return stop
+        self._freed += 1
         self.repo.free_claims(task["task_id"])
         res = task.get("reservation")
         if res and not task.get("stock_released") and not task.get("stock_settled"):
@@ -328,8 +335,11 @@ class Orchestrator:
 
     # -- allocation + check + commit ----------------------------------------------
 
-    def _llm_proposal(self, spec, ctx, view, feedback, info) -> Proposal:
+    def _llm_proposal(self, spec, ctx, view, feedback, info, options=None) -> Proposal:
         text = "TASK_SPEC: " + json.dumps(spec, sort_keys=True)
+        if options:   # the code has already ranked who could do this: the model chooses among them, it does not search
+            text += "\nCANDIDATES (nearest first): " + json.dumps(
+                [{"cluster_id": o.cluster_id, "robot_id": o.robot_id, "distance_m": round(o.distance, 1)} for o in options[:8]])
         if feedback:
             text += "\nYour previous proposal was rejected: " + feedback
         res = self.llm.converse(system=self.pack.prompts["allocation"] + "\n\n" + ctx.to_prompt(),
@@ -344,13 +354,20 @@ class Orchestrator:
         return Proposal(i["cluster_id"], i["robot_ids"], i["rationale"], "llm")
 
     def _candidates(self, spec, ctx, view, use_llm, info, attempts, state):
-        """Yield proposals in preference order: the LLM's (two tries, the second
-        with the checker's feedback), then the classical allocator's ranking."""
-        if use_llm:
+        """Yield proposals in preference order. The code ranks who is eligible first. With nobody eligible there is
+        nothing to propose (no model call). With one eligible cluster the choice is made (nearest free robot) and
+        the model is not asked. Only when two or more clusters could take the task does the model choose among
+        the ranked candidates (twice at most, the second time with the checker's reasons); then the ranking."""
+        options, excluded = eligible_options(spec, view)
+        state["excluded"] = [e.__dict__ for e in excluded]
+        if not options:
+            return
+        clusters = list(dict.fromkeys(o.cluster_id for o in options))
+        if use_llm and len(clusters) >= 2:
             feedback = None
             for _ in range(2):
                 try:
-                    prop = self._llm_proposal(spec, ctx, view, feedback, info)
+                    prop = self._llm_proposal(spec, ctx, view, feedback, info, options)
                 except LLMError as exc:
                     attempts.append({"source": "llm", "error": str(exc)})
                     state["notice"] = REDUCED_AUTONOMY
@@ -360,10 +377,9 @@ class Orchestrator:
                 feedback = state.get("feedback")
                 if not feedback:
                     return
-        options, excluded = eligible_options(spec, view)
-        state["excluded"] = [e.__dict__ for e in excluded]
+        why = "nearest free robot" if len(clusters) >= 2 else f"only {clusters[0]} can take it; nearest free robot"
         for opt in options:
-            yield Proposal(opt.cluster_id, [opt.robot_id], "nearest free robot", "classical")
+            yield Proposal(opt.cluster_id, [opt.robot_id], why, "classical")
 
     def _allocate(self, task, spec, ctx, info, use_llm, notice, *, request_text, answer, retry=False,
                   exclude=()) -> Outcome:
@@ -738,6 +754,7 @@ class Orchestrator:
 
     def finish(self, task: dict) -> None:
         """Task delivered: free robots and zones; the item stays consumed."""
+        self._freed += 1
         self.repo.release(task["task_id"])
         self.scheduler.remove(task["task_id"])
         res = task.get("reservation")
@@ -753,6 +770,7 @@ class Orchestrator:
 
     def cancel(self, task: dict) -> None:
         """Task cancelled: free robots and zones and give the item back once."""
+        self._freed += 1
         self.repo.release(task["task_id"])
         self.scheduler.remove(task["task_id"])
         res = task.get("reservation")
@@ -764,12 +782,16 @@ class Orchestrator:
         """Retry queued tasks in priority/deadline order after capacity frees.
         Returns [(task, Outcome)] for the tasks that got a lease."""
         done = []
+        ep = self.epoch()
         for entry in self.scheduler.ordered():
+            if entry.tried_epoch == ep:      # nothing it could be waiting on has changed since it last failed
+                continue
             task = load_task(entry.task_id)
             if task is None or task["status"] != "queued":
                 self.scheduler.remove(entry.task_id)
                 continue
             out = self.retry_queued(task)
+            self.scheduler.mark_tried(entry.task_id, ep)
             if out.kind == "leased":
                 done.append((task, out))
         return done

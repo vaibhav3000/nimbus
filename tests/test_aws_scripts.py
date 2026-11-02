@@ -72,12 +72,16 @@ def test_smoke_live_script_passes_end_to_end_and_tears_down(aws, capsys, monkeyp
 def test_prompt_alone_is_enough_to_allocate_and_busy_robots_are_visible(aws):
     """The emulator never sees Python objects: allocation worked only because the
     prompt carries health, free robots and stock. Busy robots must show up too."""
+    from cloud.pack import Pack
     from cloud_helpers import make_orch, new_task
-    orch = make_orch()
+    # ward 3 is a shared place on P1's map, so two clusters can take it and the model really has a choice to make
+    orch = make_orch(pack=Pack.load("hospital_sim"))
     orch.llm = __import__("cloud.llm", fromlist=["BedrockLLM"]).BedrockLLM("m", orch.tools, client=aws)
     first = orch.handle_request(new_task(1), "Deliver a wheelchair to ward 3")
     second = orch.handle_request(new_task(2), "Deliver a wheelchair to ward 3")
-    assert first.rows[0]["output"]["proposed_by"] == "llm" and second.rows[0]["output"]["proposed_by"] == "llm"
-    assert first.lease["assigned_robots"] != second.lease["assigned_robots"]  # second prompt marked R1 busy
+    # first: two clusters could take it, so the model chose. second: robot_1 is busy, only the west cluster is left, so the
+    # choice is already made and the model is not asked.
+    assert first.rows[0]["output"]["proposed_by"] == "llm" and second.rows[0]["output"]["proposed_by"] == "classical"
+    assert first.lease["assigned_robots"] != second.lease["assigned_robots"]  # second prompt marked robot_1 busy
     prompt = aws.requests[-1]["system"][0]["text"]
-    assert "R1=busy" in prompt and "east-wing area=east health=unknown" in prompt and "SOP-ISO-02" not in prompt
+    assert "robot_1=busy" in prompt and "east-wing area=east health=unknown" in prompt and "SOP-ISO-02" not in prompt

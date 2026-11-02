@@ -28,6 +28,7 @@ class FleetRegistry:
         self.healthy_s = healthy_s
         self.down_s = down_s
         self._lock = threading.RLock()
+        self.version = 0                    # bumped whenever something a queued task could be waiting on changes
         self._held: dict[tuple, int] = {}   # (cluster, item) -> leased but not yet delivered
         self.clusters: dict[str, dict] = {}
         for cid, c in seed["clusters"].items():
@@ -59,7 +60,10 @@ class FleetRegistry:
             c = self.clusters.get(cluster_id)
             if c is None:
                 return False
+            before_health = self.health(cluster_id)
             c["last_seen"] = self.clock.now()
+            if self.health(cluster_id) != before_health:
+                self.version += 1
             digest = digest or {}
             for r in digest.get("robots", []):
                 if r.get("id") in c["robots"]:
@@ -69,7 +73,10 @@ class FleetRegistry:
                         known.pop("pos")      # optional metres in the map frame; used only to draw the robot smoothly
                     if self.zones is not None and known.get("zone") not in self.zones:
                         known.pop("zone", None)   # not a map node: keep the last zone we could route from
+                    old = {k: c["robots"][r["id"]].get(k) for k in ("state", "zone")}
                     c["robots"][r["id"]].update(known)
+                    if any(known.get(k, old[k]) != old[k] for k in old):
+                        self.version += 1
             # The edge counts what is on its shelves; items already leased out are still there until
             # delivered, so its digest must not hand them back to the allocator.
             self._write_stock(cluster_id, {i: max(0, q - self._held.get((cluster_id, i), 0))
@@ -94,6 +101,8 @@ class FleetRegistry:
             if isinstance(qty, int) and not isinstance(qty, bool) and qty >= 0:
                 if self.stock_store is not None and stock.get(item) != qty:
                     self.stock_store.set(cluster_id, item, qty)
+                if stock.get(item) != qty:
+                    self.version += 1
                 stock[item] = qty
         return dict(stock)
 
@@ -157,6 +166,7 @@ class FleetRegistry:
         with self._lock:
             stock = self.clusters[cluster_id]["stock"]
             stock[item] = stock.get(item, 0) + 1
+            self.version += 1
             self._unhold(cluster_id, item)
 
     def settle_stock(self, cluster_id: str, item: str) -> None:

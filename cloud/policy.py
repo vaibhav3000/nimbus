@@ -25,6 +25,7 @@ class PolicyBook:
         self._docs = pack.policy_docs
         self._kinds = pack.restrictions
         self._active: dict[str, dict] = {}  # zone -> {"kind","source"}
+        self.version = 0                    # bumped on declare/lift: a held task may now be placeable
         self._lock = threading.Lock()
         self._topo = Topology(pack)
 
@@ -53,10 +54,12 @@ class PolicyBook:
             raise KeyError(f"unknown restriction kind {kind!r}; this pack defines {sorted(self._kinds)}")
         with self._lock:
             self._active[self._node(zone)] = {"kind": kind, "source": source}
+            self.version += 1
 
     def lift(self, zone: str) -> None:
         with self._lock:
             self._active.pop(self._node(zone), None)
+            self.version += 1
 
     def restrictions(self) -> dict[str, dict]:
         """zone -> {kind, policy, effect, exempt_priorities, source}."""
