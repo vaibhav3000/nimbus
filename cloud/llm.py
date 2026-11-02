@@ -64,6 +64,8 @@ class RuleBasedLLM:
         prompt = system + "\n" + "\n".join(m["text"] for m in messages)
         if "decide_step" in tools:
             call = self._step(messages)
+        elif "summarise_result" in tools:
+            call = self._summarise(messages[0]["text"])
         elif "replan" in tools:
             call = self._react_event(messages[0]["text"])
         elif "ask_requester" in tools:
@@ -103,6 +105,13 @@ class RuleBasedLLM:
                 q = v["question"]       # only the tool's own fields: an extra key makes the schema reject the call
                 return {"name": "ask_clarification", "input": {k: q[k] for k in ("question", "possible_readings", "missing_fields") if k in q}}
         return {"name": "submit_task_spec", "input": spec}
+
+    @staticmethod
+    def _summarise(text: str) -> dict:
+        """What a model would say from the facts it was given: restate them, add nothing."""
+        task = text.split("TASK:", 1)[1].split("RESULT:", 1)[0].strip()
+        res = text.split("RESULT:", 1)[1].strip()
+        return {"name": "summarise_result", "input": {"summary": f"Done. {task} Result: {res[:200]}"}}
 
     @staticmethod
     def _react_event(text: str) -> dict:

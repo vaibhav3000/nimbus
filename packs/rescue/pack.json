@@ -81,7 +81,8 @@
   "default_template": "delivery",
   "lease": {"speed_limit": 0.6, "expiry_grace_seconds": 120, "when_to_escalate": ["sector_unsafe", "robot_lost", "deadline_at_risk"]},
   "steps": {"intent": ["submit_task_spec", "submit_task_specs", "announce_restriction", "ask_clarification"], "allocation": ["propose_allocation"], "step": ["decide_step"],
+    "result": ["summarise_result"],
             "react_event": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "get_robot", "get_task", "eta", "replan", "hand_over", "wait_and_retry", "escalate_operator", "no_action"],
             "react_clarify": ["get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map", "get_task", "answer_clarification", "ask_requester", "escalate_operator"]},
-  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt", "step": "prompts/step.txt", "react": "prompts/react.txt"}
+  "prompts": {"intent": "prompts/intent.txt", "allocation": "prompts/allocation.txt", "step": "prompts/step.txt", "result": "prompts/result.txt", "react": "prompts/react.txt"}
 }

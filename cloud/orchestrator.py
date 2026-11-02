@@ -39,6 +39,7 @@ from .notify import Notifier
 from .trace import Trace, TracingLLM, task_scope
 from .orchestrator_types import LLM_MODES, Outcome, row as _row
 from .react import Reactor
+from .results import ResultStore
 from .statements import Statements
 from .ticker import Ticker
 from .legs import handover_options, make_legs
@@ -85,7 +86,7 @@ def _public(info: dict) -> dict:
 class Orchestrator:
     def __init__(self, *, pack: Pack, topo: Topology, fleet: FleetRegistry, policies: PolicyBook, repo,
                  scheduler: Scheduler, llm, clock: Clock, mode: str = "C1",
-                 allow_unknown: bool = True, publish=None, probe_timeout_s: float = 0.0, durable=None):
+                 allow_unknown: bool = True, publish=None, probe_timeout_s: float = 0.0, durable=None, results=None):
         self.pack, self.topo, self.fleet, self.policies, self.repo = pack, topo, fleet, policies, repo
         self.scheduler, self.llm, self.clock = scheduler, llm, clock
         self.tools = ToolRegistry(pack)
@@ -101,6 +102,7 @@ class Orchestrator:
         self._freed = 0          # robots/claims given back by this process (finish, cancel, hold, expiry)
         self.statements = Statements(self)
         self.ticker = Ticker(self)
+        self.results = results if results is not None else ResultStore()
         self.load_task = lambda task_id: None    # the HTTP layer plugs in its task store
         self.waits: dict[str, dict] = {}         # task_id -> {"until", "payload", "version"}: "look again later" from the model
         self.react = Reactor(self)
@@ -137,6 +139,7 @@ class Orchestrator:
             durable = FileDurable(Path(data_dir) / "durable.json")
         return cls(pack=pack, topo=topo, fleet=FleetRegistry.load(clock, pack, stock_store=stock_store),
                    policies=_with_kb(PolicyBook(pack, durable=durable)), repo=repo, durable=durable,
+                   results=ResultStore.from_env(data_dir),
                    scheduler=Scheduler(pack.ranks), llm=llm, clock=clock,
                    mode=os.environ.get("NIMBUS_MODE", "C1"),
                    allow_unknown=os.environ.get("NIMBUS_ALLOW_UNKNOWN", "1") == "1",
@@ -267,6 +270,32 @@ class Orchestrator:
         ctx = self.build_context(task["request_text"], task["task_id"], [])
         info = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0}
         return self._allocate(task, spec, ctx, info, self.mode in LLM_MODES, None, request_text=task["request_text"], answer=None)
+
+    def complete_summary(self, task: dict, result_ref: str) -> dict:
+        """The edge reported the last result of a task (OUTPUT_READY): look at what it stored and tell the requester in plain
+        words (PRD Table 2: "summarise for the user"). The model writes the sentence only when the result has text worth
+        reading; otherwise a template from the facts is used, so a photo does not cost a model call. Returns
+        {text, info, rows, calls, tokens_in, tokens_out}."""
+        info = self.results.describe(result_ref)
+        spec = task.get("spec") or {}
+        what = f"{spec.get('item', 'the item')} {('from ' + spec['source'] + ' ') if spec.get('source') else ''}to {spec.get('destination', 'its destination')}"
+        facts = f"{what.strip()} for task {task['task_id']}."
+        calls = tin = tout = 0
+        text, source = f"Done: {facts}" + (f" The result ({info['size']} bytes) is stored for review." if info.get("readable") else ""), "template"
+        if self.mode in LLM_MODES and info.get("preview"):
+            ctx = self.build_context(task["request_text"], task["task_id"], [])
+            try:
+                res = self.llm.converse(system=self.pack.prompts["result"], tools=self.tools.names("result"), tool_choice="any",
+                                        messages=[{"role": "user", "text": f"TASK: {facts}\nRESULT: {info['preview'][:1500]}"}], context=ctx)
+                calls, tin, tout = 1, res.input_tokens, res.output_tokens
+                call = res.tool_calls[0] if res.tool_calls else None
+                if call and not self.tools.validate(call["name"], call["input"]):
+                    text, source = call["input"]["summary"], "llm"
+            except LLMError:
+                pass
+        rows = [_row("cloud" if source == "llm" else "rule", {"result_ref": result_ref, "readable": info.get("readable", False)},
+                     {"decision": "summarise_result", "source": source, "summary": text}, (task.get("lease") or {}).get("version"))]
+        return {"text": text, "info": info, "rows": rows, "calls": calls, "tokens_in": tin, "tokens_out": tout}
 
     def expire(self, task: dict, reason: str) -> Outcome:
         """The lease ran out with no completion and no renewal: the claim ends and the task goes back in the queue

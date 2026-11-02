@@ -161,6 +161,8 @@ class Handler(BaseHTTPRequestHandler):
             "spec": task.get("spec"),
             "notice": task.get("notice"),
             "reason": task.get("reason"),
+            "summary": task.get("summary"),
+            "archive_ref": task.get("archive_ref"),
             "children": task.get("children"),
             "parent": task.get("parent"),
             "legs": task.get("legs"),           # P3, additive: hand-over legs and which one is live
@@ -901,10 +903,12 @@ def process_escalation(
             cost_map["s3_ops"] = 1
         cost.record(**cost_map)
         reacts = esc_type in ("UNEXPECTED_EVENT", "CLARIFY") and bool(task.get("lease"))
+        finished = esc_type == "OUTPUT_READY" and not next_leg and task["status"] == "completed"
 
     # What follows can call the model (seconds), so it runs without the lock that check-ins and heartbeats need.
     # Anything that moved meanwhile is handled by the lease store's conditional writes, not by holding everyone up.
     leg_outcome = orch.advance_leg(task) if next_leg else None            # a hand-over: the next leg is the next version
+    done = orch.complete_summary(task, body["payload"]["result_ref"]) if finished else None   # reads the result; may call the model
     react = None
     if reacts:
         react = (orch.react.on_event(task, body["payload"]) if esc_type == "UNEXPECTED_EVENT"
@@ -930,7 +934,27 @@ def process_escalation(
                 task["status"], task["question"], task["edge_question"] = "needs_clarification", react.question, True
                 store.put_task(task)
             answer = react.answer
+        if done is not None:
+            task["summary"] = done["text"]
+            for r in done["rows"]:
+                store.append_decision(make_decision_row(orch, r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
+            orch.notifier.send(Notice("requester", done["text"], type="ANSWER", task_id=task_id))
+            cost.record(llm_calls=done["calls"], input_tokens=done["tokens_in"], output_tokens=done["tokens_out"], s3_ops=1)
+            store.put_task(task)
         status, version = task["status"], (task.get("lease") or {}).get("version")
+        timeline = store.timeline(task_id) if done is not None else None
+
+    if done is not None:     # the cloud's own record of the finished task (PRD: S3 holds logs), outside the lock
+        ref = orch.results.put_json(f"logs/{task_id}.json", {
+            "task_id": task_id, "request": task.get("request_text"), "spec": task.get("spec"), "summary": done["text"],
+            "result_ref": body["payload"]["result_ref"], "timeline": timeline,
+            "trace": orch.trace.events(task_id=task_id)})
+        if ref:
+            with _STATE_LOCK:
+                fresh = store.get_task(task_id)
+                if fresh:
+                    fresh["archive_ref"] = ref
+                    store.put_task(fresh)
 
     if esc_type == "OUTPUT_READY":
         drain_fn()
@@ -1017,6 +1041,8 @@ class NimbusServer(ThreadingHTTPServer):
     def server_close(self):
         if getattr(self, "ticker_stop", None):
             self.ticker_stop.set()
+        if getattr(self, "sqs", None):
+            self.sqs.stop()
         if self.transport:
             try:
                 self.transport.stop()
@@ -1058,6 +1084,16 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
             for task, outcome in orch.drain(store.get_task):
                 apply_fn(task, outcome)
 
+    def ingest(topic: str, body: dict, kind: str) -> tuple[int, dict]:
+        """One entry for edge messages that arrive by MQTT or by SQS: the same functions as POST /checkins and
+        POST /escalations, so de-duplication, fencing, validation and logging do not depend on the path."""
+        if kind == "escalation":
+            return process_escalation(store, orch, cost, body, apply_fn=apply_fn, drain_fn=drain_fn)
+        parts = topic.split("/")
+        if len(parts) >= 3 and "cluster_id" not in body:
+            body["cluster_id"] = parts[1]
+        return process_checkin(store, orch, cost, body)
+
     if transport:
         def on_mqtt_escalation(topic: str, data: dict) -> None:
             body = (
@@ -1065,7 +1101,7 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
                 if isinstance(data, dict) and "topic" in data and isinstance(data.get("payload"), dict)
                 else data
             )
-            process_escalation(store, orch, cost, body, apply_fn=apply_fn, drain_fn=drain_fn)
+            ingest(topic, body, "escalation")
 
         def on_mqtt_checkin(topic: str, data: dict) -> None:
             body = (
@@ -1073,10 +1109,7 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
                 if isinstance(data, dict) and "topic" in data and isinstance(data.get("payload"), dict)
                 else data
             )
-            parts = topic.split("/")
-            if len(parts) >= 3 and isinstance(body, dict) and "cluster_id" not in body:
-                body["cluster_id"] = parts[1]
-            process_checkin(store, orch, cost, body)
+            ingest(topic, body, "checkin")
 
         transport.subscribe("nimbus/+/escalation", on_mqtt_escalation)
         transport.subscribe("nimbus/+/checkin", on_mqtt_checkin)
@@ -1105,6 +1138,12 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
         return res
 
     server_inst.tick_once = tick_once
+    server_inst.ingest = ingest
+    queue_url = os.environ.get("NIMBUS_SQS_QUEUE_URL")
+    if queue_url:                       # edge messages that IoT Core's rule drops on the queue (cloud/sqs_consumer.py)
+        from cloud.sqs_consumer import SQSConsumer
+        server_inst.sqs = SQSConsumer(queue_url, ingest, region=os.environ.get("AWS_REGION", "ap-south-1"))
+        server_inst.sqs.start()
     tick_s = float(os.environ.get("NIMBUS_TICK_S", "5"))
     if tick_s > 0:
         stop = threading.Event()
