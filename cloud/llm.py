@@ -100,7 +100,8 @@ class RuleBasedLLM:
                  "source": self.topo.facts_for(spec.get("source")), "priority": spec["priority"]}
         for v in rules.apply_rules(self.pack.rules, facts).violations:
             if v["kind"] == "clarify":  # a model reads the rule in its context and asks
-                return {"name": "ask_clarification", "input": v["question"]}
+                q = v["question"]       # only the tool's own fields: an extra key makes the schema reject the call
+                return {"name": "ask_clarification", "input": {k: q[k] for k in ("question", "possible_readings", "missing_fields") if k in q}}
         return {"name": "submit_task_spec", "input": spec}
 
     @staticmethod

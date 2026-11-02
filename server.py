@@ -171,6 +171,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send_static("app.js")
         elif path == "/operator":
             self._send_static("operator.html")
+        elif path == "/map":
+            self._send_static("map.html")
+        elif path == "/map.json":
+            from cloud import mapview
+            self._send_json(200, mapview.build(self.orch, self.store.all_tasks()))
         elif path == "/operator.js":
             self._send_static("operator.js")
         elif path.startswith("/tasks/"):
@@ -228,6 +233,7 @@ class Handler(BaseHTTPRequestHandler):
             "app.js": "application/javascript",
             "operator.html": "text/html",
             "operator.js": "application/javascript",
+            "map.html": "text/html",          # P3: live map of the whole system
         }
         if filename not in allowed:
             self._send_json(404, {"error": "not found"})
@@ -272,6 +278,16 @@ class Handler(BaseHTTPRequestHandler):
             self._post_replan(path.split("/")[2], body)
         elif path == "/checkins":
             self._post_checkin(body)
+        elif path == "/map/reopen":
+            zone = body.get("zone")
+            node = self.orch.topo.resolve_node(zone) if isinstance(zone, str) else None
+            if node is None:
+                self._send_json(400, {"error": "zone must be a place on the map"})
+            else:
+                with _STATE_LOCK:
+                    self.orch.mapstate.clear(node)
+                    self._drain()    # work that was waiting on the closure may now be placed
+                self._send_json(201, {"reopened": node})
         elif path == "/relay/decide":
             self._post_relay_decide(body)
         elif path.startswith("/tasks/") and path.endswith("/control"):

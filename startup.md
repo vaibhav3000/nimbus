@@ -33,6 +33,12 @@ python scripts/run_e3.py --seeds 10 # E3: T1-T8 under all three, writes results/
 -> `{action: proceed|wait|reroute|abort, via_zones, source: llm|rules}`. It returns 409 unless the service runs C2.
 E3 uses the offline stand-in model by default (token counts and latency are estimates); see the script header for a Bedrock run.
 
+## See it on a map
+Open **http://127.0.0.1:8000/map** while the server runs: P1's building with live robots, lease routes, closed zones (red),
+restricted places (amber), place inventory, tasks, notices. Send requests from the page (buttons SC-1 / SC-2 / SC-3), tick
+"act as the edge" and the robots walk their routes and finish; or use the buttons on a selected task to report a closed
+zone, finish a leg, pause or cancel. `curl localhost:8000/map.json` is the same data.
+
 ## MS2 behaviour to try (offline)
 ```bash
 python server.py                                     # plans on P1's Gazebo map (hospital_sim is now the default)
