@@ -35,6 +35,7 @@ from .context import Context
 from .fleet import FleetRegistry
 from .mapstate import MapState
 from .notify import Notifier
+from .trace import Trace, TracingLLM, task_scope
 from .orchestrator_types import LLM_MODES, Outcome, row as _row
 from .react import Reactor
 from .statements import Statements
@@ -82,6 +83,9 @@ class Orchestrator:
         self.tools = ToolRegistry(pack)
         self.mapstate = MapState(topo)
         self.notifier = Notifier(clock)
+        self.trace = Trace()
+        if not isinstance(llm, TracingLLM):
+            self.llm = TracingLLM(llm, self.trace)
         self.statements = Statements(self)
         self.load_task = lambda task_id: None    # the HTTP layer plugs in its task store
         self.react = Reactor(self)
@@ -457,7 +461,7 @@ class Orchestrator:
         if any(e["transient"] for e in excluded):
             deadline = parse_iso(spec["requested_at"]) + timedelta(minutes=spec["deadline_minutes"])
             self.scheduler.push(task["task_id"], spec["priority"], deadline)
-            reason = "; ".join(f"{e['cluster_id']}: {e['reason']}" for e in excluded)
+            reason = "; ".join(f"{e['cluster_id']}: {e['reason']}" for e in excluded if e["transient"])   # what waiting can fix
             rows = [] if retry else [_row("cloud", {"request_text": request_text, "context": ctx.digest()},
                                           {"decision": "queue", "reason": reason, "excluded": excluded,
                                            "attempts": attempts, "llm": _public(info)})]
@@ -776,3 +780,21 @@ class Orchestrator:
                 s = t["spec"]
                 self.scheduler.push(t["task_id"], s["priority"],
                                     parse_iso(s["requested_at"]) + timedelta(minutes=s["deadline_minutes"]))
+
+
+def _scoped(fn, arg_index=1):
+    """Run an orchestrator entry point inside a trace scope for its task (a task dict or a task id)."""
+    import functools
+
+    @functools.wraps(fn)
+    def inner(self, *a, **k):
+        ref = a[0] if a else next(iter(k.values()), None)
+        tid = ref.get("task_id") if isinstance(ref, dict) else ref if isinstance(ref, str) else None
+        with task_scope(tid):
+            return fn(self, *a, **k)
+    return inner
+
+
+for _name in ("handle_request", "retry_queued", "advance_leg", "reassign", "allocate_spec", "replan", "hold",
+              "decide_step", "stand_down"):
+    setattr(Orchestrator, _name, _scoped(getattr(Orchestrator, _name)))

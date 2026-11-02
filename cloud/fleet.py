@@ -63,7 +63,10 @@ class FleetRegistry:
             digest = digest or {}
             for r in digest.get("robots", []):
                 if r.get("id") in c["robots"]:
-                    known = {k: r[k] for k in ("state", "zone", "battery") if k in r}
+                    known = {k: r[k] for k in ("state", "zone", "battery", "pos") if k in r}
+                    if "pos" in known and not (isinstance(known["pos"], list) and len(known["pos"]) == 2
+                                               and all(isinstance(v, (int, float)) for v in known["pos"])):
+                        known.pop("pos")      # optional metres in the map frame; used only to draw the robot smoothly
                     if self.zones is not None and known.get("zone") not in self.zones:
                         known.pop("zone", None)   # not a map node: keep the last zone we could route from
                     c["robots"][r["id"]].update(known)

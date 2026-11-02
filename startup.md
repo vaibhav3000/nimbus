@@ -33,11 +33,22 @@ python scripts/run_e3.py --seeds 10 # E3: T1-T8 under all three, writes results/
 -> `{action: proceed|wait|reroute|abort, via_zones, source: llm|rules}`. It returns 409 unless the service runs C2.
 E3 uses the offline stand-in model by default (token counts and latency are estimates); see the script header for a Bedrock run.
 
-## See it on a map
-Open **http://127.0.0.1:8000/map** while the server runs: P1's building with live robots, lease routes, closed zones (red),
-restricted places (amber), place inventory, tasks, notices. Send requests from the page (buttons SC-1 / SC-2 / SC-3), tick
-"act as the edge" and the robots walk their routes and finish; or use the buttons on a selected task to report a closed
-zone, finish a leg, pause or cancel. `curl localhost:8000/map.json` is the same data.
+## See it on a map, and follow what is happening
+Open **http://127.0.0.1:8000/map** while the server runs.
+
+- **Left:** P1's building at readable size: closed zones (red ✕), restricted places (amber), live lease routes (thick; dashed = stop lease), robots beside their zone, spare-equipment counts.
+- **Right:** send requests (scenario buttons), **answer the cloud's questions in the page** ("Needs your answer"), tasks with status / version / leg, and for the selected task:
+  - **Conversation:** every message in order with the time, every model call (expand it to see what was asked and answered), every decision and lease.
+  - **Replay:** step or play the same events with a scrubber; each step highlights its zones and route on the map. "Re-run this input" sends the same text again.
+- Tick **"robots act on their leases"** and robots drive their routes at the lease speed x the speed slider, check in, and finish. Without it the page only watches; use a real or fake edge instead.
+- Links: `/map#task-000003` (select a task), `/map#task-000003/replay`, `/map#auto&speed=20`.
+
+From a terminal (same data): `python scripts/trace.py --last --detail` (add `--follow` to watch live; `--all` for everything).
+`curl localhost:8000/tasks/task-000001/trace` and `curl localhost:8000/map.json` are the raw forms.
+
+Realistic timing from the command line (a scripted fake edge, not P2's logic): `python scripts/edge_sim.py --cluster east-wing --pace 10 --complete`
+drives each lease at lease speed x 10, checking in and reporting its position; add `--block east_mid_hall` to have the corridor
+reported blocked half way along. Run one per wing for hand-overs.
 
 ## MS2 behaviour to try (offline)
 ```bash

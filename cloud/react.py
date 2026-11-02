@@ -193,3 +193,18 @@ class Reactor:
     def _read(self) -> ReadTools:
         o = self.o
         return ReadTools(topo=o.topo, fleet=o.fleet, policies=o.policies, mapstate=o.mapstate, clock=o.clock)
+
+
+def _scoped_react(fn):
+    import functools
+    from .trace import task_scope
+
+    @functools.wraps(fn)
+    def inner(self, task, *a, **k):
+        with task_scope(task.get("task_id")):
+            return fn(self, task, *a, **k)
+    return inner
+
+
+Reactor.on_event = _scoped_react(Reactor.on_event)
+Reactor.on_clarify = _scoped_react(Reactor.on_clarify)

@@ -3,262 +3,466 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nimbus map</title>
+<title>Nimbus live map</title>
 <style>
-  :root { --bg:#0f1720; --panel:#17212c; --line:#2a3a4a; --text:#e6edf3; --dim:#8aa0b2; --east:#4da3ff; --west:#ffb454;
-          --shared:#9aa7b4; --bad:#ff5c5c; --warn:#ffcc4d; --ok:#4cd97b; }
-  @media (prefers-color-scheme: light) { :root { --bg:#f4f6f8; --panel:#ffffff; --line:#d5dde5; --text:#17212c; --dim:#5a6b7a; } }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 system-ui, sans-serif; }
-  header { padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; }
+  :root { --bg:#0e141b; --panel:#16202a; --panel2:#1c2935; --line:#2b3b4a; --text:#e8eef3; --dim:#93a6b6; --east:#4da3ff; --west:#ffb454;
+          --bad:#ff5c5c; --warn:#ffcc4d; --ok:#4cd97b; --model:#c792ff; --accent:#2f6feb; }
+  @media (prefers-color-scheme: light) { :root { --bg:#eef2f6; --panel:#ffffff; --panel2:#f4f7fa; --line:#d3dce5; --text:#14202b; --dim:#566879; } }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding:8px 16px; border-bottom:1px solid var(--line); display:flex; gap:18px; align-items:center; flex-wrap:wrap; background:var(--panel); }
   header h1 { font-size:16px; margin:0; }
-  header span { color:var(--dim); font-size:12px; }
-  main { display:grid; grid-template-columns:minmax(320px, 1.3fr) minmax(320px, 1fr); gap:12px; padding:12px; }
-  @media (max-width: 900px) { main { grid-template-columns:1fr; } }
-  section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; min-width:0; }
-  h2 { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin:0 0 8px; }
-  svg { width:100%; height:auto; max-height:70vh; display:block; background:var(--bg); border-radius:6px; }
-  .legend { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--dim); margin-top:6px; }
-  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:middle; }
-  input[type=text], select { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; }
+  header .meta { color:var(--dim); font-size:12px; }
+  header label { font-size:12px; color:var(--dim); display:flex; align-items:center; gap:6px; }
+  header a { color:var(--dim); font-size:12px; }
+  .layout { display:grid; grid-template-columns:minmax(420px, 49%) minmax(0, 1fr); gap:12px; padding:12px; align-items:start; }
+  @media (max-width: 1000px) { .layout { grid-template-columns:1fr; } .mapcol { position:static !important; height:auto !important; } }
+  .mapcol { position:sticky; top:10px; height:calc(100vh - 82px); display:flex; flex-direction:column; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; min-width:0; }
+  .card + .card { margin-top:12px; }
+  h2 { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:0 0 8px; font-weight:600; }
+  #mapwrap { flex:1; min-height:0; display:flex; }
+  svg#map { width:100%; height:100%; background:var(--bg); border-radius:8px; }
+  .legend { display:flex; gap:12px; flex-wrap:wrap; font-size:11.5px; color:var(--dim); margin-top:6px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:-1px; }
+  input[type=text], select { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:7px 9px; font:inherit; }
   input[type=text] { width:100%; }
-  button { background:var(--line); color:var(--text); border:0; border-radius:6px; padding:5px 9px; font:inherit; cursor:pointer; }
-  button:hover { filter:brightness(1.2); }
-  button.primary { background:#2f6feb; color:#fff; }
-  .row { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0; align-items:center; }
-  table { width:100%; border-collapse:collapse; font-size:12px; }
-  td, th { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
-  tr.sel { background:rgba(77,163,255,.15); }
-  tr.task { cursor:pointer; }
-  .pill { padding:1px 7px; border-radius:10px; font-size:11px; background:var(--line); }
+  button { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--dim); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.small { padding:2px 8px; font-size:12px; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+  .dim { color:var(--dim); } .tiny { font-size:12px; }
+  .pill { padding:1px 8px; border-radius:10px; font-size:11px; background:var(--line); white-space:nowrap; }
   .leased { background:#1d5b36; color:#d8ffe6; } .queued { background:#6b5518; color:#fff1c2; }
-  .completed { background:#2a3a4a; } .cancelled, .rejected { background:#6b2020; color:#ffd9d9; }
-  .needs_clarification { background:#4a2f73; color:#eadcff; } .paused { background:#4a4a4a; }
-  .notice { font-size:12px; border-left:3px solid var(--line); padding:2px 8px; margin:4px 0; }
+  .completed { background:#34465a; } .cancelled, .rejected { background:#6b2020; color:#ffd9d9; }
+  .needs_clarification { background:#5b3a93; color:#efe3ff; } .paused { background:#555; }
+  .ask { border:1px solid #7a52c4; background:rgba(122,82,196,.12); border-radius:8px; padding:9px 11px; margin:8px 0; }
+  .ask b { color:var(--model); }
+  .task { border:1px solid var(--line); border-radius:8px; padding:7px 9px; margin:6px 0; cursor:pointer; background:var(--panel2); }
+  .task.sel { border-color:var(--east); box-shadow:0 0 0 1px var(--east) inset; }
+  .task .top { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .bar { height:5px; border-radius:3px; background:var(--line); margin-top:6px; overflow:hidden; } .bar > i { display:block; height:100%; background:var(--ok); width:0; transition:width .4s; }
+  .tabs { display:flex; gap:4px; margin-bottom:8px; }
+  .tabs button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #convo, #replay { max-height:52vh; overflow:auto; }
+  .ev { display:grid; grid-template-columns:62px 150px 1fr; gap:8px; padding:4px 2px; border-bottom:1px solid var(--line); font-size:12.5px; }
+  .ev .t { color:var(--dim); font-variant-numeric:tabular-nums; }
+  .ev .who { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ev.llm { background:rgba(199,146,255,.08); } .ev.llm .who { color:var(--model); }
+  .ev.lease .who, .ev.renewal .who { color:var(--ok); } .ev.notice .who { color:var(--warn); } .ev.llm-error .who { color:var(--bad); }
+  .ev.cur { outline:2px solid var(--east); background:rgba(77,163,255,.14); }
+  .ev details { margin-top:3px; } .ev pre { margin:4px 0 0; white-space:pre-wrap; word-break:break-word; font:11.5px ui-monospace, monospace; color:var(--dim); }
+  .notice { font-size:12.5px; border-left:3px solid var(--line); padding:2px 8px; margin:4px 0; }
   .notice.WARNING { border-color:var(--warn); } .notice.MAP { border-color:var(--bad); } .notice.ANSWER { border-color:var(--ok); }
-  .small { font-size:12px; color:var(--dim); }
-  #log { max-height:180px; overflow:auto; font:12px ui-monospace, monospace; }
+  .scrub { width:100%; }
+  .stat { display:inline-block; margin-right:14px; font-size:12px; color:var(--dim); } .stat b { color:var(--text); }
 </style>
 </head>
 <body>
 <header>
-  <h1>Nimbus live map</h1><span id="meta"></span>
-  <span><a href="/" style="color:var(--dim)">requester app</a> · <a href="/operator" style="color:var(--dim)">operator console</a></span>
+  <h1>Nimbus live map</h1>
+  <span class="meta" id="meta">connecting…</span>
+  <label><input type="checkbox" id="auto"> robots act on their leases (simulated edge)</label>
+  <label>speed ×<input type="range" id="speed" min="1" max="40" value="8" style="width:110px"><b id="speedv">8</b></label>
+  <label><input type="checkbox" id="pause"> pause</label>
+  <span style="flex:1"></span>
+  <a href="/">requester app</a><a href="/operator">operator console</a>
 </header>
-<main>
-  <div>
-    <section>
-      <h2>Building</h2>
-      <svg id="map" viewBox="0 0 100 100" role="img" aria-label="Hospital map with robots, leases and closures"></svg>
+
+<div class="layout">
+  <div class="mapcol">
+    <div class="card" style="flex:1; min-height:0; display:flex; flex-direction:column">
+      <h2>Building <span class="dim" style="text-transform:none; letter-spacing:0">· schematic, positions from P1's map</span></h2>
+      <div id="mapwrap"><svg id="map" role="img" aria-label="Hospital map with robots, lease routes and closures"></svg></div>
       <div class="legend">
-        <span><i class="dot" style="background:var(--east)"></i>east-wing robot</span>
-        <span><i class="dot" style="background:var(--west)"></i>west-wing robot</span>
-        <span><i class="dot" style="background:var(--bad)"></i>closed / blocked</span>
-        <span><i class="dot" style="background:var(--warn)"></i>restricted (hold)</span>
-        <span>thick line = a live lease's route · dashed = stop lease</span>
+        <span><i style="background:var(--east)"></i>east-wing robot</span><span><i style="background:var(--west)"></i>west-wing robot</span>
+        <span><i style="background:var(--bad)"></i>closed / blocked</span><span><i style="background:var(--warn)"></i>restricted</span>
+        <span>thick line = live lease route · dashed = stop lease · pulsing ring = replay focus</span>
       </div>
-    </section>
-    <section style="margin-top:12px">
-      <h2>Notices</h2><div id="notices"></div>
-    </section>
+    </div>
   </div>
+
   <div>
-    <section>
+    <div class="card" id="needs" hidden>
+      <h2>Needs your answer</h2><div id="needsbody"></div>
+    </div>
+
+    <div class="card">
       <h2>Send a request</h2>
-      <div class="row"><input id="text" type="text" placeholder='e.g. "Need an infusion pump at 2B-12, urgent."'></div>
+      <div class="row"><input id="text" type="text" placeholder='Type a request, e.g. "Need an infusion pump at 2B-12, urgent."'></div>
       <div class="row">
         <button class="primary" id="send">Send</button>
-        <button data-fill="Need an infusion pump at 2B-12, urgent.">SC-1</button>
-        <button data-fill="Move a monitor from 2B to 2C, routine">SC-2</button>
-        <button data-fill="Ward 2C is now isolation. Get the spare pumps out, hold routine deliveries there, urgent ones can still go in.">SC-3</button>
-        <button data-fill="Ward 2C is no longer in isolation.">lift SC-3</button>
+        <button data-fill="Need an infusion pump at 2B-12, urgent.">SC-1 vague urgent</button>
+        <button data-fill="Move a monitor from 2B to 2C, routine">SC-2 across wings</button>
+        <button data-fill="Ward 2C is now isolation. Get the spare pumps out, hold routine deliveries there, urgent ones can still go in.">SC-3 isolation</button>
+        <button data-fill="Ward 2C is no longer in isolation.">lift isolation</button>
+        <button data-fill="Deliver a wheelchair and an iv pole to ward 3, routine">two items</button>
       </div>
-      <div id="ask" class="small"></div>
-      <div class="row small">
-        <label><input type="checkbox" id="auto"> act as the edge (robots walk their routes and finish)</label>
-      </div>
-    </section>
-    <section style="margin-top:12px">
-      <h2>Tasks</h2>
-      <table><thead><tr><th>id</th><th>status</th><th>what</th><th>v / cluster</th></tr></thead><tbody id="tasks"></tbody></table>
-    </section>
-    <section style="margin-top:12px">
-      <h2>Selected task <span id="selname" class="small"></span></h2>
+    </div>
+
+    <div class="card">
+      <h2>Tasks <span class="dim" id="counts" style="text-transform:none"></span></h2>
+      <div id="tasks"></div>
+    </div>
+
+    <div class="card" id="detail">
+      <h2>Selected task <span id="selname" class="dim" style="text-transform:none"></span></h2>
       <div class="row">
-        <button id="finish">Edge: finish leg</button>
+        <button id="finish" class="small">Edge: finish this leg</button>
         <select id="zone"></select>
         <select id="zstate"><option>closed</option><option>blocked</option></select>
-        <button id="report">Edge: report zone</button>
-        <button id="reopen">Reopen zone</button>
-        <button id="pause">Pause</button><button id="cancel">Cancel</button>
+        <button id="report" class="small">Edge: report zone</button>
+        <button id="reopen" class="small">Reopen zone</button>
+        <button id="pausebtn" class="small">Pause task</button><button id="cancel" class="small">Cancel task</button>
+        <button id="rerun" class="small">Re-run this input</button>
       </div>
-      <div id="log"></div>
-    </section>
+      <div class="tabs"><button id="tabc" class="on">Conversation</button><button id="tabr">Replay</button></div>
+      <div id="convo"></div>
+      <div id="replay" hidden>
+        <div class="row">
+          <button id="rfirst" class="small">⏮</button><button id="rprev" class="small">◀</button>
+          <button id="rplay" class="small primary">▶ play</button>
+          <button id="rnext" class="small">▶|</button><button id="rlast" class="small">⏭</button>
+          <select id="rspeed"><option value="1">1×</option><option value="2" selected>2×</option><option value="5">5×</option></select>
+          <span class="dim tiny" id="rpos"></span>
+        </div>
+        <input type="range" class="scrub" id="scrub" min="0" max="0" value="0">
+        <div id="rcard" class="ask" style="border-color:var(--east); background:rgba(77,163,255,.1)"></div>
+        <div id="rlist"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Notices</h2><div id="notices"></div>
+    </div>
   </div>
-</main>
+</div>
+
 <script>
 "use strict";
 const NS = "http://www.w3.org/2000/svg";
 const COLORS = { "east-wing": "#4da3ff", "west-wing": "#ffb454" };
-let view = null, selected = null, walks = {}, busy = false, lastAsk = null;
-
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const $ = (id) => document.getElementById(id);
-const el = (tag, attrs = {}, text) => {
-  const e = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-};
-const h = (tag, attrs = {}, text) => {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
-  return e;
-};
+const S = (tag, attrs = {}, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; return e; };
+const H = (tag, attrs = {}, text) => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; return e; };
+const uid = (p) => `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 async function api(method, path, body) {
   const r = await fetch(path, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   let j = {}; try { j = await r.json(); } catch (e) {}
   return [r.status, j];
 }
-const uid = (p) => `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-function say(line) { const d = h("div", {}, `${new Date().toLocaleTimeString()}  ${line}`); $("log").prepend(d); }
 
-// -- drawing --------------------------------------------------------------------------------------------------------
-function draw() {
-  const svg = $("map"); svg.replaceChildren();
+let view = null, selected = null, geom = null, staticSig = "", tab = "convo";
+const sim = { robots: {}, runs: {}, last: performance.now(), hb: 0, ci: 0 };       // the page-side edge: robot state and what each is doing
+const rp = { events: [], i: 0, playing: false, timer: null };                      // replay state
+
+// ---- geometry: P1's map is tall and narrow, so it is drawn schematically (x stretched), never squeezed into a square --------
+function layout() {
   const xs = view.nodes.map(n => n.x), ys = view.nodes.map(n => n.y);
-  const pad = 4, x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
-  const W = x1 - x0, H = y1 - y0, S = 100 / Math.max(W, H);
-  svg.setAttribute("viewBox", `0 0 ${W * S} ${H * S}`);
-  const P = (n) => [(n.x - x0) * S, (y1 - n.y) * S];          // world y points up, screen y points down
-  const byId = Object.fromEntries(view.nodes.map(n => [n.id, n]));
+  const W = Math.max(...xs) - Math.min(...xs) || 1, Hh = Math.max(...ys) - Math.min(...ys) || 1;
+  const sx = Math.min(80, Math.max(26, 520 / W)), sy = Math.min(24, Math.max(11, 640 / Hh)), padx = 120, pad = 70;
+  const g = { sx, sy, pad, x0: Math.min(...xs), y1: Math.max(...ys), w: W * sx + padx + 190, h: Hh * sy + pad * 2, byId: {} };
+  g.px = (x, y) => [padx + (x - g.x0) * sx, pad + (g.y1 - y) * sy];
+  for (const n of view.nodes) { n.px = g.px(n.x, n.y); g.byId[n.id] = n; }
+  return g;
+}
+
+// ---- the building (rebuilt only when something visible changes) -------------------------------------------------------
+function drawStatic() {
+  const svg = $("map"); svg.setAttribute("viewBox", `0 0 ${geom.w} ${geom.h}`);
+  svg.replaceChildren(S("g", { id: "edges" }), S("g", { id: "routes" }), S("g", { id: "hl" }), S("g", { id: "nodes" }), S("g", { id: "robots" }));
+  const text = css("--text"), panel = css("--panel"), dim = css("--dim");
   for (const [a, b] of view.edges) {
-    const [ax, ay] = P(byId[a]), [bx, by] = P(byId[b]);
-    svg.append(el("line", { x1: ax, y1: ay, x2: bx, y2: by, stroke: "#4a5b6b", "stroke-width": 0.6 }));
+    const [ax, ay] = geom.byId[a].px, [bx, by] = geom.byId[b].px;
+    $("edges").append(S("line", { x1: ax, y1: ay, x2: bx, y2: by, stroke: css("--line"), "stroke-width": 5, "stroke-linecap": "round" }));
   }
-  for (const l of view.leases) {                              // live lease routes, in the cluster's colour
-    const pts = l.route.filter(z => byId[z]).map(z => P(byId[z]).join(",")).join(" ");
-    if (!pts) continue;
-    svg.append(el("polyline", { points: pts, fill: "none", stroke: COLORS[l.cluster] || "#fff", "stroke-width": l.stop ? 0.8 : 1.6,
-                                "stroke-dasharray": l.stop ? "1.5 1.5" : "none", opacity: 0.85, "stroke-linejoin": "round" }));
+  for (const l of view.leases) {
+    const pts = l.route.filter(z => geom.byId[z]).map(z => geom.byId[z].px.join(",")).join(" ");
+    if (pts) $("routes").append(S("polyline", { points: pts, fill: "none", stroke: COLORS[l.cluster] || "#fff", "stroke-width": l.stop ? 3 : 6, opacity: l.stop ? 0.6 : 0.8,
+      "stroke-dasharray": l.stop ? "7 7" : "none", "stroke-linejoin": "round", "stroke-linecap": "round" }));
   }
   for (const n of view.nodes) {
-    const [x, y] = P(n);
-    const closed = view.closed[n.id], restr = view.restrictions[n.id];
-    const stroke = closed ? "var(--bad)" : restr ? "var(--warn)" : "#6f8294";
-    const shape = n.kind === "gate" ? el("rect", { x: x - 2, y: y - 2, width: 4, height: 4, transform: `rotate(45 ${x} ${y})`, fill: "var(--panel)", stroke, "stroke-width": 0.9 })
-      : n.kind === "ward" || n.kind === "store" ? el("rect", { x: x - 3, y: y - 2.2, width: 6, height: 4.4, rx: 0.8, fill: "var(--panel)", stroke, "stroke-width": 0.9 })
-      : el("circle", { cx: x, cy: y, r: 1.6, fill: "var(--panel)", stroke, "stroke-width": 0.9 });
-    const t = el("title"); t.textContent = `${n.id} (${n.kind}, ${n.area})` + (closed ? ` — ${closed.state}` : "") + (restr ? ` — ${restr.kind}` : "");
-    shape.append(t); svg.append(shape);
-    if (closed) svg.append(el("text", { x, y: y + 0.9, "text-anchor": "middle", fill: "var(--bad)", "font-size": 3.2, "font-weight": "bold" }, "✕"));
-    const stock = view.places[n.id];
-    const label = n.label.length > 16 ? n.label.slice(0, 15) + "…" : n.label;
-    svg.append(el("text", { x, y: y + 5.4, "text-anchor": "middle", fill: "var(--text)", "font-size": 2.1 }, label));
-    if (stock && Object.values(stock).some(v => v > 0)) {
-      svg.append(el("text", { x, y: y + 7.6, "text-anchor": "middle", fill: "var(--dim)", "font-size": 1.9 }, Object.entries(stock).filter(([, v]) => v > 0).map(([k, v]) => `${v}×${k.replace("infusion_", "")}`).join(" ")));
+    const [x, y] = n.px, closed = view.closed[n.id], restr = view.restrictions[n.id];
+    const stroke = closed ? css("--bad") : restr ? css("--warn") : css("--dim");
+    const label = n.label.replace(/_approach$/, "").replace(/_/g, " ");
+    const g = S("g"); const tip = S("title"); tip.textContent = `${n.id}\n${n.kind} · ${n.area}${closed ? "\n" + closed.state + " (reported by " + closed.source + ")" : ""}${restr ? "\nunder " + restr.kind + " (" + restr.effect + ")" : ""}`; g.append(tip);
+    if (n.kind === "ward" || n.kind === "store") {
+      const wd = Math.max(74, label.length * 7.4 + 16);
+      g.append(S("rect", { x: x - wd / 2, y: y - 15, width: wd, height: 30, rx: 8, fill: restr ? "rgba(255,204,77,.18)" : closed ? "rgba(255,92,92,.18)" : panel, stroke, "stroke-width": closed || restr ? 3 : 2 }));
+      g.append(S("text", { x, y: y + 5, "text-anchor": "middle", fill: text, "font-size": 15, "font-weight": 600 }, label));
+    } else {
+      g.append(n.kind === "gate" ? S("rect", { x: x - 9, y: y - 9, width: 18, height: 18, transform: `rotate(45 ${x} ${y})`, fill: closed ? "rgba(255,92,92,.3)" : panel, stroke, "stroke-width": 3 })
+                                 : S("circle", { cx: x, cy: y, r: 9, fill: closed ? "rgba(255,92,92,.3)" : panel, stroke, "stroke-width": 3 }));
+      g.append(S("text", { x: x + 17, y: y + 5, fill: text, "font-size": 13.5, opacity: 0.8 }, label));
     }
+    if (closed) g.append(S("text", { x, y: y + 6, "text-anchor": "middle", fill: css("--bad"), "font-size": 17, "font-weight": 800 }, "✕"));
+    const stock = view.places[n.id];
+    if (stock && Object.values(stock).some(v => v > 0))
+      g.append(S("text", { x, y: y + 31, "text-anchor": "middle", fill: css("--warn"), "font-size": 12 }, "stock: " + Object.entries(stock).filter(([, v]) => v > 0).map(([k, v]) => `${v}× ${k.replace("infusion_", "")}`).join(", ")));
+    $("nodes").append(g);
   }
+  robotEls = {};
+}
+let robotEls = {};
+function drawRobots() {
+  if (!geom) return;
+  const layer = $("robots"); if (!layer) return;
   const stacked = {};
   for (const r of view.robots) {
-    const n = byId[r.zone]; if (!n) continue;
-    const [x, y] = P(n); const k = (stacked[n.id] = (stacked[n.id] || 0) + 1) - 1;
-    const g = el("g");
-    g.append(el("circle", { cx: x + 3.4 + k * 3.2, cy: y - 3.2, r: 1.5, fill: COLORS[r.cluster] || "#fff", stroke: r.task_id ? "#fff" : "none", "stroke-width": 0.5 }));
-    g.append(el("text", { x: x + 3.4 + k * 3.2, y: y - 3.2 + 0.7, "text-anchor": "middle", "font-size": 1.7, fill: "#0b1118", "font-weight": "bold" }, r.id.replace(/\D+/g, "") || r.id[0]));
-    const t = el("title"); t.textContent = `${r.id} (${r.cluster}) at ${r.zone}` + (r.task_id ? ` running ${r.task_id}` : " idle");
-    g.append(t); svg.append(g);
+    const s = sim.robots[r.id];
+    let x, y;
+    if (s) [x, y] = geom.px(s.x, s.y);
+    else if (r.pos) [x, y] = geom.px(r.pos[0], r.pos[1]);
+    else if (geom.byId[r.zone]) [x, y] = geom.byId[r.zone].px; else continue;
+    const k = (stacked[r.zone] = (stacked[r.zone] || 0) + 1) - 1;
+    const at = geom.byId[r.zone], parked = !s || !s.moving;
+    const half = at && (at.kind === "ward" || at.kind === "store") ? Math.max(37, (at.label.replace(/_approach$/, "").length * 7.4 + 16) / 2) : 12;
+    const off = parked ? [half + 26, -4 + k * 34] : [0, 0];
+    let g = robotEls[r.id];
+    if (!g) {
+      g = S("g", { style: "transition: transform .9s linear" });
+      g.append(S("circle", { r: 15, fill: COLORS[r.cluster] || "#fff", stroke: "#fff", "stroke-width": 0 }), S("text", { y: 5, "text-anchor": "middle", "font-size": 14, "font-weight": 800, fill: "#0b1118" }, r.id.replace(/\D+/g, "") || r.id[0]), S("text", { x: 20, y: 5, "font-size": 12.5, fill: css("--text"), "font-weight": 600 }, r.id));
+      const t = S("title"); g.append(t); layer.append(g); robotEls[r.id] = g;
+    }
+    g.firstChild.setAttribute("stroke-width", r.task_id ? 3 : 0);
+    g.lastChild.textContent = `${r.id} (${r.cluster}) at ${r.zone}` + (r.task_id ? ` · running ${r.task_id}` : " · idle");
+    g.style.transition = s ? "none" : "transform .9s linear";
+    g.setAttribute("transform", `translate(${x + off[0]}, ${y + off[1]})`);
   }
 }
 
-function render() {
-  $("meta").textContent = `pack ${view.pack} · mode ${view.mode} · model ${view.model} · clusters ${view.clusters.map(c => c.id + ":" + c.health).join(", ")}`;
-  const sel = $("zone"), keep = sel.value; sel.replaceChildren(...view.nodes.map(n => h("option", { value: n.id }, n.id))); if (keep) sel.value = keep;
-  const body = $("tasks"); body.replaceChildren();
-  for (const t of [...view.tasks].reverse().slice(0, 40)) {
-    const tr = h("tr", { class: "task" + (t.task_id === selected ? " sel" : "") });
-    tr.append(h("td", {}, t.task_id.replace("task-000", "#")));
-    const st = h("td"); st.append(h("span", { class: "pill " + t.status }, t.stopped ? t.status + " (stopped)" : t.status)); tr.append(st);
-    const what = t.spec ? `${t.spec.item} ${t.spec.source ? t.spec.source + " → " : "→ "}${t.spec.destination}` : t.text;
-    tr.append(h("td", {}, what + (t.parent ? " (child)" : "") + (t.status === "queued" && t.reason ? ` — ${t.reason}` : "")));
-    tr.append(h("td", {}, t.lease_version ? `v${t.lease_version} ${t.cluster || ""}${t.legs ? ` leg ${t.leg_index + 1}/${t.legs}` : ""}` : ""));
-    tr.addEventListener("click", () => { selected = t.task_id; render(); showLog(); });
-    body.append(tr);
+// ---- the simulated edge (page side): drive the lease's plan at the lease speed x sim speed, check in, finish ----------------
+function metres(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function nodePos(id) { const n = geom.byId[id]; return n ? { x: n.x, y: n.y } : null; }
+function ensureRobots() {
+  for (const r of view.robots) if (!sim.robots[r.id]) {
+    const p = r.pos ? { x: r.pos[0], y: r.pos[1] } : nodePos(r.zone);
+    if (p) sim.robots[r.id] = { ...p, zone: r.zone, cluster: r.cluster, moving: false };
   }
-  $("selname").textContent = selected ? `(${selected})` : "";
-  const n = $("notices"); n.replaceChildren();
-  for (const x of [...view.notices].reverse().slice(0, 12)) n.append(h("div", { class: "notice " + x.type }, `[${x.audience}${x.cluster_id ? " " + x.cluster_id : ""}${x.zone ? " " + x.zone : ""}] ${x.text}`));
-  if (!view.notices.length) n.append(h("div", { class: "small" }, "none yet"));
-  draw();
 }
-
-async function showLog() {
-  if (!selected) return;
-  const [, j] = await api("GET", `/tasks/${selected}/timeline`);
-  $("log").replaceChildren(...(j.timeline || []).slice(-30).map(r => {
-    const o = r.output || {}; return h("div", {}, `v${r.lease_version || "-"} ${r.who.padEnd(9)} ${o.decision || o.event || ""}${o.action ? " action=" + o.action : ""}${o.source ? " " + o.source : ""}`);
-  }));
-}
-
-async function refresh() {
-  if (busy) return; busy = true;
-  try { const [, j] = await api("GET", "/map.json"); view = j; render(); if (selected) showLog(); await autoEdge(); }
-  catch (e) { $("meta").textContent = "server not reachable: " + e; } finally { busy = false; }
-}
-
-// -- acting as the edge (optional): walk each live lease's route, then report it done -------------------------------
-async function autoEdge() {
-  if (!$("auto").checked) return;
+function syncRuns() {
+  const live = new Set();
   for (const l of view.leases) {
-    const key = `${l.task_id}@${l.version}`;
-    if (l.stop) { walks[key] = { done: true }; continue; }
-    const w = walks[key] || (walks[key] = { i: 0, done: false });
-    if (w.done) continue;
-    const robot = l.robots[0], zone = l.route[Math.min(w.i, l.route.length - 1)];
-    await api("POST", "/fleet/heartbeat", { cluster_id: l.cluster, robots: [{ id: robot, state: "busy", zone }] });
-    if (w.i >= l.route.length - 1) {
-      w.done = true;
-      const [st] = await api("POST", "/escalations", { type: "OUTPUT_READY", message_id: uid("done"), lease_version: l.version, task_id: l.task_id,
-        payload: { result_ref: `s3://nimbus-outputs/${l.task_id}/proof.jpg` } });
-      say(`edge: ${l.task_id} v${l.version} finished at ${zone} (HTTP ${st})`);
-    } else w.i += 1;
+    const key = `${l.task_id}@${l.version}`; live.add(key);
+    if (sim.runs[key]) continue;
+    for (const k of Object.keys(sim.runs)) if (k.startsWith(l.task_id + "@") && !sim.runs[k].done) sim.runs[k].done = true;   // a newer version replaces the old one
+    sim.runs[key] = { key, l, i: 0, p: 0, t: 0, done: !!l.stop, sent: false };
   }
 }
+async function tickEdge(now) {
+  const dt = Math.min(0.25, (now - sim.last) / 1000); sim.last = now;
+  if (!$("auto").checked || $("pause").checked || !view) return;
+  const f = +$("speed").value;
+  for (const run of Object.values(sim.runs)) {
+    if (run.done) continue;
+    const l = run.l, rb = sim.robots[l.robots[0]]; if (!rb) continue;
+    const step = l.plan[run.i];
+    if (!step) { await finish(run); continue; }
+    rb.moving = true;
+    if (step.type === "drive") {
+      let budget = Math.max(0.05, l.speed) * f * dt;
+      while (budget > 0 && run.p < step.path.length) {
+        const tgt = nodePos(step.path[run.p]); if (!tgt) { run.p++; continue; }
+        const d = metres(rb, tgt);
+        if (d <= budget) { rb.x = tgt.x; rb.y = tgt.y; rb.zone = step.path[run.p]; budget -= d; run.p++; } else { rb.x += (tgt.x - rb.x) / d * budget; rb.y += (tgt.y - rb.y) / d * budget; budget = 0; }
+      }
+      if (run.p >= step.path.length) { run.i++; run.p = 0; run.t = 0; }
+    } else { run.t += dt * f; if (run.t >= step.seconds) { run.i++; run.p = 0; run.t = 0; } }
+    run.progress = Math.min(1, (run.i + (step.type === "drive" ? run.p / Math.max(1, step.path.length) : run.t / Math.max(1, step.seconds))) / Math.max(1, l.plan.length));
+  }
+  sim.hb += dt; sim.ci += dt;
+  if (sim.hb >= 1) { sim.hb = 0; await heartbeats(); }
+  if (sim.ci >= 5) { sim.ci = 0; await checkins(); }
+}
+async function heartbeats() {
+  const byCluster = {};
+  for (const [id, r] of Object.entries(sim.robots)) (byCluster[r.cluster] ||= []).push({ id, state: r.moving ? "busy" : "idle", zone: r.zone, pos: [+r.x.toFixed(2), +r.y.toFixed(2)] });
+  for (const [cluster, robots] of Object.entries(byCluster)) await api("POST", "/fleet/heartbeat", { cluster_id: cluster, robots });
+}
+async function checkins() {
+  for (const run of Object.values(sim.runs)) {
+    if (run.done) continue; const l = run.l, rb = sim.robots[l.robots[0]];
+    const [st] = await api("POST", "/checkins", { cluster_id: l.cluster, lease_id: `lease-${l.task_id}-v${l.version}`, lease_version: l.version,
+      timestamp: new Date().toISOString().replace(/\.\d+Z$/, "Z"), message_id: uid("ci"),
+      robots: [{ id: l.robots[0], state: "busy", zone: rb.zone, pos: [+rb.x.toFixed(2), +rb.y.toFixed(2)] }] });
+    if (st === 409) run.done = true;                              // the cloud says this version is old: stop acting on it
+  }
+}
+async function finish(run) {
+  if (run.sent) return; run.sent = true; run.done = true;
+  const rb = sim.robots[run.l.robots[0]]; rb.moving = false;
+  await api("POST", "/escalations", { type: "OUTPUT_READY", message_id: uid("done"), lease_version: run.l.version, task_id: run.l.task_id,
+    payload: { result_ref: `s3://nimbus-outputs/${run.l.task_id}/proof.jpg` } });
+  refresh();
+}
 
-// -- actions --------------------------------------------------------------------------------------------------------
-const cur = () => view.tasks.find(t => t.task_id === selected);
-const curLease = () => view.leases.find(l => l.task_id === selected);
+// ---- lists and panels -----------------------------------------------------------------------------------------------
+function renderTasks() {
+  const body = $("tasks"); body.replaceChildren();
+  const list = [...view.tasks].reverse().slice(0, 30);
+  $("counts").textContent = `(${view.tasks.length})`;
+  if (!list.length) body.append(H("div", { class: "dim tiny" }, "No tasks yet — send a request above."));
+  for (const t of list) {
+    const d = H("div", { class: "task" + (t.task_id === selected ? " sel" : "") });
+    const top = H("div", { class: "top" });
+    top.append(H("b", {}, t.task_id.replace("task-0000", "#").replace("task-000", "#")),
+               H("span", { class: "pill " + t.status }, t.stopped ? `${t.status} · stopped` : t.status));
+    if (t.cluster) top.append(H("span", { class: "pill", style: `background:${COLORS[t.cluster] || "#555"}; color:#0b1118` }, `${t.cluster} v${t.lease_version}`));
+    if (t.legs) top.append(H("span", { class: "pill" }, `leg ${t.leg_index + 1}/${t.legs}`));
+    if (t.parent) top.append(H("span", { class: "pill" }, "sub-task"));
+    d.append(top);
+    d.append(H("div", { class: "tiny" }, t.spec ? `${t.spec.item.replace(/_/g, " ")} ${t.spec.source ? t.spec.source + " → " : "→ "}${t.spec.destination} · ${t.spec.priority}` : t.text));
+    if (t.status === "queued" && t.reason) d.append(H("div", { class: "tiny dim" }, "waiting: " + t.reason));
+    const run = Object.values(sim.runs).find(r => r.l.task_id === t.task_id && !r.done);
+    if (run) { const b = H("div", { class: "bar" }); b.append(H("i", { style: `width:${Math.round((run.progress || 0) * 100)}%` })); d.append(b); }
+    d.addEventListener("click", () => { selected = t.task_id; stopReplay(); loadConvo(); renderTasks(); });
+    body.append(d);
+  }
+  // clarifications waiting for a person
+  const asks = view.tasks.filter(t => t.status === "needs_clarification");
+  $("needs").hidden = !asks.length; const nb = $("needsbody"); nb.replaceChildren();
+  for (const t of asks) {
+    const q = t.question || {}, box = H("div", { class: "ask" });
+    box.append(H("div", { class: "tiny dim" }, `${t.task_id} — "${t.text}"`), H("div", {}, ""), H("b", {}, q.question || "The cloud needs more information."));
+    const row = H("div", { class: "row" });
+    for (const r of q.possible_readings || []) { const b = H("button", { class: "small" }, r); b.addEventListener("click", () => answer(t.task_id, r)); row.append(b); }
+    box.append(row);
+    const inp = H("input", { type: "text", placeholder: "or type your own answer and press Enter" });
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && inp.value.trim()) answer(t.task_id, inp.value.trim()); });
+    box.append(inp); nb.append(box);
+  }
+  const zs = $("zone"), keep = zs.value; if (zs.options.length !== view.nodes.length) { zs.replaceChildren(...view.nodes.map(n => H("option", { value: n.id }, n.id))); } if (keep) zs.value = keep;
+  const n = $("notices"); n.replaceChildren();
+  for (const x of [...view.notices].reverse().slice(0, 10)) n.append(H("div", { class: "notice " + x.type }, `[${x.audience}${x.cluster_id ? " · " + x.cluster_id : ""}${x.zone ? " · " + x.zone : ""}] ${x.text}`));
+  if (!view.notices.length) n.append(H("div", { class: "dim tiny" }, "none yet"));
+}
+function evRow(e, t0, cur) {
+  const d = H("div", { class: `ev ${e.kind}` + (cur ? " cur" : "") });
+  d.append(H("div", { class: "t" }, `+${(e.t - t0).toFixed(1)}s`));
+  const arrow = e.from === e.to || e.to === "log" ? e.from : `${e.from} → ${e.to}`;
+  d.append(H("div", { class: "who" }, (e.kind === "llm" ? "◆ " : "") + arrow));
+  const c = H("div", {}, e.summary);
+  const det = e.detail || {};
+  if (e.kind === "llm") { const dd = H("details"); dd.append(H("summary", { class: "dim" }, "what the model was asked / answered")); dd.append(H("pre", {}, `asked:\n${det.asked}\n\nanswered:\n${JSON.stringify(det.answered, null, 1)}`)); c.append(dd); }
+  else if (e.kind === "lease" || e.kind === "notice") { const dd = H("details"); dd.append(H("summary", { class: "dim" }, "message payload")); dd.append(H("pre", {}, JSON.stringify(det.payload, null, 1))); c.append(dd); }
+  else if (e.kind === "decision") { const dd = H("details"); dd.append(H("summary", { class: "dim" }, "inputs / output")); dd.append(H("pre", {}, `in:  ${JSON.stringify(det.inputs)}\nout: ${JSON.stringify(det.output, null, 1)}`)); c.append(dd); }
+  d.append(c); return d;
+}
+async function loadConvo() {
+  $("selname").textContent = selected ? `(${selected})` : "";
+  if (!selected || tab !== "convo") return;
+  const [, j] = await api("GET", `/tasks/${selected}/trace`); const ev = j.events || [];
+  const box = $("convo"), atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+  box.replaceChildren(); const t0 = ev.length ? ev[0].t : 0;
+  if (!ev.length) box.append(H("div", { class: "dim tiny" }, "Select a task to see its conversation."));
+  for (const e of ev) box.append(evRow(e, t0, false));
+  if (atEnd) box.scrollTop = box.scrollHeight;
+}
+
+// ---- replay -----------------------------------------------------------------------------------------------------------
+async function startReplay() {
+  if (!selected) return; const [, j] = await api("GET", `/tasks/${selected}/trace`);
+  rp.events = j.events || []; rp.i = 0; $("scrub").max = Math.max(0, rp.events.length - 1); showReplay();
+}
+function stopReplay() { rp.playing = false; clearTimeout(rp.timer); $("rplay").textContent = "▶ play"; clearHighlight(); }
+function clearHighlight() { const h = $("hl"); if (h) h.replaceChildren(); }
+function showReplay() {
+  const ev = rp.events; $("scrub").value = rp.i; if (!ev.length) { $("rcard").textContent = "Nothing to replay yet."; $("rlist").replaceChildren(); return; }
+  const e = ev[rp.i], t0 = ev[0].t;
+  $("rpos").textContent = `step ${rp.i + 1}/${ev.length} · +${(e.t - t0).toFixed(1)}s` + (rp.i ? ` (${(e.t - ev[rp.i - 1].t).toFixed(1)}s after the previous)` : "");
+  const card = $("rcard"); card.replaceChildren(H("b", {}, `${e.from} → ${e.to}`), H("div", {}, e.summary));
+  const det = e.detail || {};
+  if (e.kind === "llm") card.append(H("pre", { class: "tiny dim", style: "white-space:pre-wrap" }, `asked: ${det.asked}\n\nanswered: ${JSON.stringify(det.answered)}`));
+  const list = $("rlist"); list.replaceChildren(); ev.forEach((x, k) => { const r = evRow(x, t0, k === rp.i); r.addEventListener("click", () => { rp.i = k; showReplay(); }); list.append(r); });
+  list.children[rp.i]?.scrollIntoView({ block: "nearest" });
+  // show on the map what this step is about: zones named in it, and the route when it is a lease
+  clearHighlight(); const hl = $("hl"); if (!geom) return;
+  const blob = JSON.stringify([e.summary, det]);
+  if (e.kind === "lease") {
+    const seq = det.payload?.task_sequence || [], zones = [];
+    for (const s of seq) { for (const z of (s.params?.via || [])) zones.push(z); if (s.params?.to) zones.push(s.params.to); }
+    const pts = zones.filter((z, i) => geom.byId[z] && zones[i - 1] !== z).map(z => geom.byId[z].px.join(",")).join(" ");
+    if (pts) hl.append(S("polyline", { points: pts, fill: "none", stroke: COLORS[e.to] || "#fff", "stroke-width": 11, opacity: 0.35, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  }
+  for (const n of view.nodes) if (new RegExp(`(^|[^\\w-])${n.id.replace(/[-]/g, "\\-")}([^\\w-]|$)`).test(blob)) {
+    const [x, y] = n.px, ring = S("circle", { cx: x, cy: y, r: 26, fill: "none", stroke: "#4da3ff", "stroke-width": 4 });
+    ring.append(S("animate", { attributeName: "r", values: "22;34;22", dur: "1.4s", repeatCount: "indefinite" })); hl.append(ring);
+  }
+}
+function stepReplay(dir) { rp.i = Math.max(0, Math.min(rp.events.length - 1, rp.i + dir)); showReplay(); }
+function playReplay() {
+  if (rp.playing) return stopReplay();
+  if (rp.i >= rp.events.length - 1) rp.i = 0;
+  rp.playing = true; $("rplay").textContent = "❚❚ pause";
+  const next = () => {
+    if (!rp.playing) return; showReplay();
+    if (rp.i >= rp.events.length - 1) return stopReplay();
+    const gap = Math.min(2500, Math.max(350, (rp.events[rp.i + 1].t - rp.events[rp.i].t) * 1000)) / +$("rspeed").value;
+    rp.timer = setTimeout(() => { rp.i++; next(); }, gap);
+  }; next();
+}
+
+// ---- actions ----------------------------------------------------------------------------------------------------------
+async function answer(taskId, text) { const [st, j] = await api("POST", `/requests/${taskId}/answer`, { text, message_id: uid("ans") }); selected = taskId; refresh(); return [st, j]; }
 async function send() {
   const text = $("text").value.trim(); if (!text) return;
-  if (lastAsk) {                                             // answering a question the cloud asked
-    const [st, j] = await api("POST", `/requests/${lastAsk}/answer`, { text, message_id: uid("ans") });
-    say(`answer → ${j.status || st}`); lastAsk = null; $("ask").textContent = ""; $("text").value = ""; return refresh();
-  }
-  const [st, j] = await api("POST", "/requests", { text, message_id: uid("req") });
-  selected = j.task_id || selected; $("text").value = "";
-  if (j.status === "needs_clarification") { lastAsk = j.task_id; $("ask").textContent = "The cloud asks: " + j.question.question + "  (type your answer above and press Send)"; }
-  say(`request → ${j.status || st}`); refresh();
+  const [, j] = await api("POST", "/requests", { text, message_id: uid("req") }); selected = j.task_id || selected; $("text").value = ""; refresh();
 }
+const cur = () => view.tasks.find(t => t.task_id === selected);
 $("send").addEventListener("click", send);
 $("text").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
-document.querySelectorAll("button[data-fill]").forEach(b => b.addEventListener("click", () => { lastAsk = null; $("ask").textContent = ""; $("text").value = b.dataset.fill; }));
-$("finish").addEventListener("click", async () => {
-  const t = cur(); if (!t || !t.lease_version) return;
-  const [st, j] = await api("POST", "/escalations", { type: "OUTPUT_READY", message_id: uid("fin"), lease_version: t.lease_version, task_id: t.task_id, payload: { result_ref: "s3://nimbus-outputs/manual/proof.jpg" } });
-  say(`edge finish → HTTP ${st} ${j.status || j.error || ""}`); refresh();
-});
+document.querySelectorAll("button[data-fill]").forEach(b => b.addEventListener("click", () => { $("text").value = b.dataset.fill; $("text").focus(); }));
+$("finish").addEventListener("click", async () => { const t = cur(); if (!t?.lease_version) return;
+  await api("POST", "/escalations", { type: "OUTPUT_READY", message_id: uid("fin"), lease_version: t.lease_version, task_id: t.task_id, payload: { result_ref: "s3://nimbus-outputs/manual/proof.jpg" } }); refresh(); });
 $("report").addEventListener("click", async () => {
-  const t = cur(), l = curLease(); if (!t || !l) return say("select a task with a live lease first");
-  const zone = $("zone").value, state = $("zstate").value, robot = view.robots.find(r => r.task_id === t.task_id);
-  const [st, j] = await api("POST", "/escalations", { type: "UNEXPECTED_EVENT", message_id: uid("evt"), lease_version: t.lease_version, task_id: t.task_id,
-    payload: { what_happened: `${zone} is ${state}`, where: zone, robots_saw: [`${zone} ${state}`], segments: [{ segment_id: zone, state }], ...(robot ? { robot_zone: robot.zone } : {}) } });
-  say(`edge report ${zone} ${state} → HTTP ${st} ${j.replanned === undefined ? (j.error || "") : "replanned=" + j.replanned}`); refresh();
-});
-$("reopen").addEventListener("click", async () => { const [st] = await api("POST", "/map/reopen", { zone: $("zone").value }); say(`reopen ${$("zone").value} → HTTP ${st}`); refresh(); });
-for (const a of ["pause", "cancel"]) $(a).addEventListener("click", async () => {
-  if (!selected) return; const [st, j] = await api("POST", `/tasks/${selected}/control`, { action: a, message_id: uid(a) }); say(`${a} → HTTP ${st} ${j.status || j.error || ""}`); refresh();
-});
-refresh(); setInterval(refresh, 1500);
+  const t = cur(); if (!t?.lease_version) return; const zone = $("zone").value, state = $("zstate").value, robot = view.robots.find(r => r.task_id === t.task_id);
+  const sr = robot && sim.robots[robot.id];
+  await api("POST", "/escalations", { type: "UNEXPECTED_EVENT", message_id: uid("evt"), lease_version: t.lease_version, task_id: t.task_id,
+    payload: { what_happened: `${zone} is ${state}`, where: zone, robots_saw: [`${zone} ${state}`], segments: [{ segment_id: zone, state }], ...(robot ? { robot_zone: (sr && sr.zone) || robot.zone } : {}) } });
+  refresh(); });
+$("reopen").addEventListener("click", async () => { await api("POST", "/map/reopen", { zone: $("zone").value }); refresh(); });
+for (const [id, a] of [["pausebtn", "pause"], ["cancel", "cancel"]]) $(id).addEventListener("click", async () => { if (selected) { await api("POST", `/tasks/${selected}/control`, { action: a, message_id: uid(a) }); refresh(); } });
+$("rerun").addEventListener("click", async () => { const t = cur(); if (!t) return; const [, j] = await api("POST", "/requests", { text: t.text, message_id: uid("rerun") }); selected = j.task_id; refresh(); });
+$("tabc").addEventListener("click", () => { tab = "convo"; $("tabc").classList.add("on"); $("tabr").classList.remove("on"); $("convo").hidden = false; $("replay").hidden = true; stopReplay(); loadConvo(); });
+$("tabr").addEventListener("click", async () => { tab = "replay"; $("tabr").classList.add("on"); $("tabc").classList.remove("on"); $("convo").hidden = true; $("replay").hidden = false; await startReplay(); });
+$("rfirst").addEventListener("click", () => { stopReplay(); rp.i = 0; showReplay(); }); $("rlast").addEventListener("click", () => { stopReplay(); rp.i = rp.events.length - 1; showReplay(); });
+$("rprev").addEventListener("click", () => { stopReplay(); stepReplay(-1); }); $("rnext").addEventListener("click", () => { stopReplay(); stepReplay(1); });
+$("rplay").addEventListener("click", playReplay);
+$("scrub").addEventListener("input", (e) => { stopReplay(); rp.i = +e.target.value; showReplay(); });
+$("speed").addEventListener("input", () => { $("speedv").textContent = $("speed").value; });
+
+// ---- main loop --------------------------------------------------------------------------------------------------------
+let busy = false;
+async function refresh() {
+  if (busy) return; busy = true;
+  try {
+    const [, j] = await api("GET", "/map.json"); view = j;
+    if (!geom || geom.sig !== view.nodes.length + view.pack) { geom = layout(); geom.sig = view.nodes.length + view.pack; staticSig = ""; }
+    for (const n of view.nodes) n.px = geom.px(n.x, n.y);
+    ensureRobots(); syncRuns();
+    const sig = JSON.stringify([view.closed, view.restrictions, view.places, view.leases.map(l => [l.task_id, l.version, l.route, l.stop])]);
+    if (sig !== staticSig) { staticSig = sig; drawStatic(); }
+    const live = view.clusters.map(c => `${c.id} ${c.health}`).join(" · ");
+    $("meta").textContent = `${view.pack.split("@")[0]} · mode ${view.mode} · model ${view.model} · ${live}`;
+    if (!selected && view.tasks.length) { selected = view.tasks[view.tasks.length - 1].task_id; }
+    renderTasks(); if (tab === "convo") loadConvo();
+  } catch (e) { $("meta").textContent = "server not reachable: " + e; } finally { busy = false; }
+}
+let ticking = false;
+async function frame() {   // a timer, not requestAnimationFrame: it keeps running in background tabs and headless browsers
+  if (ticking) return; ticking = true;
+  try { await tickEdge(performance.now()); if (view && geom) drawRobots(); } catch (e) {} finally { ticking = false; }
+}
+// deep links: /map#task-000001  /map#task-000001/replay  /map#auto&speed=30  (parts can be combined with &)
+const hash = location.hash;
+const mt = hash.match(/(task-\d+)/); if (mt) selected = mt[1];
+if (/replay/.test(hash)) setTimeout(() => $("tabr").click(), 800);
+if (/auto/.test(hash)) $("auto").checked = true;
+const ms = hash.match(/speed=(\d+)/); if (ms) { $("speed").value = ms[1]; $("speedv").textContent = ms[1]; }
+refresh(); setInterval(refresh, 1500); setInterval(frame, 100);
 </script>
 </body>
 </html>

@@ -50,3 +50,27 @@ def test_lease_closure_and_restriction_show_up_and_reopen_clears_the_closure(api
     assert http_json("POST", api + "/map/reopen", {"zone": "E3"})[0] == 201
     assert "E3" not in http_json("GET", api + "/map.json")[1]["closed"]
     assert http_json("POST", api + "/map/reopen", {"zone": "nowhere"})[0] == 400
+
+
+def test_page_has_the_controls_a_person_needs(api):
+    with urlreq.urlopen(api + "/map") as r:
+        html = r.read().decode()
+    for needle in ("Needs your answer", "Replay", "Re-run this input", "possible_readings", "/tasks/${selected}/trace", "setInterval(frame"):
+        assert needle in html, needle
+    assert "innerHTML" not in html          # request text reaches the page: it must only ever be inserted as text
+
+
+def test_map_json_carries_the_question_so_the_page_can_answer_it(api):
+    _, b = http_json("POST", api + "/requests", {"text": "Need an infusion pump at 2B-12, urgent.", "message_id": "q1"})
+    m = http_json("GET", api + "/map.json")[1]
+    t = next(x for x in m["tasks"] if x["task_id"] == b["task_id"])
+    assert t["status"] == "needs_clarification" and t["question"]["possible_readings"]
+    st, _ = http_json("POST", api + f"/requests/{b['task_id']}/answer", {"text": t["question"]["possible_readings"][0], "message_id": "q1a"})
+    assert st == 201 and http_json("GET", api + f"/tasks/{b['task_id']}")[1]["status"] == "leased"
+
+
+def test_robot_position_digest_is_validated_and_shown(api):
+    http_json("POST", api + "/fleet/heartbeat", {"cluster_id": "east-wing", "robots": [{"id": "R1", "state": "busy", "zone": "E2", "pos": [1.5, 2.5]}]})
+    http_json("POST", api + "/fleet/heartbeat", {"cluster_id": "west-wing", "robots": [{"id": "R4", "state": "busy", "zone": "W2", "pos": "bad"}]})
+    robots = {r["id"]: r for r in http_json("GET", api + "/map.json")[1]["robots"]}
+    assert robots["R1"]["pos"] == [1.5, 2.5] and robots["R4"]["pos"] is None

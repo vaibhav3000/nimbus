@@ -21,6 +21,7 @@ from typing import Any, Callable
 import contracts
 from cloud.clock import iso
 from cloud.notify import Notice
+from cloud.trace import wire_store
 from cloud.orchestrator import InvalidLeaseError, Orchestrator, StaleVersion
 from cost import CostBook
 from mqtt_transport import is_mqtt_enabled, make_mqtt_transport_from_env
@@ -185,12 +186,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": f"unknown task {task_id}"})
             elif path.endswith("/timeline"):
                 self._send_json(200, {"task_id": task_id, "timeline": self.store.timeline(task_id)})
+            elif path.endswith("/trace"):   # P3: the full conversation for this task, with the model calls in it
+                self._send_json(200, {"task_id": task_id, "events": self.orch.trace.events(task_id=task_id)})
             else:
                 self._send_json(200, self._task_view(task))
         elif path == "/tasks":
             self._send_json(
                 200, {"tasks": [self._task_view(t) for t in self.store.all_tasks()]}
             )
+        elif path == "/trace":
+            q = parse_qs(urlparse(self.path).query)
+            self._send_json(200, {"events": self.orch.trace.events(after=int((q.get("after") or ["0"])[0]),
+                                                                   limit=int((q.get("limit") or ["200"])[0]))})
         elif path == "/cost":
             self._send_json(
                 200,
@@ -1015,6 +1022,7 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
 
     orch = Orchestrator.from_env(data_dir, publish)
     orch.load_task = store.get_task
+    wire_store(orch.trace, store)   # P3: every message and decision becomes a trace event (see /tasks/{id}/trace)
     orch.recover(store.all_tasks())
 
     def apply_fn(task: dict, outcome) -> None:
