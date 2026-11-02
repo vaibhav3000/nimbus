@@ -240,6 +240,23 @@ class DynamoLeaseRepo:
         self._transact(ops, ["task pointer"] + keys)
         return lease
 
+    def free_claims(self, task_id: str) -> list[str]:
+        cur = self._get(f"TASK#{task_id}")
+        if not cur or cur["state"]["S"] != "live":
+            return []
+        keys = [k["S"] for k in cur["claims"]["L"]]
+        ops = [{"Update": {"TableName": self.t["state"], "Key": {"pk": _s(f"TASK#{task_id}")},
+                           "UpdateExpression": "SET claims = :none", "ConditionExpression": "#s = :live",
+                           "ExpressionAttributeNames": {"#s": "state"},
+                           "ExpressionAttributeValues": {":none": {"L": []}, ":live": _s("live")}}}]
+        for k in keys:
+            kind, _, name = k.partition(":")
+            ops.append({"Delete": {"TableName": self.t["state"], "Key": {"pk": _s(f"{kind.upper()}#{name}")},
+                                   "ConditionExpression": "attribute_not_exists(pk) OR task_id = :me",
+                                   "ExpressionAttributeValues": {":me": _s(task_id)}}})
+        self._transact(ops, ["task pointer"] + keys)
+        return keys
+
     def release(self, task_id: str) -> list[str]:
         cur = self._get(f"TASK#{task_id}")
         if not cur or cur["state"]["S"] == "released":

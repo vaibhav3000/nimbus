@@ -71,9 +71,29 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
             task["status"], task["reason"] = "rejected", outcome.reason
         elif outcome.kind == "stood_down":
             task["lease"] = outcome.lease   # the stop lease is now the highest version the edge may honour
+        elif outcome.kind == "held":
+            task["status"], task["reason"], task["lease"] = "queued", outcome.reason, outcome.lease
+        elif outcome.kind == "statement":
+            task["status"], task["reason"] = "completed", outcome.reason   # a rule, not a delivery: nothing left to run
         store.put_task(task)  # records task["message_id"] as seen
         for topic, payload in outcome.publish:
             publish(topic, payload)
+        for other, other_outcome in outcome.others:      # tasks this decision stopped or held (a new restriction)
+            apply_outcome(orch, store, cost, publish, other, other_outcome)
+        for n, spec in enumerate(outcome.children, 1):   # further tasks the message created
+            child_id = store.next_task_id()
+            child = {"task_id": child_id, "message_id": f"{task.get('message_id') or task_id}#{n}",
+                     "request_text": task["request_text"], "status": "received", "question": None, "lease": None,
+                     "result_ref": None, "parent": task_id}
+            store.append_decision(make_decision_row(orch, "cloud", {"parent": task_id, "spec": spec},
+                                                    {"decision": "spawn_task"}, None, child_id))
+            apply_outcome(orch, store, cost, publish, child, orch.allocate_spec(child, spec))
+            task.setdefault("children", []).append(child_id)
+        if outcome.children:
+            store.put_task(task)
+        if outcome.drain:
+            for queued, out in orch.drain(store.get_task):
+                apply_outcome(orch, store, cost, publish, queued, out)
         # T_in/T_out from the model's usage (estimates for the offline stand-in);
         # M: leases published; W: rows + task write; F/K: flat per-decision stand-ins.
         cost.record(
@@ -135,6 +155,8 @@ class Handler(BaseHTTPRequestHandler):
             "spec": task.get("spec"),
             "notice": task.get("notice"),
             "reason": task.get("reason"),
+            "children": task.get("children"),
+            "parent": task.get("parent"),
             "legs": task.get("legs"),           # P3, additive: hand-over legs and which one is live
             "leg_index": task.get("leg_index"),
         }
@@ -976,6 +998,7 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
                 transport.publish(topic, payload)
 
     orch = Orchestrator.from_env(data_dir, publish)
+    orch.load_task = store.get_task
     orch.recover(store.all_tasks())
 
     def apply_fn(task: dict, outcome) -> None:

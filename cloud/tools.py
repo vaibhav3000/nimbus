@@ -32,6 +32,10 @@ class ToolRegistry:
             "rationale": {"type": "string", "minLength": 1},
             **pack.doc.get("spec_extensions", {}),
         }
+        spec_item = {"type": "object", "additionalProperties": False,
+                     "required": ["item", "destination", "priority", "deadline_minutes"],
+                     "properties": {k: v for k, v in props.items() if k != "rationale"}}
+        kinds = sorted(pack.restrictions)
         self._tools = {
             "submit_task_spec": {
                 "class": "propose",
@@ -40,6 +44,25 @@ class ToolRegistry:
                 "schema": {"type": "object", "additionalProperties": False,
                            "required": ["item", "destination", "priority", "deadline_minutes", "rationale"],
                            "properties": props},
+            },
+            "submit_task_specs": {
+                "class": "propose",
+                "description": ("Record SEVERAL tasks from one message (for example two items to the same place). Each entry is "
+                                "a complete task; use submit_task_spec when there is only one."),
+                "schema": {"type": "object", "additionalProperties": False, "required": ["tasks", "rationale"],
+                           "properties": {"tasks": {"type": "array", "minItems": 2, "maxItems": 8, "items": spec_item},
+                                          "rationale": {"type": "string", "minLength": 1}}},
+            },
+            "announce_restriction": {
+                "class": "propose",
+                "description": ("The requester is not asking for a delivery but telling the system a rule about a place "
+                                "(for example that it is now restricted in some way, or no longer is). Give the place, the kind of "
+                                "restriction, which items to move out of it (only if they ask), and whether it is being lifted."),
+                "schema": {"type": "object", "additionalProperties": False, "required": ["zone", "kind", "rationale"],
+                           "properties": {"zone": {"type": "string", "minLength": 1}, "kind": {"enum": kinds or ["none"]},
+                                          "extract_items": {"type": "array", "items": {"enum": item_ids}},
+                                          "lift": {"type": "boolean"},
+                                          "rationale": {"type": "string", "minLength": 1}}},
             },
             "ask_clarification": {
                 "class": "propose",

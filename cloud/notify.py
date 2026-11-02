@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass
 
 from .clock import Clock, iso
 
-AUDIENCES = ("requester", "operator", "cluster")
+AUDIENCES = ("requester", "operator", "cluster", "place")
 TYPES = ("ANSWER", "WARNING", "MAP", "STOP")
 
 
@@ -28,6 +28,7 @@ class Notice:
     cluster_id: str | None = None  # required for audience "cluster"
     task_id: str | None = None
     lease_version: int | None = None
+    zone: str | None = None        # for audience "place": the people working there
 
 
 class Notifier:
@@ -38,7 +39,8 @@ class Notifier:
 
     def send(self, n: Notice) -> tuple[dict, tuple | None]:
         """Record a notice. Returns (feed entry, (topic, payload) to publish or None)."""
-        if n.audience not in AUDIENCES or n.type not in TYPES or (n.audience == "cluster" and not n.cluster_id):
+        if (n.audience not in AUDIENCES or n.type not in TYPES or (n.audience == "cluster" and not n.cluster_id)
+                or (n.audience == "place" and not n.zone)):
             raise ValueError(f"bad notice {n}")
         mid = "notice-" + hashlib.sha1(json.dumps(asdict(n), sort_keys=True).encode()).hexdigest()[:10]
         with self._lock:

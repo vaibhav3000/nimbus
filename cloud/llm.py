@@ -79,9 +79,22 @@ class RuleBasedLLM:
         user_turns = [m["text"] for m in messages if m["role"] == "user"]
         request = user_turns[0]
         answer = user_turns[1] if len(user_turns) > 1 else None
+        st = nlp.parse_statement(self.pack, self.topo, request)
+        if st is not None:
+            if "unknown_zone" in st:
+                return {"name": "ask_clarification", "input": {
+                    "question": f"Which {self.pack.doc['nouns']['destination']} do you mean by {st['unknown_zone']!r}?",
+                    "possible_readings": sorted(self.topo.destinations())[:6]}}
+            return {"name": "announce_restriction", "input": {
+                "zone": st["zone"], "kind": st["kind"], "lift": st["lift"], "extract_items": st["extract_items"],
+                "rationale": "the message states a rule about a place"}}
         p = nlp.parse(self.pack, self.topo, request, answer=answer)
         if p.missing:
             return {"name": "ask_clarification", "input": nlp.missing_question(self.pack, p)}
+        several = nlp.split_items(self.pack, self.topo, request, p)
+        if several:
+            return {"name": "submit_task_specs", "input": {"tasks": [{k: v for k, v in s.items() if k != "rationale"} for s in several],
+                                                           "rationale": "several items in one message"}}
         spec = nlp.spec_from(p, note="offline model stand-in")
         facts = {"spec": spec, "dest": self.topo.facts_for(spec["destination"]),
                  "source": self.topo.facts_for(spec.get("source")), "priority": spec["priority"]}

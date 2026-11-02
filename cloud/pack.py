@@ -24,7 +24,7 @@ from jsonschema import Draft202012Validator
 import contracts
 
 PACKS_DIR = Path(__file__).resolve().parents[1] / "packs"
-CORE_TOOLS = {"submit_task_spec", "ask_clarification", "propose_allocation", "decide_step",
+CORE_TOOLS = {"submit_task_spec", "submit_task_specs", "announce_restriction", "ask_clarification", "propose_allocation", "decide_step",
               "get_fleet", "get_stock", "get_route", "get_policies", "get_task_log", "get_map",
               "replan", "hand_over", "answer_clarification", "ask_requester", "no_action"}
 

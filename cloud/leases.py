@@ -35,6 +35,7 @@ class LeaseRepo(Protocol):
     def holder(self, key: str, now: datetime) -> dict | None: ...
     def current(self, task_id: str) -> dict | None: ...
     def live_leases(self) -> list[dict]: ...
+    def free_claims(self, task_id: str) -> list[str]: ...
 
 
 class MemoryLeaseRepo:
@@ -115,6 +116,16 @@ class MemoryLeaseRepo:
                     c["until"] = new_expiry
             self._save()
             return dict(lease)
+
+    def free_claims(self, task_id: str) -> list[str]:
+        """Give up the task's robot and zone claims but keep its lease record live, so a later lease for the
+        same task continues the version sequence (a task held for a restriction, then re-leased)."""
+        with self._lock:
+            freed = [k for k, c in self.claims.items() if c["task_id"] == task_id]
+            for k in freed:
+                del self.claims[k]
+            self._save()
+            return freed
 
     def release(self, task_id: str) -> list[str]:
         with self._lock:

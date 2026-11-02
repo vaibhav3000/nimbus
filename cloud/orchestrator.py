@@ -37,6 +37,7 @@ from .mapstate import MapState
 from .notify import Notifier
 from .orchestrator_types import LLM_MODES, Outcome, row as _row
 from .react import Reactor
+from .statements import Statements
 from .legs import handover_options, make_legs
 from .leases import Conflict, MemoryLeaseRepo, _task_of, claim_keys_for
 from .llm import CircuitBreakerLLM, LLMError, RuleBasedLLM
@@ -81,6 +82,8 @@ class Orchestrator:
         self.tools = ToolRegistry(pack)
         self.mapstate = MapState(topo)
         self.notifier = Notifier(clock)
+        self.statements = Statements(self)
+        self.load_task = lambda task_id: None    # the HTTP layer plugs in its task store
         self.react = Reactor(self)
         self.mode, self.allow_unknown = mode, allow_unknown
         self.publish = publish or (lambda topic, payload: None)
@@ -171,10 +174,45 @@ class Orchestrator:
         kind, payload = parsed
         if kind == "clarify":
             return self._clarify_outcome(payload, text, ctx, info, notice)
-        spec = dict(payload)
+        if kind == "statement":
+            out = self.statements.apply(task, {**payload, "zone": self.topo.anchor_of(payload["zone"])}, text)
+            out.notice = f"{notice} {out.notice}" if notice else out.notice
+            return out
+        specs = [self._complete_spec(s) for s in (payload if kind == "specs" else [payload])]
+        out = self._allocate(task, specs[0], ctx, info, use_llm, notice, request_text=text, answer=answer)
+        if out.kind != "clarify":   # after a question the whole message is read again, so extras would be duplicated
+            out.children = specs[1:]
+        return out
+
+    def _complete_spec(self, spec: dict) -> dict:
+        spec = dict(spec)
         spec["destination_anchor"] = self.topo.anchor_of(spec["destination"])
         spec["requested_at"] = iso(self.clock.now())
-        return self._allocate(task, spec, ctx, info, use_llm, notice, request_text=text, answer=answer)
+        return spec
+
+    def allocate_spec(self, task: dict, spec: dict) -> Outcome:
+        """Allocate a task made by another message (an extra item, an extraction): same pipeline, no new intent step."""
+        spec = self._complete_spec(spec)
+        ctx = self.build_context(task["request_text"], task["task_id"], [])
+        info = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0}
+        return self._allocate(task, spec, ctx, info, self.mode in LLM_MODES, None, request_text=task["request_text"], answer=None)
+
+    def hold(self, task: dict, reason: str) -> Outcome:
+        """Stop a task that a new restriction blocks and queue it until the restriction is lifted: stop lease out,
+        claims freed, the reserved item returned, the task back in the scheduler."""
+        stop = self.stand_down(task, reason)
+        if stop.kind != "stood_down":
+            return stop
+        self.repo.free_claims(task["task_id"])
+        res = task.get("reservation")
+        if res and not task.get("stock_released") and not task.get("stock_settled"):
+            self.fleet.return_stock(res["cluster"], res["item"])
+            task["stock_released"] = True
+        spec = self.current_spec(task)
+        self.scheduler.push(task["task_id"], spec["priority"],
+                            parse_iso(spec["requested_at"]) + timedelta(minutes=spec["deadline_minutes"]))
+        stop.kind, stop.reason = "held", reason
+        return stop
 
     def retry_queued(self, task: dict) -> Outcome:
         ctx = self.build_context(task["request_text"], task["task_id"], [])
@@ -186,8 +224,14 @@ class Orchestrator:
 
     def _spec_errors(self, call: dict) -> list[str]:
         errs = self.tools.validate(call["name"], call["input"])
-        if not errs and call["name"] == "submit_task_spec":
-            i = call["input"]
+        if errs:
+            return errs
+        if call["name"] == "announce_restriction":
+            if self.topo.anchor_of(call["input"]["zone"]) is None:
+                errs.append(f"zone {call['input']['zone']!r} is not a place in the context")
+            return errs
+        for i in (call["input"]["tasks"] if call["name"] == "submit_task_specs" else
+                  [call["input"]] if call["name"] == "submit_task_spec" else []):
             if not self.topo.is_destination(i["destination"]):
                 errs.append(f"destination {i['destination']!r} is not a destination in the context")
             if i.get("source") and self.topo.anchor_of(i["source"]) is None:
@@ -210,15 +254,37 @@ class Orchestrator:
             call = res.tool_calls[0] if res.tool_calls else None
             errs = ["no tool call"] if call is None else self._spec_errors(call)
             if not errs:
-                return ("clarify" if call["name"] == "ask_clarification" else "spec"), call["input"]
+                return self._intent_kind(call)
             feedback = "; ".join(errs)
             info["retries"] = info.get("retries", 0) + 1
         raise LLMError(f"invalid tool output twice: {feedback}")
 
+    @staticmethod
+    def _intent_kind(call):
+        name, i = call["name"], call["input"]
+        if name == "ask_clarification":
+            return "clarify", i
+        if name == "announce_restriction":
+            return "statement", {"zone": call["input"]["zone"], "kind": i["kind"], "lift": bool(i.get("lift")),
+                                 "extract_items": i.get("extract_items", [])}
+        if name == "submit_task_specs":
+            return "specs", i["tasks"]
+        return "spec", i
+
     def _form_intent(self, text, answer):
+        st = nlp.parse_statement(self.pack, self.topo, text)
+        if st is not None:
+            if "unknown_zone" in st:
+                nouns = self.pack.doc["nouns"]
+                return "clarify", {"question": f"Which {nouns['destination']} do you mean by {st['unknown_zone']!r}?",
+                                   "possible_readings": sorted(self.topo.destinations())[:6]}
+            return "statement", st
         p = nlp.parse(self.pack, self.topo, text, answer=answer)
         if p.missing:
             return "clarify", nlp.missing_question(self.pack, p)
+        several = nlp.split_items(self.pack, self.topo, text, p)
+        if several:
+            return "specs", several
         return "spec", nlp.spec_from(p, note="form-style deterministic parse")
 
     @staticmethod
@@ -652,6 +718,12 @@ class Orchestrator:
         if res and not task.get("stock_released") and not task.get("stock_settled"):
             self.fleet.settle_stock(res["cluster"], res["item"])
             task["stock_settled"] = True
+        spec, lease = task.get("spec"), task.get("lease")
+        # equipment carried out of a place that keeps an inventory into a store: the counts follow it
+        if (spec and lease and spec.get("source") and not task.get("inventory_moved")
+                and self.topo.nodes.get(self.topo.anchor_of(spec["destination"]) or "", {}).get("kind") in self.topo.source_kinds):
+            task["inventory_moved"] = self.fleet.move_stock(self.topo.anchor_of(spec["source"]) or spec["source"],
+                                                            lease["cluster_id"], spec["item"])
 
     def cancel(self, task: dict) -> None:
         """Task cancelled: free robots and zones and give the item back once."""
