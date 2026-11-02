@@ -58,3 +58,53 @@ def test_epoch_moves_on_robot_stock_health_restriction_and_closure_changes():
     orch.policies.declare("2A", "isolation"); e4 = orch.epoch(); assert e4 > e3
     orch.mapstate.report("E3", "blocked", "x", orch.clock.now()); e5 = orch.epoch(); assert e5 > e4
     orch.clock.advance(1000); orch.mapstate.closed(orch.clock.now()); assert orch.epoch() > e5
+
+
+def test_an_edge_message_is_not_held_up_by_a_request_that_is_waiting_on_the_model(tmp_path, monkeypatch):
+    """With a slow model (1 s per call) a heartbeat used to wait behind the whole request (measured 1.8 s)."""
+    import threading
+    import time
+
+    import server
+    from cloud import llm as L
+    from conftest import http_json
+
+    orig = L.RuleBasedLLM.converse
+    monkeypatch.setattr(L.RuleBasedLLM, "converse", lambda self, **kw: (time.sleep(1.0), orig(self, **kw))[1])
+    httpd = server.make_server("127.0.0.1", 0, tmp_path / "d")
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    api = f"http://127.0.0.1:{httpd.server_address[1]}"
+    try:
+        t = threading.Thread(target=lambda: http_json("POST", api + "/requests", {"text": "Deliver a wheelchair to ward 3, routine", "message_id": "slow1"}))
+        t.start(); time.sleep(0.25)
+        t0 = time.time(); http_json("POST", api + "/fleet/heartbeat", {"cluster_id": "east-wing"}); waited = time.time() - t0
+        t.join()
+        assert waited < 0.5, f"heartbeat waited {waited:.2f}s behind a request"
+    finally:
+        httpd.shutdown()
+
+
+def test_two_requests_planned_at_once_never_share_a_robot(tmp_path, monkeypatch):
+    import threading
+    import time
+
+    import server
+    from cloud import llm as L
+    from conftest import http_json
+
+    orig = L.RuleBasedLLM.converse
+    monkeypatch.setattr(L.RuleBasedLLM, "converse", lambda self, **kw: (time.sleep(0.4), orig(self, **kw))[1])
+    httpd = server.make_server("127.0.0.1", 0, tmp_path / "d")
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    api = f"http://127.0.0.1:{httpd.server_address[1]}"
+    try:
+        ids = []
+        def go(i):
+            ids.append(http_json("POST", api + "/requests", {"text": "Deliver a blanket to ward 3, routine", "message_id": f"cc{i}"})[1]["task_id"])
+        ts = [threading.Thread(target=go, args=(i,)) for i in range(4)]
+        [t.start() for t in ts]; [t.join() for t in ts]
+        leases = [http_json("GET", api + f"/tasks/{i}")[1] for i in ids]
+        robots = [l["lease"]["assigned_robots"][0] for l in leases if l["status"] == "leased"]
+        assert len(robots) == len(set(robots)) == 3 and sum(l["status"] == "queued" for l in leases) == 1   # east has 3 robots, 4 requests
+    finally:
+        httpd.shutdown()

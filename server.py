@@ -81,6 +81,7 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
             publish(topic, payload)
         for other, other_outcome in outcome.others:      # tasks this decision stopped or held (a new restriction)
             apply_outcome(orch, store, cost, publish, other, other_outcome)
+        spawned = []
         for n, spec in enumerate(outcome.children, 1):   # further tasks the message created
             child_id = store.next_task_id()
             child = {"task_id": child_id, "message_id": f"{task.get('message_id') or task_id}#{n}",
@@ -88,13 +89,10 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
                      "result_ref": None, "parent": task_id}
             store.append_decision(make_decision_row(orch, "cloud", {"parent": task_id, "spec": spec},
                                                     {"decision": "spawn_task"}, None, child_id))
-            apply_outcome(orch, store, cost, publish, child, orch.allocate_spec(child, spec))
             task.setdefault("children", []).append(child_id)
+            spawned.append((child, spec))
         if outcome.children:
             store.put_task(task)
-        if outcome.drain:
-            for queued, out in orch.drain(store.get_task):
-                apply_outcome(orch, store, cost, publish, queued, out)
         # T_in/T_out from the model's usage (estimates for the offline stand-in);
         # M: leases published; W: rows + task write; F/K: flat per-decision stand-ins.
         cost.record(
@@ -106,6 +104,12 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
             fargate_gbs=0.001,
             cloudwatch_metrics=1,
         )
+    # Planning can call the model (seconds): never while holding the lock that every check-in and heartbeat needs.
+    for child, spec in spawned:
+        apply_outcome(orch, store, cost, publish, child, orch.allocate_spec(child, spec))
+    if outcome.drain:
+        for queued, out in orch.drain(store.get_task):
+            apply_outcome(orch, store, cost, publish, queued, out)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -350,21 +354,22 @@ class Handler(BaseHTTPRequestHandler):
             self.store.append_decision(
                 self._row("requester", {"text": text}, {"event": "request_received"}, None, task_id)
             )
-            self._decide(task, lambda: self.orch.handle_request(
-                task, text, history=self.store.timeline(task_id)), created=True)
+            history = self.store.timeline(task_id)
+        self._decide(task, lambda: self.orch.handle_request(task, text, history=history), created=True)
 
     def _decide(self, task: dict, run, *, created: bool = False) -> bool:
         """Run one orchestrator decision and answer the caller. Returns False
         after sending an error, in which case nothing more may be sent."""
-        with _STATE_LOCK:
-            try:
-                outcome = run()
-            except InvalidLeaseError as exc:
+        try:
+            outcome = run()          # may call the model: not under the state lock
+        except InvalidLeaseError as exc:
+            with _STATE_LOCK:
                 task["status"] = "rejected"
                 task.pop("message_id", None)  # faulted delivery must not burn the id
                 self.store.put_task(task)
-                self._send_json(500, {"error": "orchestrator produced an invalid lease", "detail": exc.errors})
-                return False
+            self._send_json(500, {"error": "orchestrator produced an invalid lease", "detail": exc.errors})
+            return False
+        with _STATE_LOCK:
             self._apply(task, outcome)
             view = {"duplicate": False, "task_id": task["task_id"], "status": task["status"]}
             if created or task["status"] == "needs_clarification":
@@ -384,9 +389,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _drain(self) -> None:
         """Capacity freed: lease queued tasks in priority/deadline order."""
-        with _STATE_LOCK:
-            for task, outcome in self.orch.drain(self.store.get_task):
-                self._apply(task, outcome)
+        for task, outcome in self.orch.drain(self.store.get_task):    # planning outside the lock; apply_outcome locks
+            self._apply(task, outcome)
 
     def _post_answer(self, task_id: str, body: dict):
         task = self.store.get_task(task_id)
@@ -419,10 +423,10 @@ class Handler(BaseHTTPRequestHandler):
                     task_id,
                 )
             )
-            # The model sees the whole exchange: request, its question, the answer.
-            self._decide(task, lambda: self.orch.handle_request(
-                task, task["request_text"], question=question, answer=text,
-                history=self.store.timeline(task_id)))
+            history = self.store.timeline(task_id)
+        # The model sees the whole exchange: request, its question, the answer.
+        self._decide(task, lambda: self.orch.handle_request(
+            task, task["request_text"], question=question, answer=text, history=history))
 
     def _post_escalation(self, body: dict):
         """Ingress for edge escalations (PRD Table 2; Person 3 replaces the
@@ -482,8 +486,8 @@ class Handler(BaseHTTPRequestHandler):
             self.store.put_task(task)
             self.store.see_message_id(message_id)  # accepted: record for FR-8 dedup
             self.cost.record(dynamodb_ops=2)  # status write + log row
-            if action == "cancel":
-                self._drain()
+        if action == "cancel":
+            self._drain()
         self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
 
     def _relay_edge_answer(self, task: dict, text: str, message_id: str) -> None:
@@ -517,7 +521,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(404, {"error": f"unknown cluster {cluster_id}"})
                 return
             self.cost.record(iot_messages=1)
-            self._drain()  # a cluster coming back may unblock queued work
+        self._drain()  # a cluster coming back may unblock queued work (retries only if capacity really changed)
         self._send_json(201, {"accepted": True, "health": self.orch.fleet.health(cluster_id)})
 
     def _post_relay_decide(self, body: dict):
@@ -537,16 +541,16 @@ class Handler(BaseHTTPRequestHandler):
         event = {k: body[k] for k in ("step_index", "cmd", "zone", "target", "situation", "blocked_zones", "attempt")
                  if k in body}
         task_id = match.group(1)
+        self.orch.fleet.heartbeat(body["cluster_id"], {})
+        try:
+            res = self.orch.decide_step(task_id, body["lease_version"], body["cluster_id"], event)   # model call: unlocked
+        except StaleVersion as exc:
+            self._send_json(409, {"error": "outdated lease_version", "current": exc.current})
+            return
+        if "error" in res:
+            self._send_json(res["status"], {"error": res["error"]})
+            return
         with _STATE_LOCK:
-            self.orch.fleet.heartbeat(body["cluster_id"], {})
-            try:
-                res = self.orch.decide_step(task_id, body["lease_version"], body["cluster_id"], event)
-            except StaleVersion as exc:
-                self._send_json(409, {"error": "outdated lease_version", "current": exc.current})
-                return
-            if "error" in res:
-                self._send_json(res["status"], {"error": res["error"]})
-                return
             for r in res["rows"]:
                 self.store.append_decision(self._row(r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
             self.store.see_message_id(message_id)
@@ -864,9 +868,10 @@ def process_escalation(
         if body["lease_version"] < current:
             return 409, {"error": "outdated lease_version", "current": current}
 
-        if esc_type == "OUTPUT_READY" and task["status"] != "cancelled" and orch.has_next_leg(task):
+        next_leg = esc_type == "OUTPUT_READY" and task["status"] != "cancelled" and orch.has_next_leg(task)
+        if next_leg:
             task.setdefault("leg_results", []).append(body["payload"]["result_ref"])
-            apply_fn(task, orch.advance_leg(task))   # a hand-over: the next leg is the next lease version
+            store.put_task(task)
         elif esc_type == "OUTPUT_READY" and task["status"] != "cancelled":
             task["status"] = "completed"
             task["result_ref"] = body["payload"]["result_ref"]
@@ -889,12 +894,23 @@ def process_escalation(
         if esc_type == "OUTPUT_READY":
             cost_map["s3_ops"] = 1
         cost.record(**cost_map)
+        reacts = esc_type in ("UNEXPECTED_EVENT", "CLARIFY") and bool(task.get("lease"))
 
+    # What follows can call the model (seconds), so it runs without the lock that check-ins and heartbeats need.
+    # Anything that moved meanwhile is handled by the lease store's conditional writes, not by holding everyone up.
+    leg_outcome = orch.advance_leg(task) if next_leg else None            # a hand-over: the next leg is the next version
+    react = None
+    if reacts:
+        react = (orch.react.on_event(task, body["payload"]) if esc_type == "UNEXPECTED_EVENT"
+                 else orch.react.on_clarify(task, body["payload"], body["lease_version"]))
+
+    with _STATE_LOCK:
+        task = store.get_task(task_id) or task      # a check-in may have renewed the lease meanwhile: do not overwrite it
         replanned = None
         answer = None
-        if esc_type in ("UNEXPECTED_EVENT", "CLARIFY") and task.get("lease"):
-            react = (orch.react.on_event(task, body["payload"]) if esc_type == "UNEXPECTED_EVENT"
-                     else orch.react.on_clarify(task, body["payload"], body["lease_version"]))
+        if leg_outcome is not None:
+            apply_fn(task, leg_outcome)
+        if react is not None:
             for r in react.rows:
                 store.append_decision(make_decision_row(orch, r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
             cost.record(llm_calls=react.llm_calls, input_tokens=react.tokens_in, output_tokens=react.tokens_out,
@@ -908,16 +924,17 @@ def process_escalation(
                 task["status"], task["question"], task["edge_question"] = "needs_clarification", react.question, True
                 store.put_task(task)
             answer = react.answer
+        status, version = task["status"], (task.get("lease") or {}).get("version")
 
-        if esc_type == "OUTPUT_READY":
-            drain_fn()
+    if esc_type == "OUTPUT_READY":
+        drain_fn()
 
-        reply = {"duplicate": False, "accepted": True, "status": task["status"]}
-        if replanned is not None:
-            reply.update(replanned=replanned, lease_version=task["lease"]["version"])
-        if answer is not None:
-            reply["answer"] = answer
-        return 201, reply
+    reply = {"duplicate": False, "accepted": True, "status": status}
+    if replanned is not None:
+        reply.update(replanned=replanned, lease_version=version)
+    if answer is not None:
+        reply["answer"] = answer
+    return 201, reply
 
 
 def process_checkin(
