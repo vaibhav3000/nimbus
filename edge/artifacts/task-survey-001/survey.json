@@ -1,0 +1,12 @@
+{
+  "reports": [
+    {
+      "robot": "R1",
+      "counts": {
+        "north_hall": {
+          "infusion_pump": 1
+        }
+      }
+    }
+  ]
+}

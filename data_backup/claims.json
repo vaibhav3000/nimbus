@@ -1,0 +1,331 @@
+{
+ "leases": {
+  "task-000001": {
+   "lease": {
+    "lease_id": "lease-task-000001-v1",
+    "version": 1,
+    "priority": "urgent",
+    "deadline_ts": "2026-10-26T07:11:16Z",
+    "expiry_ts": "2026-10-26T07:14:16Z",
+    "allowed_zones": [
+     "E-STORE",
+     "E1",
+     "E2",
+     "E3",
+     "2B",
+     "E4",
+     "2B-12"
+    ],
+    "forbidden_zones": [],
+    "speed_limit": 0.5,
+    "assigned_robots": [
+     "R2"
+    ],
+    "task_sequence": [
+     {
+      "cmd": "go_to",
+      "params": {
+       "to": "E-STORE",
+       "purpose": "pickup"
+      },
+      "robot": "R2"
+     },
+     {
+      "cmd": "wait",
+      "params": {
+       "seconds": 30,
+       "reason": "load"
+      },
+      "robot": "R2"
+     },
+     {
+      "cmd": "go_to",
+      "params": {
+       "to": "2B-12",
+       "via": [
+        "E-STORE",
+        "E1",
+        "E2",
+        "E3",
+        "2B"
+       ]
+      },
+      "robot": "R2"
+     },
+     {
+      "cmd": "beep",
+      "params": {},
+      "robot": "R2"
+     },
+     {
+      "cmd": "photo",
+      "params": {
+       "purpose": "delivery_proof"
+      },
+      "robot": "R2"
+     },
+     {
+      "cmd": "report",
+      "params": {},
+      "robot": "R2"
+     }
+    ],
+    "cluster_id": "east-wing",
+    "when_to_escalate": [
+     "door_closed",
+     "deadline_at_risk",
+     "robot_failed",
+     "route_blocked_no_alternative"
+    ]
+   },
+   "state": "released"
+  },
+  "task-000002": {
+   "lease": {
+    "lease_id": "lease-task-000002-v1",
+    "version": 1,
+    "priority": "urgent",
+    "deadline_ts": "2026-10-26T07:17:19Z",
+    "expiry_ts": "2026-10-26T07:20:19Z",
+    "allowed_zones": [
+     "E-STORE",
+     "E1",
+     "E2",
+     "E3",
+     "2B",
+     "E4",
+     "2B-12"
+    ],
+    "forbidden_zones": [],
+    "speed_limit": 0.5,
+    "assigned_robots": [
+     "R3"
+    ],
+    "task_sequence": [
+     {
+      "cmd": "go_to",
+      "params": {
+       "to": "E-STORE",
+       "purpose": "pickup"
+      },
+      "robot": "R3"
+     },
+     {
+      "cmd": "wait",
+      "params": {
+       "seconds": 30,
+       "reason": "load"
+      },
+      "robot": "R3"
+     },
+     {
+      "cmd": "go_to",
+      "params": {
+       "to": "2B-12",
+       "via": [
+        "E-STORE",
+        "E1",
+        "E2",
+        "E3",
+        "2B"
+       ]
+      },
+      "robot": "R3"
+     },
+     {
+      "cmd": "beep",
+      "params": {},
+      "robot": "R3"
+     },
+     {
+      "cmd": "photo",
+      "params": {
+       "purpose": "delivery_proof"
+      },
+      "robot": "R3"
+     },
+     {
+      "cmd": "report",
+      "params": {},
+      "robot": "R3"
+     }
+    ],
+    "cluster_id": "east-wing",
+    "when_to_escalate": [
+     "door_closed",
+     "deadline_at_risk",
+     "robot_failed",
+     "route_blocked_no_alternative"
+    ]
+   },
+   "state": "released"
+  },
+  "task-000005": {
+   "lease": {
+    "lease_id": "lease-task-000005-v1",
+    "version": 1,
+    "priority": "urgent",
+    "deadline_ts": "2026-10-26T07:38:25Z",
+    "expiry_ts": "2026-10-26T07:41:25Z",
+    "allowed_zones": [
+     "E-STORE",
+     "E1",
+     "E2",
+     "E3",
+     "2B",
+     "E4",
+     "2B-12"
+    ],
+    "forbidden_zones": [],
+    "speed_limit": 0.5,
+    "assigned_robots": [
+     "R1"
+    ],
+    "task_sequence": [
+     {
+      "cmd": "go_to",
+      "params": {
+       "to": "E-STORE",
+       "purpose": "pickup"
+      },
+      "robot": "R1"
+     },
+     {
+      "cmd": "wait",
+      "params": {
+       "seconds": 30,
+       "reason": "load"
+      },
+      "robot": "R1"
+     },
+     {
+      "cmd": "go_to",
+      "params": {
+       "to": "2B-12",
+       "via": [
+        "E-STORE",
+        "E1",
+        "E2",
+        "E3",
+        "2B"
+       ]
+      },
+      "robot": "R1"
+     },
+     {
+      "cmd": "beep",
+      "params": {},
+      "robot": "R1"
+     },
+     {
+      "cmd": "photo",
+      "params": {
+       "purpose": "delivery_proof"
+      },
+      "robot": "R1"
+     },
+     {
+      "cmd": "report",
+      "params": {},
+      "robot": "R1"
+     }
+    ],
+    "cluster_id": "east-wing",
+    "when_to_escalate": [
+     "door_closed",
+     "deadline_at_risk",
+     "robot_failed",
+     "route_blocked_no_alternative"
+    ]
+   },
+   "state": "released"
+  },
+  "task-000010": {
+   "lease": {
+    "lease_id": "lease-task-000010-v1",
+    "version": 1,
+    "priority": "urgent",
+    "deadline_ts": "2026-10-26T08:05:49Z",
+    "expiry_ts": "2026-10-26T08:08:49Z",
+    "allowed_zones": [
+     "E-STORE",
+     "E1",
+     "E2",
+     "E3",
+     "2B",
+     "E4",
+     "2B-12"
+    ],
+    "forbidden_zones": [],
+    "speed_limit": 0.5,
+    "assigned_robots": [
+     "R1"
+    ],
+    "task_sequence": [
+     {
+      "cmd": "go_to",
+      "params": {
+       "to": "E-STORE",
+       "purpose": "pickup"
+      },
+      "robot": "R1"
+     },
+     {
+      "cmd": "wait",
+      "params": {
+       "seconds": 30,
+       "reason": "load"
+      },
+      "robot": "R1"
+     },
+     {
+      "cmd": "go_to",
+      "params": {
+       "to": "2B-12",
+       "via": [
+        "E-STORE",
+        "E1",
+        "E2",
+        "E3",
+        "2B"
+       ]
+      },
+      "robot": "R1"
+     },
+     {
+      "cmd": "beep",
+      "params": {},
+      "robot": "R1"
+     },
+     {
+      "cmd": "photo",
+      "params": {
+       "purpose": "delivery_proof"
+      },
+      "robot": "R1"
+     },
+     {
+      "cmd": "report",
+      "params": {},
+      "robot": "R1"
+     }
+    ],
+    "cluster_id": "east-wing",
+    "when_to_escalate": [
+     "door_closed",
+     "deadline_at_risk",
+     "robot_failed",
+     "route_blocked_no_alternative"
+    ]
+   },
+   "state": "live"
+  }
+ },
+ "claims": {
+  "robot:R1": {
+   "task_id": "task-000010",
+   "version": 1,
+   "until": "2026-10-26T08:08:49Z"
+  }
+ }
+}

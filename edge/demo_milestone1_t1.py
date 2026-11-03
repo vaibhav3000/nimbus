@@ -33,9 +33,9 @@ from edge.supervisor.supervisor import EdgeSupervisor
 from edge.slm.engine import EdgeSLMEngine
 
 
-def run_demo():
+def run_demo(backend: str = "mock"):
     print("=" * 70)
-    print("  NIMBUS MILESTONE 1 DEMO — EDGE TIER & LOCAL AUTONOMY (PERSON 2)")
+    print("  NIMBUS MILESTONE 1 DEMO -- EDGE TIER & LOCAL AUTONOMY (PERSON 2)")
     print("=" * 70)
 
     # 1. Initialize Edge Supervisor
@@ -43,10 +43,12 @@ def run_demo():
     supervisor = EdgeSupervisor(
         cluster_id="east-wing",
         db_path="edge_local_store.db",
-        slm_mode="auto"
+        slm_mode="auto",
+        robot_backend=backend,
     )
     print("    - Local SQLite store: 'edge_local_store.db'")
     print(f"    - Edge SLM mode: {supervisor.slm.mode} (Model: {supervisor.slm.model_name})")
+    print(f"    - Robot Backend: {backend.upper()} ({'ground_robot_sdk / Gazebo' if backend == 'sim' else 'in-memory mock'})")
     print(f"    - Topology Graph: {len(supervisor.topology.get('nodes', {}))} nodes, {len(supervisor.waypoints)} waypoints")
     print(f"    - Cluster Home Zone: {supervisor.home_zone}")
     print(f"    - Designated Safe Parking: {supervisor.safe_parking_zone}")
@@ -65,6 +67,8 @@ def run_demo():
         "deadline_ts": deadline.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "expiry_ts": expiry.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "allowed_zones": [
+            "north_hall",
+            "east_north_gate",
             "east_waiting_approach",
             "east_mid_hall",
             "nurse_station_approach"
@@ -95,9 +99,9 @@ def run_demo():
     print("\n[3] Executing Task Sequence on Robot R1:")
     result = supervisor.process_lease(lease_t1)
 
-    print(f"\n    [+] Mission Status : {result['status']}")
-    print(f"    [+] Steps Executed : {result['executed_steps_count']} steps")
-    print(f"    [+] Result Ref     : {result['result_ref']}")
+    print(f"\n    [+] Mission Status : {result.get('status', 'UNKNOWN')}")
+    print(f"    [+] Steps Executed : {result.get('executed_steps_count', 0)} steps")
+    print(f"    [+] Result Ref     : {result.get('result_ref', 'N/A')}")
 
     # 4. Demonstrate Live Tactical Reasoning with Local Ollama SLM
     print("\n[4] Testing Live Tactical Event with Local SLM (Qwen2.5-1.5B via Ollama):")
@@ -160,7 +164,7 @@ def run_demo():
         "lease_version": 1,
         "task_id": "task-000001",
         "payload": {
-            "result_ref": result["result_ref"]
+            "result_ref": result.get("result_ref", "storage://results/demo/delivery-proof.jpg")
         }
     }
     from edge.schemas.validator import validate_escalation
@@ -174,4 +178,8 @@ def run_demo():
 
 
 if __name__ == "__main__":
-    run_demo()
+    import argparse
+    parser = argparse.ArgumentParser(description="Run Milestone 1 Task T1 Demo.")
+    parser.add_argument("--backend", choices=["mock", "sim"], default="mock", help="Robot backend: 'mock' (in-memory) or 'sim' (Person 1 ground_robot_sdk / Gazebo)")
+    args = parser.parse_args()
+    run_demo(backend=args.backend)

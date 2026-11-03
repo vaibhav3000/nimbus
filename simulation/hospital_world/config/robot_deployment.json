@@ -10,7 +10,7 @@
       "start_node": "north_hall",
       "start_edge": null,
       "wing": "shared",
-      "association": "exact physical topology waypoint"
+      "association": "exact physical topology waypoint (R1, east cluster / shared central spine)"
     },
     "robot_2": {
       "namespace": "/robot_2",
@@ -18,7 +18,39 @@
       "start_node": null,
       "start_edge": ["north_hall", "nurse_station_approach"],
       "wing": "shared",
-      "association": "on the validated shared corridor edge, 2.5 m south of north_hall; no arbitrary start node assigned"
+      "association": "on the validated shared corridor edge, 2.5 m south of north_hall (R2, east cluster)"
+    },
+    "robot_3": {
+      "namespace": "/robot_3",
+      "spawn_pose": [4.5, 8.0, -1.5707963],
+      "start_node": "east_waiting_approach",
+      "start_edge": null,
+      "wing": "east",
+      "association": "exact physical topology waypoint at Ward 2B approach (R3, east wing)"
+    },
+    "robot_4": {
+      "namespace": "/robot_4",
+      "spawn_pose": [-4.5, 8.0, -1.5707963],
+      "start_node": "west_waiting_approach",
+      "start_edge": null,
+      "wing": "west",
+      "association": "exact physical topology waypoint at Ward 2C approach (R4, west wing primary)"
+    },
+    "robot_5": {
+      "namespace": "/robot_5",
+      "spawn_pose": [-4.5, 3.0, 0.0],
+      "start_node": "west_mid_hall",
+      "start_edge": null,
+      "wing": "west",
+      "association": "exact physical topology waypoint at west central bypass (R5, west wing)"
+    },
+    "robot_6": {
+      "namespace": "/robot_6",
+      "spawn_pose": [-4.5, -8.0, 0.0],
+      "start_node": "west_south_hall",
+      "start_edge": null,
+      "wing": "west",
+      "association": "exact physical topology waypoint at west south corridor (R6, west wing)"
     }
   }
 }

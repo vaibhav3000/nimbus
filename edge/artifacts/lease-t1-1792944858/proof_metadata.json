@@ -1,0 +1,13 @@
+{
+  "task_id": "lease-t1-1792944858",
+  "robot_id": "R1",
+  "pose": [
+    0.0,
+    5.0,
+    0.0
+  ],
+  "resolution": "1280x720",
+  "file_size_bytes": 1038,
+  "sha256": "25478af1a0e2f2ac658057066a94ec91bf2001ce76c359d7231c9c5916345dc9",
+  "created_at": "2026-10-25T16:14:18.739826+00:00"
+}

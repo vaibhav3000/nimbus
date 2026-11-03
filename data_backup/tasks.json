@@ -1,0 +1,599 @@
+{
+ "task-000001": {
+  "task_id": "task-000001",
+  "message_id": "app-6wr876bumv",
+  "request_text": "Need an infusion pump at 2B-12, urgent",
+  "status": "completed",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000001-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-10-26T07:11:16Z",
+   "expiry_ts": "2026-10-26T07:14:16Z",
+   "allowed_zones": [
+    "E-STORE",
+    "E1",
+    "E2",
+    "E3",
+    "2B",
+    "E4",
+    "2B-12"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R2"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "E-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R2"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R2"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "2B-12",
+      "via": [
+       "E-STORE",
+       "E1",
+       "E2",
+       "E3",
+       "2B"
+      ]
+     },
+     "robot": "R2"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R2"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R2"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R2"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": "storage://results/task-000001/delivery-proof.jpg",
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump_paediatric",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump_paediatric to 2B-12 (urgent); offline model stand-in",
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T06:59:16Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "infusion_pump_paediatric"
+  },
+  "stock_released": false
+ },
+ "task-000002": {
+  "task_id": "task-000002",
+  "message_id": "app-bqtpxxxfcw",
+  "request_text": "Need an infusion pump at 2B-12, urgent",
+  "status": "completed",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000002-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-10-26T07:17:19Z",
+   "expiry_ts": "2026-10-26T07:20:19Z",
+   "allowed_zones": [
+    "E-STORE",
+    "E1",
+    "E2",
+    "E3",
+    "2B",
+    "E4",
+    "2B-12"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R3"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "E-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "2B-12",
+      "via": [
+       "E-STORE",
+       "E1",
+       "E2",
+       "E3",
+       "2B"
+      ]
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R3"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R3"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": "storage://results/task-000002/delivery-proof.jpg",
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump_paediatric",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump_paediatric to 2B-12 (urgent); offline model stand-in",
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T07:05:19Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "infusion_pump_paediatric"
+  },
+  "stock_released": false
+ },
+ "task-000003": {
+  "task_id": "task-000003",
+  "message_id": "app-scx6b0nxpf",
+  "request_text": "Need an infusion pump at 2B-12, urgent",
+  "status": "cancelled",
+  "question": {
+   "question": "2B-12 is a paediatric bed. Do you need a paediatric pump?",
+   "possible_readings": [
+    "paediatric infusion pump",
+    "standard infusion pump"
+   ]
+  },
+  "lease": null,
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump_paediatric",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump_paediatric to 2B-12 (urgent); offline model stand-in",
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T07:15:33Z"
+  },
+  "reason": "east-wing: no infusion_pump_paediatric in stock; west-wing: destination 2B-12 is outside west-wing's area (hand-over needed)"
+ },
+ "task-000004": {
+  "task_id": "task-000004",
+  "message_id": "app-qv8le7jjoz",
+  "request_text": "Need an infusion pump at 2B-12, urgent",
+  "status": "cancelled",
+  "question": {
+   "question": "2B-12 is a paediatric bed. Do you need a paediatric pump?",
+   "possible_readings": [
+    "paediatric infusion pump",
+    "standard infusion pump"
+   ]
+  },
+  "lease": null,
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump_paediatric",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump_paediatric to 2B-12 (urgent); offline model stand-in",
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T07:25:24Z"
+  },
+  "reason": "east-wing: no infusion_pump_paediatric in stock; west-wing: destination 2B-12 is outside west-wing's area (hand-over needed)"
+ },
+ "task-000005": {
+  "task_id": "task-000005",
+  "message_id": "app-nvw47rd1it",
+  "request_text": "Need an infusion pump at 2B-12, urgent",
+  "status": "cancelled",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000005-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-10-26T07:38:25Z",
+   "expiry_ts": "2026-10-26T07:41:25Z",
+   "allowed_zones": [
+    "E-STORE",
+    "E1",
+    "E2",
+    "E3",
+    "2B",
+    "E4",
+    "2B-12"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R1"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "E-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "2B-12",
+      "via": [
+       "E-STORE",
+       "E1",
+       "E2",
+       "E3",
+       "2B"
+      ]
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R1"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R1"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump to 2B-12 (urgent); offline model stand-in",
+   "variant_confirmed_by_requester": true,
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T07:26:25Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "infusion_pump"
+  },
+  "stock_released": true
+ },
+ "task-000006": {
+  "task_id": "task-000006",
+  "message_id": "app-bizy04jfnt",
+  "request_text": "\u201cNeed an infusion pump at 2B-12, urgent\u201d",
+  "status": "cancelled",
+  "question": null,
+  "lease": null,
+  "result_ref": null,
+  "notice": "Reduced autonomy: the cloud model is unavailable, so deterministic rules are deciding.",
+  "spec": {
+   "item": "infusion_pump",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump to 2B-12 (urgent); form-style deterministic parse",
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T07:36:31Z"
+  },
+  "reason": "east-wing: cluster health is down; west-wing: destination 2B-12 is outside west-wing's area (hand-over needed)"
+ },
+ "task-000007": {
+  "task_id": "task-000007",
+  "message_id": "app-vh0b7r5dri",
+  "request_text": "\u201cNeed an infusion pump at 2B-12, urgent\u201d",
+  "status": "cancelled",
+  "question": null,
+  "lease": null,
+  "result_ref": null,
+  "notice": "Reduced autonomy: the cloud model is unavailable, so deterministic rules are deciding.",
+  "spec": {
+   "item": "infusion_pump",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump to 2B-12 (urgent); form-style deterministic parse",
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T07:37:00Z"
+  },
+  "reason": "east-wing: cluster health is down; west-wing: destination 2B-12 is outside west-wing's area (hand-over needed)"
+ },
+ "task-000008": {
+  "task_id": "task-000008",
+  "message_id": "app-1d9zr9wf8v",
+  "request_text": "\u201c\u201cNeed an infusion pump at 2B-12, urgent\u201d\u201d",
+  "status": "cancelled",
+  "question": {
+   "question": "2B-12 is a paediatric bed. Do you need a paediatric pump?",
+   "possible_readings": [
+    "paediatric infusion pump",
+    "standard infusion pump"
+   ]
+  },
+  "lease": null,
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump_paediatric",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump_paediatric to 2B-12 (urgent); offline model stand-in",
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T07:52:30Z"
+  },
+  "reason": "east-wing: no infusion_pump_paediatric in stock; west-wing: destination 2B-12 is outside west-wing's area (hand-over needed)"
+ },
+ "task-000009": {
+  "task_id": "task-000009",
+  "message_id": "app-800ppbftl1",
+  "request_text": "\u201c\u201cNeed an infusion pump at 2B-12, urgent\u201d\u201d",
+  "status": "cancelled",
+  "question": {
+   "question": "2B-12 is a paediatric bed. Do you need a paediatric pump?",
+   "possible_readings": [
+    "paediatric infusion pump",
+    "standard infusion pump"
+   ]
+  },
+  "lease": null,
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump_paediatric",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump_paediatric to 2B-12 (urgent); offline model stand-in",
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T07:53:22Z"
+  },
+  "reason": "east-wing: no infusion_pump_paediatric in stock; west-wing: destination 2B-12 is outside west-wing's area (hand-over needed)"
+ },
+ "task-000010": {
+  "task_id": "task-000010",
+  "message_id": "app-k8em4oz1ln",
+  "request_text": "\u201c\u201cNeed an infusion pump at 2B-12, urgent\u201d\u201d",
+  "status": "leased",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000010-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-10-26T08:05:49Z",
+   "expiry_ts": "2026-10-26T08:08:49Z",
+   "allowed_zones": [
+    "E-STORE",
+    "E1",
+    "E2",
+    "E3",
+    "2B",
+    "E4",
+    "2B-12"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R1"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "E-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "2B-12",
+      "via": [
+       "E-STORE",
+       "E1",
+       "E2",
+       "E3",
+       "2B"
+      ]
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R1"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R1"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump to 2B-12 (urgent); offline model stand-in",
+   "variant_confirmed_by_requester": true,
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T07:53:49Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "infusion_pump"
+  },
+  "stock_released": false
+ },
+ "_seen_message_ids": [
+  "app-1d9zr9wf8v",
+  "app-6mmr544iwo",
+  "app-6wr876bumv",
+  "app-786abg68xt",
+  "app-800ppbftl1",
+  "app-bizy04jfnt",
+  "app-bqtpxxxfcw",
+  "app-bw9q5ytmva",
+  "app-esybtek8ir",
+  "app-ez7t8e2d8p",
+  "app-ikihy65d15",
+  "app-iyw1eki1o6",
+  "app-k8em4oz1ln",
+  "app-nvw47rd1it",
+  "app-qv8le7jjoz",
+  "app-rudbz5gfps",
+  "app-scx6b0nxpf",
+  "app-vh0b7r5dri",
+  "msg-ci-1792997956584-139b38",
+  "msg-ci-1792998321609-725a14",
+  "msg-ci-1792999198830-1468ea",
+  "msg-ci-1792999204026-bf11ac",
+  "msg-ci-1792999585963-640962",
+  "msg-ci-1793001229651-da7e8d",
+  "msg-out-1792997957166",
+  "msg-out-1792998322034",
+  "msg-unexp-1792999586085-dfb156",
+  "msg-unexp-1793001257270-183eba",
+  "op-0e0hhwas2g",
+  "op-1wbx8shq6u",
+  "op-2c9yaik17d",
+  "op-50msk32zyn",
+  "op-8rpwcmq3er",
+  "op-nli5415059",
+  "op-pg6qtpov2o"
+ ]
+}

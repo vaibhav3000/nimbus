@@ -1,0 +1,8 @@
+{
+  "task_id": "lease-task-t1-001",
+  "execution_duration_sec": 0.18,
+  "distance_travelled_m": 12.5,
+  "subtasks_completed": 5,
+  "battery_consumed_pct": 0.0,
+  "timestamp": 1793734676.5786843
+}

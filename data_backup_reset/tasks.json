@@ -1,0 +1,1233 @@
+{
+ "task-000001": {
+  "task_id": "task-000001",
+  "message_id": "app-qgygw1wpth",
+  "request_text": "Need an infusion pump at 2B-12, urgent.",
+  "status": "cancelled",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000001-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-10-26T09:00:23Z",
+   "expiry_ts": "2026-10-26T09:03:23Z",
+   "allowed_zones": [
+    "E-STORE",
+    "E1",
+    "E2",
+    "E3",
+    "2B",
+    "E4",
+    "2B-12"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R3"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "E-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "2B-12",
+      "via": [
+       "E-STORE",
+       "E1",
+       "E2",
+       "E3",
+       "2B"
+      ]
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R3"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R3"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump_paediatric",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump_paediatric to 2B-12 (urgent); offline model stand-in",
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T08:48:23Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "infusion_pump_paediatric"
+  },
+  "stock_released": true
+ },
+ "task-000002": {
+  "task_id": "task-000002",
+  "message_id": "app-3h3g6r0luq",
+  "request_text": "Need an infusion pump at 2B-12, urgent.",
+  "status": "cancelled",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000002-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-10-26T09:47:27Z",
+   "expiry_ts": "2026-10-26T09:50:27Z",
+   "allowed_zones": [
+    "E-STORE",
+    "E1",
+    "E2",
+    "E3",
+    "2B",
+    "E4",
+    "2B-12"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R1"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "E-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "2B-12",
+      "via": [
+       "E-STORE",
+       "E1",
+       "E2",
+       "E3",
+       "2B"
+      ]
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R1"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R1"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump to 2B-12 (urgent); offline model stand-in",
+   "variant_confirmed_by_requester": true,
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T09:35:27Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "infusion_pump"
+  },
+  "stock_released": true
+ },
+ "task-000003": {
+  "task_id": "task-000003",
+  "message_id": "app-ov7off016l",
+  "request_text": "Need an infusion pump at 2B-12, urgent",
+  "status": "cancelled",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000003-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-10-26T10:00:52Z",
+   "expiry_ts": "2026-10-26T10:03:52Z",
+   "allowed_zones": [
+    "E-STORE",
+    "E1",
+    "E2",
+    "E3",
+    "2B",
+    "E4",
+    "2B-12"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R2"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "E-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R2"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R2"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "2B-12",
+      "via": [
+       "E-STORE",
+       "E1",
+       "E2",
+       "E3",
+       "2B"
+      ]
+     },
+     "robot": "R2"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R2"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R2"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R2"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump",
+   "destination": "2B-12",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump to 2B-12 (urgent); offline model stand-in",
+   "variant_confirmed_by_requester": true,
+   "destination_anchor": "2B",
+   "requested_at": "2026-10-26T09:48:52Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "infusion_pump"
+  },
+  "stock_released": true
+ },
+ "task-000004": {
+  "task_id": "task-000004",
+  "message_id": "app-svdz3xrvk4",
+  "request_text": "Deliver IV infusion kit from South Equipment Store to East Ward Bed 12.",
+  "status": "cancelled",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000004-v1",
+   "version": 1,
+   "priority": "routine",
+   "deadline_ts": "2026-10-26T11:00:57Z",
+   "expiry_ts": "2026-10-26T11:03:57Z",
+   "allowed_zones": [
+    "E-STORE",
+    "E1",
+    "E2",
+    "E3",
+    "ward-3"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R1"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "E-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "ward-3",
+      "via": [
+       "E-STORE",
+       "E1",
+       "E2",
+       "E3",
+       "ward-3"
+      ]
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R1"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R1"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "wheelchair",
+   "destination": "ward-3",
+   "priority": "routine",
+   "deadline_minutes": 60,
+   "constraints": [],
+   "rationale": "wheelchair to ward-3 (routine); offline model stand-in",
+   "destination_anchor": "ward-3",
+   "requested_at": "2026-10-26T10:00:57Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "wheelchair"
+  },
+  "stock_released": true
+ },
+ "task-000005": {
+  "task_id": "task-000005",
+  "message_id": "app-t2lfai7pfr",
+  "request_text": "Deliver a monitor to ward 3, routine.",
+  "status": "cancelled",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000005-v1",
+   "version": 1,
+   "priority": "routine",
+   "deadline_ts": "2026-10-26T11:01:56Z",
+   "expiry_ts": "2026-10-26T11:04:56Z",
+   "allowed_zones": [
+    "E-STORE",
+    "E1",
+    "E2",
+    "E3",
+    "ward-3"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R3"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "E-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "ward-3",
+      "via": [
+       "E-STORE",
+       "E1",
+       "E2",
+       "E3",
+       "ward-3"
+      ]
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R3"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R3"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "monitor",
+   "destination": "ward-3",
+   "priority": "routine",
+   "deadline_minutes": 60,
+   "constraints": [],
+   "rationale": "monitor to ward-3 (routine); offline model stand-in",
+   "destination_anchor": "ward-3",
+   "requested_at": "2026-10-26T10:01:56Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "monitor"
+  },
+  "stock_released": true
+ },
+ "task-000006": {
+  "task_id": "task-000006",
+  "message_id": "app-zrbuxkct09",
+  "request_text": "Deliver a monitor to ward 3, routine.",
+  "status": "leased",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000006-v1",
+   "version": 1,
+   "priority": "routine",
+   "deadline_ts": "2026-10-26T11:02:35Z",
+   "expiry_ts": "2026-10-26T11:05:35Z",
+   "allowed_zones": [
+    "E-STORE",
+    "E1",
+    "E2",
+    "E3",
+    "ward-3"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R3"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "E-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "ward-3",
+      "via": [
+       "E-STORE",
+       "E1",
+       "E2",
+       "E3",
+       "ward-3"
+      ]
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R3"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R3"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "monitor",
+   "destination": "ward-3",
+   "priority": "routine",
+   "deadline_minutes": 60,
+   "constraints": [],
+   "rationale": "monitor to ward-3 (routine); offline model stand-in",
+   "destination_anchor": "ward-3",
+   "requested_at": "2026-10-26T10:02:35Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "monitor"
+  },
+  "stock_released": false
+ },
+ "task-000007": {
+  "task_id": "task-000007",
+  "message_id": "app-9zb0ccis8k",
+  "request_text": "Deliver a wheelchair to ward 3, routine.",
+  "status": "leased",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000007-v1",
+   "version": 1,
+   "priority": "routine",
+   "deadline_ts": "2026-10-26T11:36:08Z",
+   "expiry_ts": "2026-10-26T11:39:08Z",
+   "allowed_zones": [
+    "E-STORE",
+    "E1",
+    "E2",
+    "E3",
+    "ward-3"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R1"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "E-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "ward-3",
+      "via": [
+       "E-STORE",
+       "E1",
+       "E2",
+       "E3",
+       "ward-3"
+      ]
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R1"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R1"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "wheelchair",
+   "destination": "ward-3",
+   "priority": "routine",
+   "deadline_minutes": 60,
+   "constraints": [],
+   "rationale": "wheelchair to ward-3 (routine); offline model stand-in",
+   "destination_anchor": "ward-3",
+   "requested_at": "2026-10-26T10:36:08Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "wheelchair"
+  },
+  "stock_released": false
+ },
+ "task-000008": {
+  "task_id": "task-000008",
+  "message_id": "app-7ldr8sfo5w",
+  "request_text": "Deliver a blanket to 2C, urgent",
+  "status": "leased",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000008-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-10-26T12:04:07Z",
+   "expiry_ts": "2026-10-26T12:11:58Z",
+   "allowed_zones": [
+    "W-STORE",
+    "W2",
+    "2C"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R4"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "W-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R4"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R4"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "2C",
+      "via": [
+       "W-STORE",
+       "W2",
+       "2C"
+      ]
+     },
+     "robot": "R4"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R4"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R4"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R4"
+    }
+   ],
+   "cluster_id": "west-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "blanket",
+   "destination": "2C",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "blanket to 2C (urgent); offline model stand-in",
+   "destination_anchor": "2C",
+   "requested_at": "2026-10-26T11:52:07Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "west-wing",
+   "item": "blanket"
+  },
+  "stock_released": false
+ },
+ "task-000009": {
+  "task_id": "task-000009",
+  "message_id": "app-d5ywj0q0vh",
+  "request_text": "Deliver a blanket to 2C, urgent",
+  "status": "leased",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000009-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-10-26T12:06:29Z",
+   "expiry_ts": "2026-10-26T12:11:58Z",
+   "allowed_zones": [
+    "W-STORE",
+    "W2",
+    "2C"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R5"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "W-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R5"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R5"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "2C",
+      "via": [
+       "W-STORE",
+       "W2",
+       "2C"
+      ]
+     },
+     "robot": "R5"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R5"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R5"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R5"
+    }
+   ],
+   "cluster_id": "west-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "blanket",
+   "destination": "2C",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "blanket to 2C (urgent); offline model stand-in",
+   "destination_anchor": "2C",
+   "requested_at": "2026-10-26T11:54:29Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "west-wing",
+   "item": "blanket"
+  },
+  "stock_released": false
+ },
+ "task-000010": {
+  "task_id": "task-000010",
+  "message_id": "app-k6zbmaee5c",
+  "request_text": "Deliver a blanket to 2C, urgent",
+  "status": "leased",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000010-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-10-26T12:21:06Z",
+   "expiry_ts": "2026-10-26T12:24:06Z",
+   "allowed_zones": [
+    "W-STORE",
+    "W2",
+    "2C"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R6"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "W-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R6"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R6"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "2C",
+      "via": [
+       "W-STORE",
+       "W2",
+       "2C"
+      ]
+     },
+     "robot": "R6"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R6"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R6"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R6"
+    }
+   ],
+   "cluster_id": "west-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "blanket",
+   "destination": "2C",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "blanket to 2C (urgent); offline model stand-in",
+   "destination_anchor": "2C",
+   "requested_at": "2026-10-26T12:09:06Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "west-wing",
+   "item": "blanket"
+  },
+  "stock_released": false
+ },
+ "task-000011": {
+  "task_id": "task-000011",
+  "message_id": "app-mbdnnuead6",
+  "request_text": "Deliver a blanket to 2C, urgent",
+  "status": "leased",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000011-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-10-26T14:19:27Z",
+   "expiry_ts": "2026-10-26T14:22:27Z",
+   "allowed_zones": [
+    "W-STORE",
+    "W2",
+    "2C"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 0.5,
+   "assigned_robots": [
+    "R4"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "W-STORE",
+      "purpose": "pickup"
+     },
+     "robot": "R4"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R4"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "2C",
+      "via": [
+       "W-STORE",
+       "W2",
+       "2C"
+      ]
+     },
+     "robot": "R4"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R4"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R4"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R4"
+    }
+   ],
+   "cluster_id": "west-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "blanket",
+   "destination": "2C",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "blanket to 2C (urgent); offline model stand-in",
+   "destination_anchor": "2C",
+   "requested_at": "2026-10-26T14:07:27Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "west-wing",
+   "item": "blanket"
+  },
+  "stock_released": false
+ },
+ "_seen_message_ids": [
+  "app-3h3g6r0luq",
+  "app-5z8mgc2mm0",
+  "app-7giyltmvv5",
+  "app-7ldr8sfo5w",
+  "app-9zb0ccis8k",
+  "app-d5ywj0q0vh",
+  "app-jvcwdnyzvy",
+  "app-k6zbmaee5c",
+  "app-mbdnnuead6",
+  "app-ov7off016l",
+  "app-q44za53xra",
+  "app-qgygw1wpth",
+  "app-svdz3xrvk4",
+  "app-t2lfai7pfr",
+  "app-zrbuxkct09",
+  "msg-ci-1793004181962-2fa061",
+  "msg-ci-1793004182143-94038d",
+  "msg-ci-1793004182779-2056cd",
+  "msg-ci-1793004183156-c0ff33",
+  "msg-ci-1793004183446-91ea26",
+  "msg-ci-1793004183815-0f4d01",
+  "msg-ci-1793004184061-4db99c",
+  "msg-ci-1793004184346-41b8e4",
+  "msg-ci-1793004184551-7d9808",
+  "msg-ci-1793004184773-4056af",
+  "msg-ci-1793004185068-e1fc10",
+  "msg-ci-1793004185212-672eaf",
+  "msg-ci-1793004201324-aa7d0c",
+  "msg-ci-1793004201682-20bd2a",
+  "msg-ci-1793004202003-0573ae",
+  "msg-ci-1793004202222-34d0bb",
+  "msg-ci-1793004202524-cf61f8",
+  "msg-ci-1793004504231-6784f5",
+  "msg-ci-1793004586958-cbd4d2",
+  "msg-ci-1793004778110-77dd0d",
+  "msg-ci-1793004904211-acdca4",
+  "msg-ci-1793007328563-8c3917",
+  "msg-ci-1793007356181-7e2492",
+  "msg-ci-1793007383819-df8976",
+  "msg-ci-1793007411476-20a62e",
+  "msg-ci-1793007934020-e23bca",
+  "msg-ci-1793007934149-42fee2",
+  "msg-ci-1793007934495-112975",
+  "msg-ci-1793007934704-809a64",
+  "msg-ci-1793007934865-3e6605",
+  "msg-ci-1793007935092-8804ca",
+  "msg-ci-1793007935241-4c4da4",
+  "msg-ci-1793007935415-79298c",
+  "msg-ci-1793007935530-2f17d4",
+  "msg-ci-1793007935661-97681b",
+  "msg-ci-1793007935828-37e185",
+  "msg-ci-1793007935926-7cc759",
+  "msg-ci-1793007954301-8acfc2",
+  "msg-ci-1793007954512-312721",
+  "msg-ci-1793007954723-e893c8",
+  "msg-ci-1793007954866-ddfa2c",
+  "msg-ci-1793007955057-9d13d1",
+  "msg-ci-1793008134116-1148d6",
+  "msg-ci-1793008139182-78dd7f",
+  "msg-ci-1793008144191-ba6d51",
+  "msg-ci-1793008149212-39e0a1",
+  "msg-ci-1793008154292-f1d5ab",
+  "msg-ci-1793008543398-ac0790",
+  "msg-ci-1793008543843-393721",
+  "msg-ci-1793008544291-41ebc0",
+  "msg-ci-1793008544595-1ab0e7",
+  "msg-ci-1793008545018-2103a3",
+  "msg-ci-1793008859015-42f69a",
+  "msg-ci-1793008918707-8a6469",
+  "msg-ci-1793008970272-0e8091",
+  "msg-ci-1793009297438-747e8d",
+  "msg-ci-1793009297666-7c6064",
+  "msg-ci-1793009298376-e15437",
+  "msg-ci-1793009298841-102e5f",
+  "msg-ci-1793009299166-6ecd3c",
+  "msg-ci-1793009299646-ecae97",
+  "msg-ci-1793009299988-e91858",
+  "msg-ci-1793009300388-c874ec",
+  "msg-ci-1793009300636-1f8f85",
+  "msg-ci-1793009300919-548667",
+  "msg-ci-1793009301298-5ddbc7",
+  "msg-ci-1793009301465-d82560",
+  "msg-ci-1793009317080-266eb0",
+  "msg-ci-1793009317499-79e2d4",
+  "msg-ci-1793009317906-e18251",
+  "msg-ci-1793009318182-b74f41",
+  "msg-ci-1793009318590-06cd9e",
+  "msg-ci-1793010969118-a8546e",
+  "msg-ci-1793011051761-acec66",
+  "msg-ci-1793011134423-0aad42",
+  "msg-ci-1793015528392-05d48a",
+  "msg-ci-1793015669826-468222",
+  "msg-ci-1793015933311-640c83",
+  "msg-ci-1793015933886-3314d6",
+  "msg-ci-1793015936386-a90869",
+  "msg-ci-1793015937423-0c9001",
+  "msg-ci-1793015938313-3ae493",
+  "msg-ci-1793015939312-60ede3",
+  "msg-ci-1793015939998-7e1bea",
+  "msg-ci-1793015940770-362abe",
+  "msg-ci-1793015941299-c87671",
+  "msg-ci-1793015941988-c3b1b3",
+  "msg-ci-1793015942993-1c827f",
+  "msg-ci-1793015943364-01a7ea",
+  "msg-ci-1793015961549-6cc181",
+  "msg-ci-1793015962195-23e35a",
+  "msg-ci-1793015962862-e6f7ce",
+  "msg-ci-1793015963316-81dc89",
+  "msg-ci-1793015963946-13bfdd",
+  "msg-ci-1793016538574-0a6978",
+  "msg-ci-1793016538687-809c7b",
+  "msg-ci-1793016623346-2f76e8",
+  "msg-ci-1793016706072-e640da",
+  "msg-ci-1793016791168-2e07ab",
+  "msg-ci-1793023485585-711dae",
+  "msg-ci-1793023485681-0dc589",
+  "msg-ci-1793023485788-80b007",
+  "msg-ci-1793023647990-3a8426",
+  "msg-ci-1793023730624-eeea65",
+  "msg-ci-1793023813330-4e5383",
+  "msg-ci-1793118987459-f6c07d",
+  "msg-ci-1793118987610-dc481d",
+  "msg-ci-1793118999528-49b20c",
+  "msg-ci-1793119084658-9cf5f4",
+  "msg-unexp-1793008859337-20b234",
+  "msg-unexp-1793008919004-3ec365",
+  "msg-unexp-1793008970569-54c958",
+  "msg-unexp-1793011219596-08fe66",
+  "msg-unexp-1793015528848-64a97a",
+  "msg-unexp-1793015670703-d46c26",
+  "msg-unexp-1793016873850-12fa1b",
+  "msg-unexp-1793023894808-7b6bca",
+  "op-bojzsf0pel",
+  "op-jkg2ok271b",
+  "op-jt6at9gko9",
+  "op-q6i0u0w0ee",
+  "op-zyq4m7frhd"
+ ]
+}

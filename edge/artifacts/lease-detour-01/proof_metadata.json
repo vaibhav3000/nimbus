@@ -1,0 +1,13 @@
+{
+  "task_id": "lease-detour-01",
+  "robot_id": "R1",
+  "pose": [
+    14.0,
+    4.0,
+    0.0
+  ],
+  "resolution": "1280x720",
+  "file_size_bytes": 1035,
+  "sha256": "2a8a229b6414eec28e5de3d817211ae65517a826cb7b240d6ec8ca5684e2c58e",
+  "created_at": "2026-11-03T19:38:19.510935+00:00"
+}

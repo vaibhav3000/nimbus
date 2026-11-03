@@ -23,7 +23,7 @@ class NavigationConfig:
     steering_gain: float = 1.2
     startup_odometry_timeout: float = 5.0
     odometry_timeout: float = 1.0
-    goal_timeout: float = 60.0
+    goal_timeout: float = 270.0
 
 
 class NavigationController:

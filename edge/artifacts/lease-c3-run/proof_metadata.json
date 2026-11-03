@@ -1,0 +1,13 @@
+{
+  "task_id": "lease-c3-run",
+  "robot_id": "R1",
+  "pose": [
+    14.0,
+    4.0,
+    0.0
+  ],
+  "resolution": "1280x720",
+  "file_size_bytes": 1032,
+  "sha256": "fc840c203645c6c205fe66082ea046d845e10acf41e07e97f4b8846e2876b20c",
+  "created_at": "2026-11-03T19:37:56.298667+00:00"
+}

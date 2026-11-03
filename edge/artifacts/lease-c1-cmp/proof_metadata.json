@@ -1,0 +1,13 @@
+{
+  "task_id": "lease-c1-cmp",
+  "robot_id": "R1",
+  "pose": [
+    14.0,
+    4.0,
+    0.0
+  ],
+  "resolution": "1280x720",
+  "file_size_bytes": 1032,
+  "sha256": "1cea5f9df8459f1cb779153777df9513c963c7021638143b4a4f9c460111e15f",
+  "created_at": "2026-11-03T19:37:55.876145+00:00"
+}

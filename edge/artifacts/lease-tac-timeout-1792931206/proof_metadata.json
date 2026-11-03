@@ -1,0 +1,13 @@
+{
+  "task_id": "lease-tac-timeout-1792931206",
+  "robot_id": "R1",
+  "pose": [
+    0.0,
+    5.0,
+    0.0
+  ],
+  "resolution": "1280x720",
+  "file_size_bytes": 1047,
+  "sha256": "ba8ec89f7bde418514606627005f191c1fa15cc1e06a5cae738f5ad0c253d15e",
+  "created_at": "2026-10-25T12:26:47.792118+00:00"
+}
