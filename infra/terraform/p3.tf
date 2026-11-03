@@ -178,3 +178,40 @@ resource "aws_budgets_budget" "monthly" {
     }
   }
 }
+
+# ---------------------------------------------------------------------------
+# Container registry for the service image (the Dockerfile is P3's). The image is
+# built and pushed by scripts/build_push.sh. First deploy: apply just the repository
+# (`terraform apply -target=aws_ecr_repository.app`), push the image, then apply the rest,
+# otherwise the ECS service starts before there is an image to pull.
+# ---------------------------------------------------------------------------
+
+resource "aws_ecr_repository" "app" {
+  name                 = "nimbus-app"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+resource "aws_ecr_lifecycle_policy" "app" {
+  repository = aws_ecr_repository.app.name
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep the 10 most recent images"
+      selection    = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 10 }
+      action       = { type = "expire" }
+    }]
+  })
+}
+
+locals {
+  app_image = var.app_image != "" ? var.app_image : "${aws_ecr_repository.app.repository_url}:latest"
+}
+
+output "ecr_repository_url" {
+  description = "Where scripts/build_push.sh pushes the service image."
+  value       = aws_ecr_repository.app.repository_url
+}

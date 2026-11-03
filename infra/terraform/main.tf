@@ -98,7 +98,7 @@ resource "aws_ecs_task_definition" "app" {
   container_definitions = jsonencode([
     {
       name      = "nimbus-app"
-      image     = var.app_image
+      image     = local.app_image
       essential = true
       portMappings = [
         { containerPort = 8000, protocol = "tcp" }

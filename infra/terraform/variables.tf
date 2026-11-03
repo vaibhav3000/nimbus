@@ -11,9 +11,9 @@ variable "project_name" {
 }
 
 variable "app_image" {
-  description = "Container image for the always-on Fargate service. Person 3 sets the real ECR image."
+  description = "Container image for the Fargate service. Empty (the default) uses the ECR repository this configuration creates, tag `latest`; push it with scripts/build_push.sh."
   type        = string
-  default     = "ghcr.io/team-nimbus/nimbus-app:placeholder"
+  default     = ""
 }
 
 variable "egress_mode" {
