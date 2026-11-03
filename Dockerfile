@@ -14,7 +14,7 @@ WORKDIR /app
 # Runtime dependencies only (pytest and moto are test-only).
 RUN pip install --no-cache-dir "jsonschema>=4.21" "boto3>=1.34"
 
-COPY server.py contracts.py cost.py store.py ./
+COPY server.py contracts.py cost.py store.py mqtt_transport.py ./
 COPY contracts/ contracts/
 COPY cloud/ cloud/
 COPY packs/ packs/
@@ -34,4 +34,6 @@ RUN useradd --create-home nimbus && mkdir -p /app/data && chown nimbus /app/data
 USER nimbus
 
 EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD python -c "import urllib.request,os; urllib.request.urlopen('http://127.0.0.1:%s/pack' % os.environ.get('PORT','8000'), timeout=4)"
 CMD ["python", "server.py"]
