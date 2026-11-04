@@ -1,0 +1,12 @@
+{
+  "task_id": "task-000001",
+  "execution_duration_sec": 0.054,
+  "distance_travelled_m": 47.94,
+  "subtasks_completed": 6,
+  "battery_consumed_pct": 0.0,
+  "timestamp": 1793827232.1272464,
+  "planned_distance_m": 47.94,
+  "distance_source": "measured_pose_history",
+  "execution_mode": "mock",
+  "arrival_verified": true
+}

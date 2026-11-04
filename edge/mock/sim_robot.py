@@ -507,7 +507,25 @@ class SimRobot:
             if self._mock_range_enabled:
                 adapter.set_range_scan(RangeScan((front_dist, front_dist, front_dist), front_dist, front_dist, timestamp=now))
 
+            self._publish_viewer_pose(cur_x, cur_y, cur_yaw, now)
             time.sleep(dt)
+
+    _viewer_last = 0.0
+
+    def _publish_viewer_pose(self, x: float, y: float, yaw: float, now: float) -> None:
+        """Kinematic mode only: stream the pose to the Gazebo-less viewer (simulation/lite/viewer.py)."""
+        url = os.environ.get("NIMBUS_SIM_VIEWER_URL")
+        if not url or now - self._viewer_last < 0.15:
+            return
+        self._viewer_last = now
+        try:
+            import urllib.request
+            body = json.dumps({"id": self.robot_id, "x": x, "y": y, "yaw": yaw, "zone": self.current_zone,
+                               "status": self.status, "t": now}).encode()
+            req = urllib.request.Request(url.rstrip("/") + "/pose", data=body, headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=0.3).read()
+        except Exception:
+            pass
 
     def _bind_feedback_sync(self, runtime: Any = None) -> None:
         runtime=runtime or self.runtime

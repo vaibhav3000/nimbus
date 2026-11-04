@@ -1,0 +1,20 @@
+{
+  "task_id": "task-000001",
+  "robot_id": "R2",
+  "pose": [
+    4.5,
+    8.0,
+    0.0
+  ],
+  "resolution": "1280x720",
+  "file_size_bytes": 1030,
+  "sha256": "99e500800283ec98f0b9cd8ef62191a1cb109537de34cafb0e940f2a48ff0228",
+  "created_at": "2026-11-04T21:20:32.126838+00:00",
+  "pose_source": "mock_simulation",
+  "pose_frame": "simulated/world",
+  "pose_timestamp": 1793827232.102287,
+  "arrival_verified": true,
+  "execution_mode": "mock",
+  "proof_type": "simulated",
+  "physical_verification": false
+}

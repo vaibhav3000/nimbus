@@ -97,8 +97,11 @@ class EdgeSupervisor:
         gazebo_validation: str = "odometry",
         system_mode: str = "C1",
         token: Optional[str] = None,
+        sim_mode: str = "auto",
     ):
         import os
+        self.sim_mode = (sim_mode or os.environ.get("NIMBUS_SIM_MODE") or "auto").lower()
+        self._seen_notices = set()
         self.token = token or os.environ.get("NIMBUS_EDGE_TOKEN")
         self.cluster_id = cluster_id
         self.cloud_url = cloud_url.rstrip("/")
@@ -216,7 +219,7 @@ class EdgeSupervisor:
                 initial_pos=initial_pos,
                 current_zone=current_zone,
                 waypoints=self.waypoints,
-                use_gazebo=True,
+                use_gazebo={"gazebo": True, "kinematic": False}.get(getattr(self, "sim_mode", "auto")),
                 validation_source=self.gazebo_validation,
             )
         return MockRobot(
@@ -372,7 +375,7 @@ class EdgeSupervisor:
 
     def fetch_leases_from_cloud(self) -> List[Dict[str, Any]]:
         """Polls GET /outbox on the cloud stand-in server (FR-11 selective sharing, NFR-5)."""
-        url = f"{self.cloud_url}/outbox"
+        url = f"{self.cloud_url}/outbox?active=1"
         headers = {"Accept": "application/json"}
         if getattr(self, "token", None):
             headers["Authorization"] = f"Bearer {self.token}"
@@ -386,7 +389,9 @@ class EdgeSupervisor:
                     topic = item.get("topic", "") if isinstance(item, dict) else ""
                     if topic == f"nimbus/{self.cluster_id}/notice" and isinstance(item, dict):
                         npayload = item.get("payload", {})
-                        if self.verbose:
+                        nkey = item.get("payload_id") or json.dumps(npayload, sort_keys=True)
+                        if self.verbose and nkey not in self._seen_notices:
+                            self._seen_notices.add(nkey)
                             print(f"[{self.cluster_id}] Notice received: {npayload.get('type')}")
                         continue
                     if topic and not topic.startswith(f"nimbus/{self.cluster_id}/"):
@@ -488,7 +493,7 @@ class EdgeSupervisor:
 
         req_data = json.dumps(body).encode("utf-8")
         if self.verbose:
-            print(f"[{self.cluster_id}] Sending Heartbeat to Cloud ({url}):\n{json.dumps(body, indent=2)}")
+            print(f"[{self.cluster_id}] Sending heartbeat ({len(body.get('robots', []))} robots)")
         headers = {"Content-Type": "application/json"}
         if getattr(self, "token", None):
             headers["Authorization"] = f"Bearer {self.token}"
@@ -1409,7 +1414,8 @@ class EdgeSupervisor:
         )
 
         # Survey tasks (T7): if task sequence contains "report" or lease is survey
-        is_survey = any(st.get("cmd") == "report" for st in task_sequence)
+        is_survey = any(st.get("cmd") == "report" for st in task_sequence) and not any(
+            st.get("cmd") == "photo" and (st.get("params") or {}).get("purpose") == "delivery_proof" for st in task_sequence)
         if is_survey:
             reports_list = []
             for rid in lease.get("assigned_robots", [active_robot_id]):
