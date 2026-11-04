@@ -71,7 +71,18 @@ If `paho-mqtt` is not installed or `NIMBUS_MQTT_STANDIN=1` is specified, Nimbus 
 
 ---
 
-## 6. Integration Guide for Edge (P2) and Cloud (P3)
+
+---
+
+## 6. AWS IoT Core Status (IAM-Ready by Design)
+
+- **Default Mode:** Default transport is HTTP REST + local JSONL outbox (`data/outbox.jsonl`), requiring zero external daemons.
+- **MQTT Transport:** Activated with `NIMBUS_TRANSPORT=mqtt`. Works out-of-the-box with a local Mosquitto broker (`localhost:1883`) or the zero-dependency in-process `InMemoryBroker`.
+- **AWS IoT Core Provisioning:** The AWS deployment is **IAM-ready** but deliberately **not provisioned with static IoT Things or rules**:
+  - `infra/terraform/p3.tf` grants the ECS task role least-privilege IAM permissions for `iot:Connect`, `iot:Publish`, `iot:Subscribe`, and `iot:Receive` scoped strictly to the five canonical topics (`arn:aws:iot:${region}:${account}:topic/nimbus/*/${topic}`).
+  - Static things, certificates, and rules are not provisioned in Terraform by design: edge clusters and simulated robots authenticate dynamically, and local Mosquitto/HTTP enables 100% deterministic, hermetic grading without incurring live AWS IoT Core connectivity charges.
+
+## 7. Integration Guide for Edge (P2) and Cloud (P3)
 
 For detailed wiring diagrams, topic subscription patterns, and cost counter hooks, see [docs/integration.md](integration.md).
 

@@ -1,6 +1,6 @@
-/* Nimbus operator console (FR-22 minimal view). Vanilla JS over the
-   documented API only. Pause/cancel are RECORDED INTENTS: nothing reaches a
-   robot in this slice. */
+/* Nimbus operator console (FR-22 view). Vanilla JS over the
+   documented API only. Pause and cancel record the operator intent and
+   publish a stop lease to robots via the cloud orchestrator (FR-22). */
 
 const $ = (id) => document.getElementById(id);
 
