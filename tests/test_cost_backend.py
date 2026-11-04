@@ -11,6 +11,8 @@ from cost import (
     DynamoCostBackend,
     LocalFileCostBackend,
     make_cost_backend,
+    calculate_cost_per_task,
+    CostCalculationResult,
 )
 
 
@@ -198,3 +200,116 @@ def test_make_cost_backend_unknown_value_raises(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("NIMBUS_COST_BACKEND", "unsupported_engine")
     with pytest.raises(ValueError, match="Unknown NIMBUS_COST_BACKEND"):
         make_cost_backend(tmp_path)
+
+
+def test_calculate_cost_per_task_all_ten_terms():
+    """Verify that calculate_cost_per_task accurately computes the 10-term PRD Sec 7 formula."""
+    counters = {
+        "input_tokens": 1000,         # T_in
+        "output_tokens": 200,         # T_out
+        "fargate_gbs": 50.0,          # F
+        "iot_messages": 30,           # M
+        "dynamodb_ops": 20,           # W
+        "sqs_messages": 10,           # Q
+        "s3_ops": 5,                  # S
+        "data_transfer_bytes": 1024,  # D
+        "apigw_requests": 15,         # G
+        "cloudwatch_metrics": 8,      # K
+    }
+
+    # Pass symbolic pricing table using PRD p_* notation
+    pricing = {
+        "p_in": 0.000003,       # 1000 * 0.000003 = 0.003
+        "p_out": 0.000015,      # 200 * 0.000015 = 0.003
+        "p_fargate": 0.00005,   # 50 * 0.00005 = 0.0025
+        "p_iot": 0.000001,      # 30 * 0.000001 = 0.00003
+        "p_ddb": 0.00000125,    # 20 * 0.00000125 = 0.000025
+        "p_sqs": 0.0000004,     # 10 * 0.0000004 = 0.000004
+        "p_s3": 0.000005,       # 5 * 0.000005 = 0.000025
+        "p_transfer": 0.00000009, # 1024 * 0.00000009 = 0.00009216
+        "p_apigw": 0.000001,    # 15 * 0.000001 = 0.000015
+        "p_cw": 0.0003,         # 8 * 0.0003 = 0.0024
+    }
+
+    num_tasks = 5
+    result = calculate_cost_per_task(counters, pricing, num_tasks=num_tasks)
+
+    # Check return type and representations
+    assert isinstance(result, CostCalculationResult)
+    assert isinstance(result, tuple)
+
+    # Test tuple unpacking: breakdown, cost_per_task
+    breakdown, cost_per_task = result
+    assert isinstance(breakdown, dict)
+    assert len(breakdown) == 10
+
+    # Verify each individual term cost
+    assert breakdown["input_tokens"] == pytest.approx(0.003)
+    assert breakdown["output_tokens"] == pytest.approx(0.003)
+    assert breakdown["fargate_gbs"] == pytest.approx(0.0025)
+    assert breakdown["iot_messages"] == pytest.approx(0.00003)
+    assert breakdown["dynamodb_ops"] == pytest.approx(0.000025)
+    assert breakdown["sqs_messages"] == pytest.approx(0.000004)
+    assert breakdown["s3_ops"] == pytest.approx(0.000025)
+    assert breakdown["data_transfer_bytes"] == pytest.approx(0.00009216)
+    assert breakdown["apigw_requests"] == pytest.approx(0.000015)
+    assert breakdown["cloudwatch_metrics"] == pytest.approx(0.0024)
+
+    expected_total = sum(breakdown.values())
+    expected_cpt = expected_total / num_tasks
+
+    assert result.total_cost == pytest.approx(expected_total)
+    assert cost_per_task == pytest.approx(expected_cpt)
+    assert result.cost_per_task == pytest.approx(expected_cpt)
+
+    # Test dict-like key indexing
+    assert result["breakdown"] == breakdown
+    assert result["cost_per_task"] == pytest.approx(expected_cpt)
+    assert result["total_cost"] == pytest.approx(expected_total)
+
+
+def test_calculate_cost_per_task_zero_tasks_safe():
+    """Verify that num_tasks = 0 is handled safely without ZeroDivisionError."""
+    counters = {"input_tokens": 500, "output_tokens": 100}
+    pricing = {"p_in": 0.000002, "p_out": 0.00001}
+
+    # Zero tasks
+    res_zero = calculate_cost_per_task(counters, pricing, num_tasks=0)
+    assert res_zero.cost_per_task == 0.0
+    assert res_zero["cost_per_task"] == 0.0
+    assert res_zero.total_cost == pytest.approx(500 * 0.000002 + 100 * 0.00001)
+
+    # Negative tasks (defensive)
+    res_neg = calculate_cost_per_task(counters, pricing, num_tasks=-1)
+    assert res_neg.cost_per_task == 0.0
+
+
+def test_calculate_cost_per_task_pricing_aliases():
+    """Pricing table can use counter names or short p_* aliases seamlessly."""
+    counters = {"fargate_gbs": 10.0, "sqs_messages": 50}
+    # Using counter names instead of p_*
+    pricing = {"fargate_gbs": 0.0001, "sqs_messages": 0.00005}
+
+    breakdown, cpt = calculate_cost_per_task(counters, pricing, num_tasks=2)
+    assert breakdown["fargate_gbs"] == pytest.approx(0.001)
+    assert breakdown["sqs_messages"] == pytest.approx(0.0025)
+    assert cpt == pytest.approx((0.001 + 0.0025) / 2)
+
+
+def test_calculate_cost_per_task_with_cost_book_integration(tmp_path: Path):
+    """Confirm CostBook.snapshot() integrates directly and existing CostBook behavior is unchanged."""
+    book = CostBook(tmp_path)
+    book.record(input_tokens=2000, output_tokens=500, apigw_requests=4)
+
+    # Verify existing CostBook methods behave as before
+    snap = book.snapshot()
+    assert snap["input_tokens"] == 2000
+    assert snap["output_tokens"] == 500
+    assert snap["apigw_requests"] == 4
+
+    # Pass CostBook instance directly to calculate_cost_per_task
+    pricing = {"p_in": 0.000001, "p_out": 0.000002, "p_apigw": 0.0001}
+    res = calculate_cost_per_task(book, pricing, num_tasks=4)
+    expected_total = (2000 * 0.000001) + (500 * 0.000002) + (4 * 0.0001)
+    assert res.total_cost == pytest.approx(expected_total)
+    assert res.cost_per_task == pytest.approx(expected_total / 4)

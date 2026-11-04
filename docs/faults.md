@@ -161,6 +161,9 @@ The harness can be configured via environment variables for automated test pipel
 
 This section provides the exact commands for running experiments **E4**, **E5**, and **E6** defined in PRD Section 7.
 
+> [!NOTE]
+> **Measurement Origin Note:** Recovery timestamps, packet drop counts, and connection failure metrics in local test runs are produced by the local userspace **`FaultProxy`** (`scripts/fault_harness.py`), **not by a live Linux kernel `tc`/`netem` run** (which is reserved for hardware nodes with root privileges via `--tc-apply`). See [`docs/e4-e5-evidence.md`](e4-e5-evidence.md) for full details.
+
 ### Experiment E4: Latency & Jitter Degradation (Tasks T2, T4, T5, T7)
 
 **Goal:** Evaluate system responsiveness, task handover, timeline tracking, and lease renewal under WAN latency and jitter without triggering spurious lease expirations.

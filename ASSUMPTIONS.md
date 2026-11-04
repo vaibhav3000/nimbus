@@ -57,17 +57,18 @@ entry below is a PRD detail the scope left open and the reading chosen.
    only the reaction logic gets replaced. UNEXPECTED_EVENT/CLARIFY reactions
    (re-plan, map update) are NOT implemented: rows are recorded only.
 
-10. **Cost counters record stand-in values.** Input tokens = `len(text)//4`
-    (crude stand-in tokenizer), output tokens = 150 per cloud decision (the
-    PRD's edge decision cap, used here as a plausible per-decision constant),
-    Fargate GB-s = flat 0.001 per decision, IoT = 1 per lease published,
+10. **Cost counters record stand-in values during local demos.** Input tokens =
+    `len(text)//4` (stand-in heuristic locally; real Bedrock tokens in AWS),
+    output tokens = 150 per cloud decision, Fargate GB-s = 0.001, IoT = 1 per lease,
     DynamoDB = rows written, SQS = escalations, S3 = OUTPUT_READY results.
-    Prices are never applied: PRD Sec. 7 keeps p_* symbolic. No Cost
-    Explorer calls (scope).
+    `calculate_cost_per_task(counters, pricing, num_tasks)` in `cost.py` computes
+    the complete 10-term PRD Section 7 formula using caller-supplied symbolic
+    pricing tables with zero-task division safety.
 
-11. **API Gateway integration is a MOCK placeholder.** A real API Gateway →
-    ECS Fargate hop needs a VPC link + NLB (or internal ALB), an infra sizing
-    beyond a skeleton. Comment in `main.tf` marks the replacement point.
+11. **API Gateway integration uses HTTP_PROXY.** The Terraform configuration
+    (`infra/terraform/main.tf`) declares a real `HTTP_PROXY` integration with
+    `$default` auto-deploy stage targeting `var.ecs_target_url` with dedicated
+    security group `aws_security_group.app` allowing port 8000.
 
 12. **Terraform binary.** None was installed on this machine, so a portable
     Terraform 1.9.8 was downloaded into `tools/` (gitignored) to make
@@ -101,3 +102,10 @@ entry below is a PRD detail the scope left open and the reading chosen.
     decision-row construction deduplicated through one helper, app HTML
     interpolation escaped, and the stale-version test expectation aligned with
     what is publicly reachable (see SPEC-P4.md).
+
+
+18. **Operator Console delivers stop leases.** Pausing and cancelling from
+    `static/operator.html` records human intents in the audit decision log, and
+    cancelling actively issues a stop lease to robots via `orch.stand_down()`.
+    Link degradation is reflected live on the Command Floor HUD via
+    `scripts/fault_harness.py` telemetry.
