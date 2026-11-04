@@ -60,7 +60,7 @@ if SIM_DIR and str(SIM_DIR) not in sys.path:
 # Import simulation components if available
 try:
     from ground_robot_sdk import MockAdapter, NavigationConfig, RobotRuntime, SafetyConfig
-    from ground_robot_sdk.models import CameraFrame, CommandStatus, Odometry, Pose2D, RangeScan, Twist2D
+    from ground_robot_sdk.models import CameraFrame, CommandStatus, GroundTruthPose, Odometry, Pose2D, RangeScan, Twist2D
     from ground_robot_sdk.namespaces import RobotIdentity
     from topology.resolver import load_data, resolve_destination, shortest_route, world_to_sdk_startup
     HAS_SDK = True
@@ -241,6 +241,9 @@ class SimRobot:
         waypoints: Optional[Dict[str, List[float]]] = None,
         use_gazebo: Optional[bool] = None,
         spawn_pose: Optional[Tuple[float, float, float]] = None,
+        validation_source: str = "odometry",
+        position_tolerance: float = 0.10,
+        sensor_timeout: float = 1.0,
     ):
         self.robot_id = robot_id
         cfg = DEFAULT_ROBOT_DEPLOYMENT.get(robot_id, DEFAULT_ROBOT_DEPLOYMENT["R1"])
@@ -268,6 +271,26 @@ class SimRobot:
             self.pose = list(self.spawn_pose)
 
         self.status = "IDLE"
+        self.execution_mode = "gazebo" if use_gazebo is not False else "sdk_mock"
+        self.validation_source = validation_source
+        self.position_tolerance = float(position_tolerance)
+        self.sensor_timeout = float(sensor_timeout)
+        self.connection_state = "INITIALIZING"
+        self._pose_lock = threading.RLock()
+        self.pose_source = "configured_spawn"
+        self.pose_frame = "gazebo/world"
+        self.pose_timestamp: Optional[float] = None
+        self.position_history: List[Tuple[float, float, float, float, str]] = []
+        self.measured_distance_m = 0.0
+        self.arrival_verified = False
+        # Navigation odometry is reset to startup-local coordinates each time
+        # the edge runtime attaches. Its origin can differ from the original
+        # deployment spawn after an edge restart.
+        self._navigation_origin_world = tuple(self.spawn_pose)
+        self._navigation_origin_measured = False
+        self.last_photo_bytes: Optional[bytes] = None
+        self._mock_odom_enabled = True
+        self._mock_range_enabled = True
         self.battery_pct = 95.0
         self.has_fault = False
         self.fault_msg = None
@@ -312,6 +335,7 @@ class SimRobot:
 
         if not HAS_SDK:
             self.runtime = None
+            self.connection_state = "DISCONNECTED"
             return
 
         # Check for ROS 2 rclpy availability
@@ -337,13 +361,17 @@ class SimRobot:
                     safety_config=SafetyConfig(obstacle_guard=True, minimum_front_distance=0.25),
                     navigation_config=NavigationConfig(
                         goal_timeout=270.0,
-                        position_tolerance=0.50,
+                        position_tolerance=self.position_tolerance,
                         startup_odometry_timeout=30.0,
-                        odometry_timeout=15.0,
+                        odometry_timeout=self.sensor_timeout,
+                        require_obstacle_feedback=True,
+                        obstacle_timeout=self.sensor_timeout,
+                        validation_source=self.validation_source,
+                        ground_truth_tolerance=self.position_tolerance,
                     ),
                 ).start()
-                # Ensure SensorManager timeout matches or exceeds navigation odometry tolerance
-                self.runtime.sensors._timeout = 15.0
+                self.runtime.sensors._timeout = self.sensor_timeout
+                self._bind_feedback_sync()
 
                 # Allow the asynchronous ROS-Gazebo bridge up to 20 seconds to establish odometry & range
                 bridge_ready_by = time.time() + 15.0
@@ -351,9 +379,9 @@ class SimRobot:
                 while time.time() < bridge_ready_by:
                     try:
                         health = self.runtime.state().health
-                        if health.odometry.fresh and health.range.fresh:
+                        if self.runtime.readiness(require_ground_truth=self.validation_source == "ground_truth") == "READY":
                             sensors_fresh = True
-                            print(f"      [sim] Live sensors connected for {self.sim_name} (odom & range) on partition: '{os.environ.get('IGN_PARTITION')}'")
+                            print(f"      [sim] READY: {self.sim_name} odom, range{', and ground truth' if self.validation_source == 'ground_truth' else ''} are fresh on partition '{os.environ.get('IGN_PARTITION')}'")
                             break
                         elif health.odometry.fresh and not health.range.fresh:
                             time.sleep(0.5)
@@ -361,25 +389,20 @@ class SimRobot:
                         pass
                     time.sleep(0.2)
 
-                # If range sensor is not publishing in headless/software mode, disable obstacle guard to avoid false stall
-                if not sensors_fresh:
-                    try:
-                        health = self.runtime.state().health
-                        if health.odometry.fresh and not health.range.fresh:
-                            print(f"      [sim] Notice: /{self.sim_name}/ultrasonic/scan not active; disabling obstacle_guard to prevent false stall.")
-                            self.runtime.safety.config.obstacle_guard = False
-                        elif not health.odometry.fresh:
-                            print(f"      [sim] Notice: /{self.sim_name}/odom not yet received. Partition: '{os.environ.get('IGN_PARTITION')}'. Ensure Gazebo is running unpaused.")
-                    except Exception:
-                        pass
-
                 self._is_gazebo = True
+                self.connection_state = self.runtime.readiness(require_ground_truth=self.validation_source == "ground_truth")
+                if not sensors_fresh:
+                    health=self.runtime.state().health
+                    print(f"      [sim] {self.connection_state}: {self.sim_name} odom_fresh={health.odometry.fresh} range_fresh={health.range.fresh} ground_truth_fresh={health.ground_truth.fresh}; navigation will fail closed.")
             except Exception as e:
-                print(f"[SimRobot:{self.robot_id}] Notice: ROS 2 / Gazebo not ready ({e}); falling back to SDK kinematic mock.")
-                self.runtime = self._init_mock_runtime()
+                print(f"[SimRobot:{self.robot_id}] Gazebo initialization failed: {e}")
+                self.runtime = None
+                self.connection_state = "DISCONNECTED"
         else:
             # Standalone SDK mock adapter with kinematic loop
             self.runtime = self._init_mock_runtime()
+            self.execution_mode = "sdk_mock"
+            self.connection_state = "READY"
 
     def _init_mock_runtime(self) -> Any:
         adapter = MockAdapter()
@@ -388,8 +411,9 @@ class SimRobot:
             robot_name=self.sim_name,
             namespace=self.namespace,
             safety_config=SafetyConfig(obstacle_guard=True, minimum_front_distance=0.25),
-            navigation_config=NavigationConfig(goal_timeout=60.0, position_tolerance=0.25, control_period=0.02),
+            navigation_config=NavigationConfig(goal_timeout=60.0, position_tolerance=min(self.position_tolerance,0.25), control_period=0.02,odometry_timeout=self.sensor_timeout,require_obstacle_feedback=True,obstacle_timeout=self.sensor_timeout),
         ).start()
+        runtime.sensors._timeout=self.sensor_timeout
 
         # Initialize odometry at start pose
         adapter.set_odometry(Odometry(Pose2D(self.spawn_pose[0], self.spawn_pose[1], self.spawn_pose[2]), Twist2D(), timestamp=time.time()))
@@ -398,6 +422,7 @@ class SimRobot:
         # Generate a minimal valid JPEG image frame for camera tests
         minimal_jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.' \",#\x1c\x1c(7),01444\x1f'9=82<.342\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xc4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xbf\x00\xff\xd9"
         adapter.set_camera_frame(CameraFrame(timestamp=time.time(), width=320, height=240, encoding="jpeg", available=True, data=minimal_jpeg))
+        self._bind_feedback_sync(runtime)
 
         # Start kinematic background updater
         self._kinematic_running = True
@@ -420,15 +445,79 @@ class SimRobot:
             cur_y += v * math.sin(cur_yaw) * dt
 
             now = time.time()
-            adapter.set_odometry(Odometry(Pose2D(cur_x, cur_y, cur_yaw), Twist2D(v, w), timestamp=now))
+            if self._mock_odom_enabled:
+                adapter.set_odometry(Odometry(Pose2D(cur_x, cur_y, cur_yaw), Twist2D(v, w), timestamp=now))
 
             # Maintain fresh range sensor
             front_dist = 2.0
             if self.injected_obstacles:
                 front_dist = 0.15  # within obstacle guard trigger range (< 0.25m)
-            adapter.set_range_scan(RangeScan((front_dist, front_dist, front_dist), front_dist, front_dist, timestamp=now))
+            if self._mock_range_enabled:
+                adapter.set_range_scan(RangeScan((front_dist, front_dist, front_dist), front_dist, front_dist, timestamp=now))
 
             time.sleep(dt)
+
+    def _bind_feedback_sync(self, runtime: Any = None) -> None:
+        runtime=runtime or self.runtime
+        runtime.sensors.subscribe("odometry",self._on_odometry_feedback)
+        runtime.sensors.subscribe("ground_truth",self._on_ground_truth_feedback)
+
+    def _local_to_world(self, pose: Pose2D) -> List[float]:
+        sx,sy,syaw=self._navigation_origin_world; c,s=math.cos(syaw),math.sin(syaw)
+        return [sx+c*pose.x-s*pose.y,sy+s*pose.x+c*pose.y,math.atan2(math.sin(syaw+pose.yaw),math.cos(syaw+pose.yaw))]
+
+    def _world_to_navigation(self, xy: Tuple[float, float]) -> Tuple[float, float]:
+        sx,sy,syaw=self._navigation_origin_world
+        dx,dy=float(xy[0])-sx,float(xy[1])-sy
+        c,s=math.cos(syaw),math.sin(syaw)
+        return c*dx+s*dy,-s*dx+c*dy
+
+    def _record_pose(self, pose: List[float], source: str, timestamp: Optional[float]) -> None:
+        with self._pose_lock:
+            if self.position_history:
+                _,last_x,last_y,_,_=self.position_history[-1]
+                delta=math.hypot(pose[0]-last_x,pose[1]-last_y)
+                if math.isfinite(delta) and delta < 2.0: self.measured_distance_m += delta
+            now=time.time()
+            self.pose[:]=pose
+            self.pose_source=source; self.pose_timestamp=timestamp or now
+            self.position_history.append((now,pose[0],pose[1],pose[2],source))
+
+    def _on_odometry_feedback(self, _odometry: Odometry) -> None:
+        if self.execution_mode == "gazebo" and not self._navigation_origin_measured:
+            sx,sy,syaw=self.spawn_pose; raw=_odometry.pose; c,s=math.cos(syaw),math.sin(syaw)
+            self._navigation_origin_world=(sx+c*raw.x-s*raw.y,sy+s*raw.x+c*raw.y,math.atan2(math.sin(syaw+raw.yaw),math.cos(syaw+raw.yaw)))
+            self._navigation_origin_measured=True
+        if self.validation_source == "ground_truth" and self.runtime.sensors.get_health().ground_truth.fresh: return
+        self._record_pose(self._local_to_world(self.runtime.navigation.pose),"odometry/startup_local->gazebo/world",_odometry.timestamp)
+
+    def _on_ground_truth_feedback(self, feedback: GroundTruthPose) -> None:
+        if self.execution_mode == "gazebo" and not self._navigation_origin_measured:
+            self._navigation_origin_world=(feedback.pose.x,feedback.pose.y,feedback.pose.yaw)
+            self._navigation_origin_measured=True
+        if self.validation_source == "ground_truth":
+            self._record_pose([feedback.pose.x,feedback.pose.y,feedback.pose.yaw],"gazebo_ground_truth",feedback.timestamp)
+
+    def set_mock_sensor_enabled(self, *, odometry: Optional[bool]=None, range_scan: Optional[bool]=None) -> None:
+        if self.execution_mode != "sdk_mock": raise RuntimeError("sensor injection controls are only available in sdk_mock mode")
+        if odometry is not None: self._mock_odom_enabled=bool(odometry)
+        if range_scan is not None: self._mock_range_enabled=bool(range_scan)
+
+    def refresh_readiness(self) -> str:
+        if not self.runtime: self.connection_state="DISCONNECTED"
+        elif self.execution_mode == "sdk_mock": self.connection_state="READY"
+        else: self.connection_state=self.runtime.readiness(require_ground_truth=self.validation_source == "ground_truth")
+        return self.connection_state
+
+    def pose_snapshot(self) -> Dict[str, Any]:
+        health=self.runtime.state().health if self.runtime else None
+        source_health=(health.ground_truth if self.pose_source == "gazebo_ground_truth" else health.odometry) if health else None
+        fresh=bool(source_health and source_health.fresh)
+        with self._pose_lock: last=list(self.pose)
+        return {"pose":last if fresh else None,"last_known_pose":last,"pose_source":self.pose_source,"pose_frame":self.pose_frame,"pose_timestamp":self.pose_timestamp,"pose_fresh":fresh}
+
+    def get_status(self) -> Dict[str, Any]:
+        return {"robot_id":self.robot_id,"current_cmd_id":self.current_cmd_id,"status":self.status,"zone":self.current_zone,"battery_pct":self.battery_pct,"connection_state":self.refresh_readiness(),"execution_mode":self.execution_mode,**self.pose_snapshot(),"timestamp":time.time()}
 
     def _find_route(self, start_zone: str, target_zone: str) -> List[str]:
         """Calculates collision-free topology corridor waypoints between two nodes."""
@@ -527,31 +616,46 @@ class SimRobot:
             "start_time": start_t,
         }
 
+        def finish(status: str, message: str, **extra: Any) -> Dict[str, Any]:
+            self.status=status
+            record.update({"end_time":time.time(),"status":status,"result_msg":message})
+            self.history.append(record)
+            snapshot=self.pose_snapshot()
+            verification_source=extra.get("verification_source")
+            physical_verification=self.execution_mode == "gazebo" and (
+                (bool(extra.get("arrival_verified")) and verification_source in {"odometry","ground_truth"})
+                or (bool(extra.get("has_photo")) and verification_source == "gazebo_camera")
+            )
+            return {
+                "robot_id":self.robot_id,"cmd_id":cmd_id,"status":status,
+                "zone":self.current_zone,"message":message,"timestamp":time.time(),
+                "execution_mode":self.execution_mode,"connection_state":self.refresh_readiness(),
+                "arrival_verified":bool(extra.pop("arrival_verified",False)),
+                "physical_verification":physical_verification,
+                "distance_travelled_m":round(self.measured_distance_m,3),**snapshot,**extra,
+            }
+
         # Check for simulated fault or critically depleted battery
         if self.has_fault or self.battery_pct <= 5.0:
-            self.status = "FAILED"
             msg = self.fault_msg or "Battery critical (<5%); emergency stop"
-            record["end_time"] = time.time()
-            record["status"] = self.status
-            record["result_msg"] = msg
-            self.history.append(record)
             if self.runtime:
                 self.runtime.commands.stop()
-            return {
-                "robot_id": self.robot_id,
-                "cmd_id": cmd_id,
-                "status": "FAILED",
-                "pose": list(self.pose),
-                "zone": self.current_zone,
-                "has_fault": self.has_fault,
-                "message": msg,
-                "timestamp": time.time(),
-            }
+            return finish("FAILED",msg,has_fault=self.has_fault)
 
         # Dispatch action to ground_robot_sdk
         if action == "go_to":
             target_name = params.get("to") or params.get("target_name")
             target_xy = params.get("target")
+
+            if not self.runtime:
+                return finish("SENSOR_UNAVAILABLE","robot runtime is unavailable")
+            if self.execution_mode == "gazebo" and self.refresh_readiness() != "READY":
+                health=self.runtime.state().health
+                if not health.odometry.fresh:
+                    return finish("LOCALIZATION_UNAVAILABLE","live Gazebo odometry is unavailable or stale")
+                if not health.range.fresh:
+                    return finish("SENSOR_UNAVAILABLE","live Gazebo obstacle sensor is unavailable or stale")
+                return finish("LOCALIZATION_UNAVAILABLE","configured Gazebo ground-truth validation is unavailable or stale")
 
             # 1. Resolve world coordinates from PRD aliases or waypoints
             if target_xy is None and target_name:
@@ -568,7 +672,14 @@ class SimRobot:
                     target_xy = self.waypoints[target_name]
 
             if target_xy is None:
-                target_xy = self.pose[:2]
+                return finish("INVALID_DESTINATION",f"Unknown destination: {target_name!r}")
+            try:
+                if len(target_xy) < 2:
+                    raise ValueError
+                target_xy=[float(target_xy[0]),float(target_xy[1])]
+                if not all(math.isfinite(v) for v in target_xy): raise ValueError
+            except (TypeError,ValueError):
+                return finish("INVALID_DESTINATION",f"Invalid destination coordinates for {target_name!r}")
 
             # 2. Check injected obstacles for tactical autonomy testing
             blocked_zone = None
@@ -590,26 +701,10 @@ class SimRobot:
                 if obs_info["type"] == "transient" and obs_info["wait_count"] >= obs_info["clears_after_waits"]:
                     del self.injected_obstacles[blocked_zone]
                 else:
-                    self.status = "BLOCKED"
                     result_msg = f"Navigation blocked in {blocked_zone}: {obs_info['description']}"
-                    record["end_time"] = time.time()
-                    record["status"] = self.status
-                    record["result_msg"] = result_msg
-                    self.history.append(record)
                     if self.runtime:
                         self.runtime.commands.stop()
-                    return {
-                        "robot_id": self.robot_id,
-                        "cmd_id": cmd_id,
-                        "status": "BLOCKED",
-                        "pose": list(self.pose),
-                        "zone": self.current_zone,
-                        "blocked_zone": blocked_zone,
-                        "obstacle_type": obs_info["type"],
-                        "obstacle_description": obs_info["description"],
-                        "message": result_msg,
-                        "timestamp": time.time(),
-                    }
+                    return finish("BLOCKED",result_msg,blocked_zone=blocked_zone,obstacle_type=obs_info["type"],obstacle_description=obs_info["description"])
 
             # 3. Expand corridor route using Dijkstra topology graph
             waypoints_to_visit = []
@@ -636,77 +731,39 @@ class SimRobot:
                     if target_name in self.waypoints:
                         target_xy = self.waypoints[target_name]
                 if target_xy is None:
-                    target_xy = self.pose[:2]
+                    return finish("INVALID_DESTINATION",f"Unknown destination: {target_name!r}")
                 waypoints_to_visit.append((target_name or "target", target_xy, float(params.get("speed", params.get("max_speed", 0.45)))))
 
             # 4. Sequentially execute each corridor waypoint
             for wp_name, wp_xy, wp_speed in waypoints_to_visit:
-                if HAS_SDK:
-                    x_sdk, y_sdk = world_to_sdk_startup(tuple(wp_xy[:2]), self.spawn_pose)
-                else:
-                    x_sdk, y_sdk = wp_xy[0] - self.spawn_pose[0], wp_xy[1] - self.spawn_pose[1]
+                x_sdk, y_sdk = self._world_to_navigation(tuple(wp_xy[:2]))
 
                 req_speed = float(params.get("speed", params.get("max_speed", 0.45)))
                 speed = min(req_speed, float(wp_speed))
 
-                if self.runtime:
-                    task = self.runtime.commands.goto(x_sdk, y_sdk, frame="world", speed=speed)
-                    deadline = time.time() + 60.0
-
-                    while time.time() < deadline:
-                        st = self.runtime.commands.status(task.command_id)
-                        if st.status == CommandStatus.COMPLETED:
-                            break
-                        if st.status in {CommandStatus.FAILED, CommandStatus.CANCELLED, CommandStatus.REJECTED}:
-                            self.status = "BLOCKED" if "obstacle" in (st.reason or "").lower() else "FAILED"
-                            result_msg = f"Navigation {st.status.value}: {st.reason or 'stopped'}"
-                            record["end_time"] = time.time()
-                            record["status"] = self.status
-                            record["result_msg"] = result_msg
-                            self.history.append(record)
-                            return {
-                                "robot_id": self.robot_id,
-                                "cmd_id": cmd_id,
-                                "status": self.status,
-                                "pose": list(self.pose),
-                                "zone": self.current_zone,
-                                "message": result_msg,
-                                "timestamp": time.time(),
-                            }
-                        time.sleep(0.05)
-
-                    if st.status != CommandStatus.COMPLETED:
-                        # Timeout guard: robot physically blocked or stalled
-                        try:
-                            cur_odom = self.runtime.state().odometry
-                            if cur_odom and cur_odom.pose:
-                                self.pose[0] = cur_odom.pose.x + self.spawn_pose[0]
-                                self.pose[1] = cur_odom.pose.y + self.spawn_pose[1]
-                        except Exception:
-                            pass
-                        self.status = "BLOCKED"
-                        result_msg = f"Navigation blocked / stalled at ({self.pose[0]:.2f}, {self.pose[1]:.2f}) - failed to reach {wp_name}"
-                        record["end_time"] = time.time()
-                        record["status"] = self.status
-                        record["result_msg"] = result_msg
-                        self.history.append(record)
-                        return {
-                            "robot_id": self.robot_id,
-                            "cmd_id": cmd_id,
-                            "status": "BLOCKED",
-                            "pose": list(self.pose),
-                            "zone": self.current_zone,
-                            "blocked_zone": self.current_zone,
-                            "message": result_msg,
-                            "timestamp": time.time(),
-                        }
-
-                self.pose[0] = float(wp_xy[0])
-                self.pose[1] = float(wp_xy[1])
+                task = self.runtime.commands.goto(x_sdk, y_sdk, frame="world", speed=speed)
+                deadline = time.monotonic()+self.runtime.navigation.config.goal_timeout+1.0
+                terminal={status for status in CommandStatus if status not in {CommandStatus.PENDING,CommandStatus.ACCEPTED,CommandStatus.RUNNING}}
+                st=task
+                while time.monotonic() < deadline:
+                    st=self.runtime.commands.status(task.command_id)
+                    if st and st.status in terminal: break
+                    time.sleep(0.02)
+                if not st or st.status not in terminal:
+                    self.runtime.commands.stop()
+                    return finish("TIMEOUT",f"Navigation timed out before reaching {wp_name}")
+                if st.status != CommandStatus.COMPLETED or not st.details.get("arrival_verified"):
+                    self.runtime.commands.stop()
+                    mapped={
+                        CommandStatus.BLOCKED:"BLOCKED",CommandStatus.SENSOR_UNAVAILABLE:"SENSOR_UNAVAILABLE",
+                        CommandStatus.LOCALIZATION_UNAVAILABLE:"LOCALIZATION_UNAVAILABLE",CommandStatus.GROUND_TRUTH_MISMATCH:"LOCALIZATION_UNAVAILABLE",
+                        CommandStatus.TIMEOUT:"TIMEOUT",CommandStatus.REJECTED:"FAILED",CommandStatus.CANCELLED:"FAILED",
+                    }.get(st.status,"FAILED")
+                    return finish(mapped,f"Navigation {st.status.value}: {st.reason or 'arrival was not verified'}",verification=st.details,verification_source=st.details.get("verification_source"))
                 self.current_zone = wp_name
+                self.arrival_verified=True
 
-            self.status = "COMPLETED"
-            result_msg = f"Arrived at {self.current_zone} ({self.pose[:2]}) via corridor centerlines"
+            return finish("COMPLETED",f"Arrived at {self.current_zone} using measured feedback",arrival_verified=True,verification_source=st.details.get("verification_source"),verification=st.details)
 
         elif action == "wait":
             sec = float(params.get("duration_sec", params.get("seconds", 1.0)))
@@ -719,40 +776,21 @@ class SimRobot:
             for obs in self.injected_obstacles.values():
                 obs["wait_count"] += 1
 
-            self.status = "COMPLETED"
-            result_msg = f"Waited {sec}s"
+            return finish("COMPLETED",f"Waited {sec}s",postconditions_verified=True,verification_source="clock")
 
         elif action == "photo":
             photo_bytes = None
-            if self.runtime:
-                try:
-                    frame = self.runtime.commands.photo()
-                    if frame and frame.available and frame.data:
-                        photo_bytes = frame.data
-                except Exception:
-                    pass
-
+            try:
+                frame = self.runtime.commands.photo() if self.runtime else None
+                camera_fresh=bool(self.runtime and self.runtime.state().health.camera.fresh)
+                if frame and frame.available and frame.data and (camera_fresh or self.execution_mode == "sdk_mock"):
+                    photo_bytes = frame.data
+            except Exception:
+                photo_bytes=None
             if not photo_bytes:
-                photo_bytes = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xff\xd9"
-
-            self.last_photo_bytes = photo_bytes
-            self.status = "COMPLETED"
-            result_msg = f"Captured camera frame at {self.pose[:2]} ({self.current_zone})"
-            record["end_time"] = time.time()
-            record["status"] = self.status
-            record["result_msg"] = result_msg
-            self.history.append(record)
-            return {
-                "robot_id": self.robot_id,
-                "cmd_id": cmd_id,
-                "status": "COMPLETED",
-                "pose": list(self.pose),
-                "zone": self.current_zone,
-                "has_photo": bool(photo_bytes),
-                "photo_size": len(photo_bytes) if photo_bytes else 0,
-                "message": result_msg,
-                "timestamp": time.time(),
-            }
+                return finish("CAPTURE_FAILED","No fresh camera frame is available")
+            self.last_photo_bytes=photo_bytes
+            return finish("COMPLETED",f"Captured {'simulated' if self.execution_mode == 'sdk_mock' else 'live'} camera frame",postconditions_verified=True,verification_source="simulated_camera" if self.execution_mode == "sdk_mock" else "gazebo_camera",has_photo=True,photo_size=len(photo_bytes))
 
         elif action == "beep":
             if self.runtime:
@@ -763,7 +801,7 @@ class SimRobot:
         elif action == "stop":
             if self.runtime:
                 self.runtime.commands.stop()
-            self.status = "IDLE"
+            self.status = "COMPLETED"
             result_msg = f"Stop executed: {params.get('reason', 'normal stop')}"
 
         elif action == "report":
@@ -771,39 +809,10 @@ class SimRobot:
                 rep = self.runtime.commands.report()
             else:
                 rep = {}
-            self.status = "IDLE"
-            result_msg = f"State report: Pose {self.pose[:2]}, Zone {self.current_zone}, Battery {self.battery_pct}%"
-            record["end_time"] = time.time()
-            record["status"] = self.status
-            record["result_msg"] = result_msg
-            self.history.append(record)
-            return {
-                "robot_id": self.robot_id,
-                "cmd_id": cmd_id,
-                "status": "IDLE",
-                "pose": list(self.pose),
-                "zone": self.current_zone,
-                "battery": self.battery_pct,
-                "report": rep,
-                "message": result_msg,
-                "timestamp": time.time(),
-            }
+            return finish("COMPLETED","State report captured",postconditions_verified=True,verification_source="telemetry",battery=self.battery_pct,report=rep)
 
         else:
             self.status = "FAILED"
             result_msg = f"Unknown action: {action}"
 
-        record["end_time"] = time.time()
-        record["status"] = self.status
-        record["result_msg"] = result_msg
-        self.history.append(record)
-
-        return {
-            "robot_id": self.robot_id,
-            "cmd_id": cmd_id,
-            "status": self.status,
-            "pose": list(self.pose),
-            "zone": self.current_zone,
-            "message": result_msg,
-            "timestamp": time.time(),
-        }
+        return finish(self.status,result_msg,postconditions_verified=self.status == "COMPLETED",verification_source="command_ack" if self.status == "COMPLETED" else None)

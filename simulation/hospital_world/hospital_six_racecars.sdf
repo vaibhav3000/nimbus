@@ -1546,7 +1546,7 @@
         </visual>
         <sensor name="ultrasonic" type="gpu_lidar">
           <always_on>1</always_on>
-          <update_rate>2</update_rate>
+          <update_rate>15</update_rate>
           <topic>/robot_1/ultrasonic/scan</topic>
           <lidar>
             <scan>
@@ -2019,7 +2019,7 @@
         </visual>
         <sensor name="ultrasonic" type="gpu_lidar">
           <always_on>1</always_on>
-          <update_rate>2</update_rate>
+          <update_rate>15</update_rate>
           <topic>/robot_2/ultrasonic/scan</topic>
           <lidar>
             <scan>
@@ -2492,7 +2492,7 @@
         </visual>
         <sensor name="ultrasonic" type="gpu_lidar">
           <always_on>1</always_on>
-          <update_rate>2</update_rate>
+          <update_rate>15</update_rate>
           <topic>/robot_3/ultrasonic/scan</topic>
           <lidar>
             <scan>
@@ -2965,7 +2965,7 @@
         </visual>
         <sensor name="ultrasonic" type="gpu_lidar">
           <always_on>1</always_on>
-          <update_rate>2</update_rate>
+          <update_rate>15</update_rate>
           <topic>/robot_4/ultrasonic/scan</topic>
           <lidar>
             <scan>
@@ -3438,7 +3438,7 @@
         </visual>
         <sensor name="ultrasonic" type="gpu_lidar">
           <always_on>1</always_on>
-          <update_rate>2</update_rate>
+          <update_rate>15</update_rate>
           <topic>/robot_5/ultrasonic/scan</topic>
           <lidar>
             <scan>
@@ -3911,7 +3911,7 @@
         </visual>
         <sensor name="ultrasonic" type="gpu_lidar">
           <always_on>1</always_on>
-          <update_rate>2</update_rate>
+          <update_rate>15</update_rate>
           <topic>/robot_6/ultrasonic/scan</topic>
           <lidar>
             <scan>

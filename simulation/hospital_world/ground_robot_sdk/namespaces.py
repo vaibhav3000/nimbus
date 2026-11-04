@@ -12,6 +12,7 @@ class RobotIdentity:
     """Empty namespace preserves the original single-robot topic contract."""
     robot_name: str = "ground_robot"
     namespace: str = ""
+    world_name: str = "hospital"
     def __post_init__(self):
         if not self.robot_name or "/" in self.robot_name: raise ValueError("robot_name must be a non-empty name without '/'")
         normalized=self.namespace.strip()
@@ -22,4 +23,7 @@ class RobotIdentity:
         if not self.namespace:
             return RobotTopics("/cmd_vel","/odom","/picarx/ultrasonic/scan","/picarx/camera/image","/tf","/picarx/pose","odom","base_link")
         prefix=self.namespace
-        return RobotTopics(f"{prefix}/cmd_vel",f"{prefix}/odom",f"{prefix}/ultrasonic/scan",f"{prefix}/camera/image",f"{prefix}/tf",f"{prefix}/pose",f"{self.robot_name}/odom",f"{self.robot_name}/base_link")
+        # The per-model PosePublisher stream contains child links but not the
+        # parent model itself in Gazebo Fortress.  The world stream contains
+        # the authoritative model transform needed for arrival validation.
+        return RobotTopics(f"{prefix}/cmd_vel",f"{prefix}/odom",f"{prefix}/ultrasonic/scan",f"{prefix}/camera/image",f"{prefix}/tf",f"/world/{self.world_name}/pose/info",f"{self.robot_name}/odom",f"{self.robot_name}/base_link")

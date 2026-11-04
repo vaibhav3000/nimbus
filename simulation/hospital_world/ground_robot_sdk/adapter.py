@@ -2,13 +2,14 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Callable, Optional
-from .models import CameraFrame, Odometry, RangeScan, Twist2D
+from .models import CameraFrame, GroundTruthPose, Odometry, RangeScan, Twist2D
 
 
 class RobotAdapter(ABC):
     """Only adapters may know middleware or hardware message types."""
-    def bind_sensor_callbacks(self, odometry: Callable[[Odometry], None], range_scan: Callable[[RangeScan], None], camera: Callable[[CameraFrame], None]) -> None:
+    def bind_sensor_callbacks(self, odometry: Callable[[Odometry], None], range_scan: Callable[[RangeScan], None], camera: Callable[[CameraFrame], None], ground_truth: Optional[Callable[[GroundTruthPose], None]] = None) -> None:
         self._odometry_callback, self._range_callback, self._camera_callback = odometry, range_scan, camera
+        self._ground_truth_callback = ground_truth or (lambda _value: None)
     @abstractmethod
     def start(self) -> None: ...
     @abstractmethod

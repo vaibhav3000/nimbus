@@ -14,11 +14,12 @@ WORKDIR /app
 # Runtime dependencies only (pytest and moto are test-only).
 RUN pip install --no-cache-dir "jsonschema>=4.21" "boto3>=1.34"
 
-COPY server.py contracts.py cost.py store.py mqtt_transport.py ./
+COPY server.py contracts.py cost.py store.py mqtt_transport.py standin.py ./
 COPY contracts/ contracts/
 COPY cloud/ cloud/
 COPY packs/ packs/
 COPY static/ static/
+COPY scripts/ scripts/
 
 # Defaults for the deployed service; Terraform's container definition can override any of them.
 ENV NIMBUS_BACKEND=aws \

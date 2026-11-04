@@ -128,7 +128,7 @@ class SDKTest(unittest.TestCase):
             task=runtime.commands.goto(1,0)
             time.sleep(.08)
             result=runtime.commands.status(task.command_id)
-            self.assertEqual(result.status.value,"failed")
+            self.assertEqual(result.status.value,"localization_unavailable")
             self.assertIn("no odometry",result.reason)
             self.assertEqual(runtime.adapter.last_command,Twist2D())
         finally: runtime.close()

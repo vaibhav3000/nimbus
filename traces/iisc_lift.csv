@@ -1,4 +1,4 @@
-# IISc Central Block Lift Trip Trace (10 Hz)
+# IISc Central Block Lift Trip Trace (short synthetic example for local testing)
 # Time(s), RTT(ms), Loss(%)
 # t=0..4s: hallway approach; t=5..15s: inside lift shaft (high latency + jitter + loss); t=16..20s: 3rd floor exit
 time_sec,rtt_ms,loss_pct

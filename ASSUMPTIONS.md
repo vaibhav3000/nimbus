@@ -50,12 +50,10 @@ entry below is a PRD detail the scope left open and the reading chosen.
    `when_to_escalate` as above. Zone/robot assignment is deliberately crude;
    the real assignment is Person 3's rule checker + scheduler.
 
-9. **`/escalations` ingress exists though Person 3 owns escalation handling.**
-   Needed so (a) the app can show a result (OUTPUT_READY completes the task),
-   (b) FR-8's dedup/staleness shape is observable at a public boundary, and
-   (c) Person 3 has a drop-in ingress: the route, guards and log rows stay,
-   only the reaction logic gets replaced. UNEXPECTED_EVENT/CLARIFY reactions
-   (re-plan, map update) are NOT implemented: rows are recorded only.
+9. **`/escalations` ingress integrates with P3 re-planning.** Initially created
+   with guards (dedup, schema validation, stale-version check) and record-only
+   logging; now fully wired into Person 3's orchestrator re-planning, multi-leg
+   handover, and survey map updates.
 
 10. **Cost counters record stand-in values.** Input tokens = `len(text)//4`
     (crude stand-in tokenizer), output tokens = 150 per cloud decision (the
@@ -65,9 +63,9 @@ entry below is a PRD detail the scope left open and the reading chosen.
     Prices are never applied: PRD Sec. 7 keeps p_* symbolic. No Cost
     Explorer calls (scope).
 
-11. **API Gateway integration is a MOCK placeholder.** A real API Gateway →
-    ECS Fargate hop needs a VPC link + NLB (or internal ALB), an infra sizing
-    beyond a skeleton. Comment in `main.tf` marks the replacement point.
+11. **API Gateway routes ECS requests.** Includes an auto-deploying `$default`
+    stage with `ANY /{proxy+}` and `GET /` proxy routes, avoiding manual routing
+    setup for web and API traffic.
 
 12. **Terraform binary.** None was installed on this machine, so a portable
     Terraform 1.9.8 was downloaded into `tools/` (gitignored) to make
@@ -101,3 +99,19 @@ entry below is a PRD detail the scope left open and the reading chosen.
     decision-row construction deduplicated through one helper, app HTML
     interpolation escaped, and the stale-version test expectation aligned with
     what is publicly reachable (see SPEC-P4.md).
+
+18. **Operator pause/cancel publishes a stop lease (FR-22).** When the operator
+    triggers pause or cancel, `server.py` calls `orch.stand_down()`, which generates
+    and publishes a schema-valid stop lease (`task_sequence: [{"cmd": "stop"}]`,
+    version incremented) to robots via MQTT (`nimbus/{cluster_id}/lease`) and the
+    outbox. Cancel also releases held robot and zone claims.
+
+19. **LLM outage fallback (FR-18).** Person 3 integrated `CircuitBreakerLLM` and
+    `RuleBasedLLM`. When Bedrock experiences outages or rate limits, the cloud
+    falls back immediately to deterministic rule-based allocation (C3 mode)
+    while leased edge tasks continue without disruption.
+
+20. **Security controls for fault injection and cluster validation.** Endpoints
+    `/fault` and `/llm/outage` are protected by default and require Bearer auth
+    or the `NIMBUS_DEMO_FAULTS=1` flag for local demos. Unknown edge clusters are
+    rejected with HTTP 404 unless `NIMBUS_ALLOW_UNKNOWN=1` is explicitly set.
