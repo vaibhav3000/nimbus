@@ -9,6 +9,7 @@ transit corridor traversal, and dynamic obstacle / fault injection for tactical 
 
 import json
 from pathlib import Path
+import math
 import time
 from typing import Any, Dict, List, Optional
 
@@ -102,6 +103,14 @@ class MockRobot:
         self.fault_msg = None
         self.current_cmd_id = None
         self.history: List[Dict[str, Any]] = []
+        self.execution_mode = "mock"
+        self.connection_state = "READY"
+        self.pose_source = "mock_simulation"
+        self.pose_frame = "simulated/world"
+        self.pose_timestamp = time.time()
+        self.measured_distance_m = 0.0
+        self.arrival_verified = False
+        self.last_photo_bytes = None
 
         # Obstacle simulation registry: {zone_or_corridor: {type, description, clears_after_waits, wait_count}}
         self.injected_obstacles: Dict[str, Dict[str, Any]] = {}
@@ -175,14 +184,18 @@ class MockRobot:
             }
 
         if action == "go_to":
-            target_name = params.get("to") or params.get("target_name") or "target"
+            target_name = params.get("to") or params.get("target_name")
             target = params.get("target")
 
             # Resolve coordinate from topology waypoints if not explicitly passed
             if target is None and target_name in self.waypoints:
                 target = self.waypoints[target_name]
             if target is None:
-                target = self.pose[:2]
+                self.status = "INVALID_DESTINATION"
+                result_msg = f"Unknown destination: {target_name!r}"
+                record.update({"end_time":time.time(),"status":self.status,"result_msg":result_msg})
+                self.history.append(record)
+                return {"robot_id":self.robot_id,"cmd_id":cmd_id,"status":self.status,"pose":list(self.pose),"zone":self.current_zone,"message":result_msg,"timestamp":time.time(),"execution_mode":"mock","physical_verification":False,"arrival_verified":False}
 
             # Obstacle checking in target zone or transit corridor
             blocked_zone = None
@@ -224,8 +237,10 @@ class MockRobot:
                         "timestamp": time.time(),
                     }
 
+            old_x,old_y=self.pose[:2]
             self.pose[0] = float(target[0])
             self.pose[1] = float(target[1])
+            self.measured_distance_m += math.hypot(self.pose[0]-old_x,self.pose[1]-old_y)
             if len(target) > 2:
                 self.pose[2] = float(target[2])
 
@@ -233,6 +248,8 @@ class MockRobot:
                 self.current_zone = target_name
 
             self.status = "COMPLETED"
+            self.arrival_verified = True
+            self.pose_timestamp=time.time()
             result_msg = f"Arrived at {self.current_zone} ({self.pose[:2]})"
 
         elif action == "wait":
@@ -247,7 +264,7 @@ class MockRobot:
         elif action == "photo":
             resolution = params.get("photo_resolution", "1280x720")
             self.status = "COMPLETED"
-            result_msg = f"Photo captured at {self.pose} ({self.current_zone}) with res {resolution}"
+            result_msg = f"Simulated photo event at {self.pose} ({self.current_zone}) with res {resolution}"
 
         elif action == "beep":
             freq = params.get("beep_frequency_hz", 440)
@@ -255,12 +272,12 @@ class MockRobot:
             result_msg = f"Beeped at {freq}Hz"
 
         elif action == "stop":
-            self.status = "IDLE"
+            self.status = "COMPLETED"
             reason = params.get("reason", "Emergency / reflex stop applied")
             result_msg = f"Stop executed: {reason}"
 
         elif action == "report":
-            self.status = "IDLE"
+            self.status = "COMPLETED"
             result_msg = f"Pose: {self.pose}, Zone: {self.current_zone}, Battery: {self.battery_pct}%"
 
         else:
@@ -281,6 +298,14 @@ class MockRobot:
             "current_zone": self.current_zone,
             "message": result_msg,
             "timestamp": time.time(),
+            "execution_mode": "mock",
+            "connection_state": "READY",
+            "arrival_verified": self.status == "COMPLETED",
+            "physical_verification": False,
+            "pose_source": self.pose_source,
+            "pose_frame": self.pose_frame,
+            "pose_timestamp": self.pose_timestamp,
+            "distance_travelled_m": round(self.measured_distance_m,3),
         }
 
     def get_status(self) -> Dict[str, Any]:
@@ -295,4 +320,7 @@ class MockRobot:
             "battery_pct": self.battery_pct,
             "has_fault": self.has_fault,
             "timestamp": time.time(),
+            "execution_mode": "mock",
+            "connection_state": "READY",
+            "physical_verification": False,
         }

@@ -20,7 +20,7 @@ Usage:
     # Print Linux tc/netem commands for a hardware testbed
     python scripts/fault_harness.py --tc-script --profile severe --iface eth0
 
-    # Trace replay mode
+    # Trace replay mode (Note: IISc traces are short synthetic examples for local testing, not full 10 Hz recordings)
     python scripts/fault_harness.py --trace traces/iisc_lift.csv
 """
 

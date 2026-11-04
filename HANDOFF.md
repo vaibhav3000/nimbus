@@ -1,40 +1,29 @@
-# HANDOFF.md: Person 4 slice, for the next agent
+# HANDOFF.md: Person 4 slice & integrated architecture
 
-**State: complete and green.** 62 P4 tests pass (`python -m pytest tests/test_api.py tests/test_fault_harness.py tests/test_mqtt_transport.py tests/test_cost_backend.py -q`), `terraform validate` passes, SC-1 verified clickable in a real browser (request → clarify → answer → lease v1 → OUTPUT_READY → result, refresh-safe).
+**State: complete, integrated, and green.** Over 400 tests pass across the repository (58 P4 tests, 51 edge tests, 20 simulation tests), `terraform validate` passes honestly, and SC-1 is verified clickable in a real browser end-to-end (request → clarify → answer → lease v1 → check-in/renewal → pause/cancel stop lease → OUTPUT_READY → result).
 
-## Read first (do not duplicate, they are current)
+## Architecture & Current Status (PRD v5.0)
 
-- README.md: run instructions, real vs stand-in vs Person-3-replace table, API list
-- SPEC-P4.md: the spec this was built against
-- ASSUMPTIONS.md: every PRD-gap reading chosen (17 numbered)
-- REUSE.md: what was reused from the old v3.1 workspace and why
-- GLOSSARY.md: the team vocabulary; use these terms
-- docs/p4-compliance-matrix.md: complete mapping of FR-8, FR-9, FR-10, FR-20, FR-21, FR-22, NFR-4, NFR-5, NFR-6
-- docs/p4-fresh-clone.md: quick start guide for clean machine setup
-- docs/e4-e5-evidence.md: fault harness exact reproduction commands
+- **Contracts (`contracts/`)**: Published wire schemas for `lease`, `escalation`, `robot_subtask`, `decision_log_entry`, and topic topologies (`contracts/topics.md`).
+- **Cloud Orchestration & Fallback (FR-13..FR-18)**: Bedrock LLM orchestrator with deterministic rule-checker verification. Full FR-18 circuit breaker fallback to rule-based allocation (C3 mode) when Bedrock is unreachable.
+- **Operator Console (FR-22)**: Interactive 3D spatial floor map (`static/operator.html`, `static/operator.js`), fault telemetry badge, and pause/cancel controls. When an operator triggers pause or cancel, `server.py` calls `orch.stand_down()`, which generates and publishes a schema-valid **stop lease** (`[{"cmd": "stop"}]`, incremented version) delivered to edge robots via `nimbus/{cluster_id}/lease` and `data/outbox.jsonl`.
+- **Requester App (FR-21)**: Plain-language interface at `/` for staff requests with interactive clarification dialogs.
+- **Decision Log (FR-20)**: Append-only JSONL decision log (`store.py`) replayable via `GET /tasks/{id}/timeline`.
+- **Cost Hooks (PRD Sec. 7)**: 10 raw cost counters in `cost.py` exposed via `GET /cost`.
+- **Cloud-Edge Transport**: Switchable between default local HTTP + JSONL and MQTT on the five canonical topics via `NIMBUS_TRANSPORT=mqtt`.
+- **Infrastructure (`infra/terraform/`)**: Complete validated skeleton including VPC, dedicated ECS security group, Fargate service, API Gateway with auto-deploying `$default` stage, DynamoDB tables, SQS escalations queue, EventBridge bus, S3 bucket, ECR repository with `force_delete`, and CloudWatch alarm skeleton.
 
 ## How to run
 
 ```bash
-python server.py        # http://127.0.0.1:8000, data in data/
+python server.py                                # http://127.0.0.1:8000
 python -m pytest tests/test_api.py tests/test_fault_harness.py tests/test_mqtt_transport.py tests/test_cost_backend.py -q
-cd infra/terraform && terraform init -backend=false && terraform validate
+cd infra/terraform && terraform validate
 ```
 
-Terraform binary for this machine lives (gitignored) in `tools/terraform.exe`.
+## Security & Operational Flags
 
-## Architecture & Integration Points
-
-1. **Orchestrator Boundary**: `server.py` interfaces with `cloud.orchestrator.Orchestrator` (Person 3) when available, falling back cleanly to `standin.py` for local offline testing.
-2. **Escalations & Re-planning**: `server.py` guards ingress (dedupe, schema validation, stale-version 409 rejection) and delegates re-planning and lease v2 generation to the orchestrator.
-3. **Storage & State**: `store.py` provides local atomic file persistence; DynamoDB tables (`leases`, `tasks`, `robot_status`, `decision_log`, `state`) are declared in Terraform with least-privilege IAM policies.
-4. **Cost Tracking & Formula**: `cost.py` records raw counters (`COUNTERS`) and provides `calculate_cost_per_task(counters, pricing, num_tasks)` computing the full PRD Section 7 10-term formula with zero-task division guard.
-5. **Operator Console & Stop Leases**: `static/operator.html` and `static/operator.js` provide a live spatial floor grid HUD; cancelling a task publishes a stop lease to robots via `orch.stand_down()`.
-6. **Network Fault Harness**: `scripts/fault_harness.py` provides a cross-platform userspace `FaultProxy` for testing WAN latency, jitter, packet drops, and partition recovery (E4–E6).
-
-## Operational Details & Boundaries
-
-- Operator cancel publishes a stop lease to robots; intents are preserved in the append-only decision log.
-- Network traces in `traces/` (`iisc_corridor.csv`, `iisc_lift.csv`, `iisc_basement.csv`) are short synthetic examples for local testing.
-- Cost counters carry stand-in values during local demos; prices are symbolic and passed into `calculate_cost_per_task()`.
-- API Gateway HTTP API uses `HTTP_PROXY` integration to forward requests to the ECS container port 8000.
+- `NIMBUS_DEMO_FAULTS`: Set to `1` to enable local demo access to `/fault` and `/llm/outage` diagnostic endpoints (disabled by default in production).
+- `NIMBUS_ALLOW_UNKNOWN`: Defaults to `0` (off). Rejects heartbeats or check-ins from unregistered cluster IDs with HTTP 404 unless enabled.
+- `NIMBUS_EDGE_TOKEN`: When set, protects edge endpoints with Bearer token authentication (NFR-5).
+- `NIMBUS_TRANSPORT`: Set to `mqtt` to activate MQTT transport (defaults to `http`).

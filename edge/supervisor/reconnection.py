@@ -90,7 +90,10 @@ class ReconnectionManager:
                 robot_positions = {}
                 for rid in assigned_robots:
                     if rid in self.robots:
-                        robot_positions[rid] = list(self.robots[rid].pose[:2])
+                        robot=self.robots[rid]
+                        snapshot=robot.pose_snapshot() if hasattr(robot,"pose_snapshot") else {"pose":list(robot.pose)}
+                        pose=snapshot.get("pose")
+                        robot_positions[rid] = None if pose is None else list(pose[:2])
                     else:
                         robot_positions[rid] = [0.0, 0.0]
 

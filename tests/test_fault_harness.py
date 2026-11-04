@@ -469,7 +469,7 @@ def test_operator_console_serves_fault_hud(api):
         assert resp.status == 200
         # Exact operator labels preserved
         assert "Nimbus: Operator Console" in html
-        assert "Operator console: intents are recorded, not yet delivered to robots." in html
+        assert "Operator console: pause and cancel record the intent and publish a stop lease to robots." in html
         # Spatial View fault badge, telemetry summary, and styles
         assert 'id="floor-fault-badge"' in html
         assert 'id="floor-fault-stats"' in html

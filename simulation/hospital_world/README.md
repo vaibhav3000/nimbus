@@ -155,13 +155,16 @@ For a robot named `robot_1`, the live Gazebo interfaces are:
 | Ackermann velocity input | `/robot_1/cmd_vel` |
 | Odometry | `/robot_1/odom` |
 | Transform | `/robot_1/tf`, `robot_1/odom` -> `robot_1/base_link` |
-| RGB camera | `/robot_1/camera/image` (640x480, 15 Hz) |
+| RGB camera | `/robot_1/camera/image` (640x480, 2 Hz) |
 | Front range | `/robot_1/ultrasonic/scan` (five rays, 15 Hz) |
-| Pose publisher | `/robot_1/pose` |
+| Ground-truth model poses | `/world/hospital/pose/info` |
 
 `robot_2` has the same interfaces under `/robot_2`. Existing ROS 2 clients can
 bridge them through the SDK’s `GazeboAdapter`; the wrappers start
 `ros_gz_bridge` and `ros_gz_image` when a `RobotRuntime` starts.
+The SDF pose publisher uses `ignition.msgs.Pose_V`; the adapter bridges it to
+`tf2_msgs/msg/TFMessage` and stores the selected model pose separately from
+odometry as Gazebo world-frame ground truth.
 
 ## Python SDK
 
@@ -170,6 +173,67 @@ Start Gazebo first, then in another terminal using the same `IGN_PARTITION`:
 ```bash
 export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
 python3 run_robot_control.py --robot-name robot_1 --namespace /robot_1 --port 8081
+```
+
+This standalone HTTP wrapper requires fresh odometry and range feedback for
+navigation. Add `--validation-source ground_truth` to require Gazebo pose
+verification as well. The Edge Supervisor does not call this HTTP server; it
+constructs the same `RobotRuntime` directly.
+
+For the complete Edge integration, start the six-robot world and edge in
+separate terminals with the same partition:
+
+```bash
+HOSPITAL_IGN_PARTITION=custom_hospital_world ./launch_hospital_six_racecars.sh
+HOSPITAL_IGN_PARTITION=custom_hospital_world python3 ../../edge/run_supervisor.py \
+  --cluster east-wing --robot-backend sim --gazebo-validation ground_truth
+```
+
+Before submitting a cloud task, confirm that the edge startup table reports
+`READY`. Useful transport checks are:
+
+```bash
+ign topic -e -n 1 -t /robot_1/odom
+ign topic -e -n 1 -t /robot_1/ultrasonic/scan
+ign topic -e -n 1 -t /world/hospital/pose/info
+```
+
+The live validation harness sends one bounded navigation request and exits
+non-zero if readiness, the expected terminal status, or arrival verification
+fails:
+
+```bash
+python3 scripts/validate_edge_gazebo.py --robot R1 --target 1.0 12.0 \
+  --validation-source ground_truth --expect COMPLETED
+```
+
+The harness can terminate only its ultrasonic bridge after motion starts. It
+must end with `SENSOR_UNAVAILABLE`, never `COMPLETED`:
+
+```bash
+python3 scripts/validate_edge_gazebo.py --robot R1 --target 2.0 12.0 \
+  --validation-source ground_truth --disconnect range \
+  --disconnect-after 0.5 --expect SENSOR_UNAVAILABLE
+```
+
+For a fresh simulator session, this creates a box 18.5 cm ahead of R1's front
+sensor and verifies a real `BLOCKED` result:
+
+```bash
+ign service -s /world/hospital/create --reqtype ignition.msgs.EntityFactory \
+  --reptype ignition.msgs.Boolean --timeout 5000 \
+  --req 'sdf: "<sdf version=\"1.9\"><model name=\"nimbus_validation_obstacle\"><static>true</static><pose>0.6 12 0.3 0 0 0</pose><link name=\"body\"><collision name=\"collision\"><geometry><box><size>0.3 1.0 0.6</size></box></geometry></collision><visual name=\"visual\"><geometry><box><size>0.3 1.0 0.6</size></box></geometry></visual></link></model></sdf>"'
+python3 scripts/validate_edge_gazebo.py --robot R1 --target 1.0 12.0 \
+  --validation-source ground_truth --expect BLOCKED
+```
+
+Deterministic sensor-loss, localization-loss, obstacle, and
+ground-truth-divergence tests can
+be run without claiming live Gazebo execution:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. python3 -m pytest -q \
+  ../../edge/tests/test_edge_gazebo_regressions.py
 ```
 
 Use the high-level facade from an application. For a Gazebo world-frame target,

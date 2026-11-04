@@ -1,7 +1,7 @@
 """Fast in-memory adapter for SDK and API tests."""
 from __future__ import annotations
 from .adapter import RobotAdapter
-from .models import CameraFrame, Odometry, RangeScan, Twist2D
+from .models import CameraFrame, GroundTruthPose, Odometry, RangeScan, Twist2D
 
 
 class MockAdapter(RobotAdapter):
@@ -12,3 +12,4 @@ class MockAdapter(RobotAdapter):
     def set_odometry(self, value: Odometry): self._odometry_callback(value)
     def set_range_scan(self, value: RangeScan): self._range_callback(value)
     def set_camera_frame(self, value: CameraFrame): self._camera_callback(value)
+    def set_ground_truth(self, value: GroundTruthPose): self._ground_truth_callback(value)
