@@ -45,6 +45,12 @@ echo "Check your edge command started with IGN_PARTITION=... (a missing 'I' -> G
 python3 -c "import rclpy; print('rclpy: importable')" 2>&1 | tail -1
 ps aux | grep -E "run_supervisor|ros_gz_bridge|gz sim|ign gazebo" | grep -v grep | awk '{print "  running:", $11, $12, $13, $14, $15, $16}' | head -10
 
+hr "1b. Partition each running process actually uses (they must all be identical; the edge spawns its own ros_gz_bridge children)"
+for pid in $(pgrep -f "run_supervisor|ros_gz_bridge|ign gazebo" 2>/dev/null); do
+  part=$(tr '\0' '\n' < /proc/$pid/environ 2>/dev/null | grep -E '^IGN_PARTITION=' | head -1)
+  printf '  pid %-7s %-28s %s\n' "$pid" "$(ps -o args= -p $pid | cut -c1-28)" "${part:-IGN_PARTITION=<unset>}"
+done
+
 hr "2. THE ANSWER: the edge's recorded failure (decision_log EXECUTION_FAILED)"
 if [ ! -f "$DB" ]; then
   echo "Edge DB '$DB' not found in $(pwd). Run this from the folder you started the edge in, or set EDGE_DB=<path>."
@@ -63,7 +69,9 @@ hr "3. Cloud: reachable? what does it believe about this cluster?"
 curl -s -m 5 "${TOKEN_HDR[@]}" "$CLOUD/fleet" | python3 -c "
 import json,sys
 try:
-    for c in json.load(sys.stdin):
+    d = json.load(sys.stdin)
+    print('pack=%s mode=%s' % (d.get('pack'), d.get('mode')))
+    for c in d.get('fleet', d):
         print(c['cluster_id'], 'health=%s age_s=%s' % (c['health'], c['age_s']))
         for r in c['robots']: print('   ', r)
 except Exception as e: print('cannot read /fleet:', e)"
@@ -90,6 +98,19 @@ except subprocess.TimeoutExpired as e:
 print(out.strip().splitlines()[-1] if out.strip() else "  NO MESSAGES")
 PY
   done
+  if command -v ign >/dev/null 2>&1; then
+    echo "--- Gazebo side (not ROS): is the simulator itself publishing the scan?  (partition: ${IGN_PARTITION:-<unset>})"
+    ign topic -l 2>/dev/null | grep "/$ROBOT/" | head -8
+    python3 - "/$ROBOT/ultrasonic/scan" <<'PY'
+import subprocess, sys
+try:
+    out = subprocess.run(["ign", "topic", "-e", "-t", sys.argv[1], "-n", "1"], capture_output=True, text=True, timeout=8).stdout
+except subprocess.TimeoutExpired:
+    out = ""
+print("  Gazebo IS publishing the scan -> the ROS bridge/partition is the problem" if out.strip()
+      else "  Gazebo is NOT publishing the scan -> the lidar sensor itself is not rendering (see reading guide)")
+PY
+  fi
 else
   echo "ros2 not on PATH: run 'source /opt/ros/<distro>/setup.bash' first, then re-run this script."
 fi
@@ -101,7 +122,9 @@ cat <<'TXT'
  front range data is stale or unavailable/invalid     lidar topic not fresh: check section 4; the edge requires a message every 1 s
  front obstacle is inside safety distance (BLOCKED)   something within 0.25 m of the robot (another robot spawned next to it?)
  LOCALIZATION_UNAVAILABLE / no odometry ... timeout   edge started before the sim was ready, or wrong partition: start Gazebo first, then the edge
- Unknown destination / INVALID_DESTINATION            a zone name with no entry in sim_robot.py CLOUD_TO_SIM_ALIASES: use NIMBUS_PACK=hospital_sim
+ Unknown destination / INVALID_DESTINATION            a zone name with no entry in sim_robot.py CLOUD_TO_SIM_ALIASES: use NIMBUS_PACK=hospital_sim6 for P1's six-robot world
+ Gazebo side says NOT publishing the scan             gpu_lidar needs 3D rendering: on WSL/headless run with a working GL/EGL (e.g. LIBGL_ALWAYS_SOFTWARE=1, or WSLg), or ask P1 for a CPU lidar
+ Gazebo publishes but ROS shows NO MESSAGES          the bridge runs in another partition: see section 1b, every pid must show the same IGN_PARTITION
  Navigation timed out                                 robot never reached the point: check section 4 and the Gazebo window
  section 2d shows PENDING/FAILED outbox rows          the cloud never got the escalation: check the cloud URL and the edge token
 Send P1/P3 the output of sections 2 and 4.
