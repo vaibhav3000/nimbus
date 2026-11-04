@@ -148,9 +148,7 @@ resource "aws_security_group" "app" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Name = "${local.name_prefix}-app-sg"
-  }
+  tags = { Name = "${local.name_prefix}-app-sg" }
 }
 
 resource "aws_ecs_service" "app" {
@@ -178,7 +176,7 @@ resource "aws_apigatewayv2_api" "main" {
   protocol_type = "HTTP"
 }
 
-resource "aws_apigatewayv2_integration" "placeholder" {
+resource "aws_apigatewayv2_integration" "app" {
   api_id                 = aws_apigatewayv2_api.main.id
   integration_type       = "HTTP_PROXY"
   integration_uri        = "https://httpbin.org/post"
@@ -186,10 +184,28 @@ resource "aws_apigatewayv2_integration" "placeholder" {
   payload_format_version = "1.0"
 }
 
+resource "aws_apigatewayv2_stage" "default" {
+  api_id      = aws_apigatewayv2_api.main.id
+  name        = "$default"
+  auto_deploy = true
+}
+
 resource "aws_apigatewayv2_route" "requests" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "POST /requests"
-  target    = "integrations/${aws_apigatewayv2_integration.placeholder.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.app.id}"
+}
+
+resource "aws_apigatewayv2_route" "proxy" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.app.id}"
+}
+
+resource "aws_apigatewayv2_route" "root" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "GET /"
+  target    = "integrations/${aws_apigatewayv2_integration.app.id}"
 }
 
 resource "aws_apigatewayv2_stage" "default" {
@@ -418,4 +434,134 @@ resource "aws_iam_role" "execution" {
 resource "aws_iam_role_policy_attachment" "execution" {
   role       = aws_iam_role.execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+
+# ---------------------------------------------------------------------------
+# AWS IoT Core skeleton: IoT Policy for edge robot clusters.
+# Note: AWS IoT Things, X.509 certificates, and certificate attachments are
+# provisioned at device onboarding / deployment time, not baked statically.
+# ---------------------------------------------------------------------------
+
+resource "aws_iot_policy" "edge_cluster" {
+  name = "${local.name_prefix}-edge-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["iot:Connect"]
+        Resource = ["arn:aws:iot:${var.aws_region}:*:client/nimbus-*"]
+      },
+      {
+        Effect = "Allow"
+        Action = ["iot:Publish"]
+        Resource = [
+          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/escalation",
+          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/checkin",
+          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/probe"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = ["iot:Receive", "iot:Subscribe"]
+        Resource = [
+          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/lease",
+          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/renewal",
+          "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/lease",
+          "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/renewal"
+        ]
+      }
+    ]
+  })
+}
+
+# ---------------------------------------------------------------------------
+# Static web app storage and CloudFront CDN distribution skeleton.
+# ---------------------------------------------------------------------------
+
+resource "aws_s3_bucket" "static_app" {
+  bucket        = "${local.name_prefix}-static-app"
+  force_destroy = false
+}
+
+resource "aws_cloudfront_origin_access_control" "static_app" {
+  name                              = "${local.name_prefix}-oac"
+  description                       = "OAC for Nimbus static web application"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+resource "aws_cloudfront_distribution" "static_app" {
+  comment             = "Nimbus static web UI distribution skeleton"
+  enabled             = false
+  is_ipv6_enabled     = true
+  default_root_object = "index.html"
+
+  origin {
+    domain_name              = aws_s3_bucket.static_app.bucket_regional_domain_name
+    origin_id                = "S3-${aws_s3_bucket.static_app.id}"
+    origin_access_control_id = aws_cloudfront_origin_access_control.static_app.id
+  }
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "S3-${aws_s3_bucket.static_app.id}"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 3600
+    max_ttl                = 86400
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+
+  tags = { Name = "${local.name_prefix}-static-cdn" }
+}
+
+# ---------------------------------------------------------------------------
+# Secrets Manager skeleton: secret container for API keys / third-party credentials.
+# Real secret values are injected during deploy time, not stored in code.
+# ---------------------------------------------------------------------------
+
+resource "aws_secretsmanager_secret" "app_secrets" {
+  name                    = "${local.name_prefix}-app-secrets"
+  description             = "Skeleton secret container for Nimbus API keys and credentials (populated at deploy time)"
+  recovery_window_in_days = 0
+}
+
+# ---------------------------------------------------------------------------
+# CloudWatch Alarm skeleton: missed check-in alerts (PRD NFR-2, Sec. 7).
+# Monitors Nimbus/App MissedCheckins metric emitted via EMF.
+# ---------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "missed_checkin" {
+  alarm_name          = "${local.name_prefix}-missed-checkin-alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "MissedCheckins"
+  namespace           = "Nimbus/App"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Triggered when an edge robot cluster misses its heartbeat checkin deadline"
+  treat_missing_data  = "notBreaching"
 }
