@@ -94,6 +94,7 @@ class EdgeSupervisor:
         waypoints_file: Optional[str] = None,
         verbose: bool = True,
         robot_backend: str = "mock",
+        gazebo_validation: str = "odometry",
         system_mode: str = "C1",
         token: Optional[str] = None,
     ):
@@ -102,6 +103,7 @@ class EdgeSupervisor:
         self.cluster_id = cluster_id
         self.cloud_url = cloud_url.rstrip("/")
         self.robot_backend = (robot_backend or "mock").lower()
+        self.gazebo_validation = gazebo_validation
         self.system_mode = (system_mode or "C1").upper()
         if self.system_mode == "C3":
             slm_mode = "rules_only"
@@ -205,7 +207,7 @@ class EdgeSupervisor:
 
         if getattr(self, "robot_backend", "mock") in ("sim", "simulator", "gazebo"):
             # Check if a SimRobot for this vehicle namespace already exists
-            target_sim_name = "robot_2" if robot_id in ("R2", "robot_2") else "robot_1"
+            target_sim_name = f"robot_{robot_id[1:]}" if robot_id.upper().startswith("R") and robot_id[1:].isdigit() else robot_id
             for existing in getattr(self, "robots", {}).values():
                 if isinstance(existing, SimRobot) and getattr(existing, "sim_name", None) == target_sim_name:
                     return existing
@@ -214,6 +216,8 @@ class EdgeSupervisor:
                 initial_pos=initial_pos,
                 current_zone=current_zone,
                 waypoints=self.waypoints,
+                use_gazebo=True,
+                validation_source=self.gazebo_validation,
             )
         return MockRobot(
             robot_id=robot_id,
@@ -699,7 +703,11 @@ class EdgeSupervisor:
             }
             self.store.store_robot_command(park_cmd)
             res = robot.execute_command(park_cmd)
-            self.store.update_robot_command_status(park_cmd["cmd_id"], "COMPLETED")
+            park_status=res.get("status","FAILED")
+            if park_status == "COMPLETED" and res.get("arrival_verified",False):
+                self.store.update_robot_command_status(park_cmd["cmd_id"], "COMPLETED")
+            else:
+                self.store.update_robot_command_status(park_cmd["cmd_id"],park_status)
             parking_results[rid] = res
 
         self.store.log_decision(
@@ -857,6 +865,8 @@ class EdgeSupervisor:
             self.robots[active_robot_id] = active_robot
 
         battery_start = active_robot.battery_pct
+        mission_distance_start={rid:getattr(robot,"measured_distance_m",None) for rid,robot in self.robots.items()}
+        mission_start_poses={rid:list(robot.pose) for rid,robot in self.robots.items()}
 
         if is_verbose:
             print(f"\n  [2] Task Ingestion & Execution Plan:")
@@ -993,14 +1003,11 @@ class EdgeSupervisor:
 
             # FR-7 & FR-8: Check if sub-task was already executed by prior supervisor before failover
             existing_cmd = self.store.get_robot_command(cmd_id)
-            if existing_cmd and existing_cmd["status"] == "COMPLETED":
+            if existing_cmd and existing_cmd["status"] == "COMPLETED" and getattr(robot,"execution_mode","mock") == "mock":
                 if is_verbose:
                     print(f"      |-- [Step {step_num}/{len(task_sequence)}] Sub-task already COMPLETED in store (Standby Takeover / Deduplication) -> Skipping physical re-execution")
-                if cmd == "go_to" and target_dest:
-                    robot.current_zone = target_dest
-                    if "target" in params:
-                        robot.pose[0] = float(params["target"][0])
-                        robot.pose[1] = float(params["target"][1])
+                # A durable completion record prevents duplicate actuation, but
+                # never rewrites live localization to the old commanded target.
                 executed_steps.append({
                     "cmd_id": cmd_id,
                     "action": cmd,
@@ -1030,9 +1037,27 @@ class EdgeSupervisor:
                 print(f"      |-- [Step {step_num}/{len(task_sequence)}] Sub-task: {cmd}{target_str} (Robot: {robot_id})")
 
             exec_report = robot.execute_command(cmd_payload)
+            exec_report.setdefault("action",cmd)
+            exec_report.setdefault("params",params)
+            exec_status = str(exec_report.get("status", "FAILED")).upper()
+
+            detailed_failures={"INVALID_DESTINATION","SENSOR_UNAVAILABLE","LOCALIZATION_UNAVAILABLE","TIMEOUT","CAPTURE_FAILED","CANCELLED","REJECTED","GROUND_TRUTH_MISMATCH"}
+            if exec_status in detailed_failures or exec_status not in {"COMPLETED","BLOCKED","FAILED"}:
+                try: robot.execute_command({"cmd_id":f"cmd-stop-{robot_id}-{int(time.time()*1000)}","action":"stop","params":{"reason":f"terminal execution failure: {exec_status}"}})
+                except Exception: pass
+                self.store.update_robot_command_status(cmd_payload["cmd_id"],exec_status)
+                self.store.update_lease_status(lease_id,version,"FAILED")
+                self.store.log_decision(
+                    decision_id=f"dec-fail-{lease_id}-v{version}-{idx+1}",lease_id=lease_id,decided_by="RULE",
+                    input_context={"step":idx,"subtask":subtask},decision_action="EXECUTION_FAILED",
+                    decision_output=exec_report,latency_ms=1.0,
+                )
+                self.active_lease=None
+                return {"status":"FAILED","execution_status":exec_status,"reason":exec_report.get("message",f"Robot returned {exec_status}"),"executed_steps":executed_steps,"failed_step":exec_report}
 
             # Check if execution failed or was blocked by obstacle
             if exec_report["status"] in ("BLOCKED", "FAILED"):
+                self.store.update_robot_command_status(cmd_payload["cmd_id"],exec_status)
                 blocked_zone = exec_report.get("blocked_zone", robot.current_zone)
                 event_desc = exec_report.get("message", "Obstruction encountered")
                 time_remaining = max(0.0, (expiry_dt - datetime.now(timezone.utc)).total_seconds())
@@ -1164,7 +1189,10 @@ class EdgeSupervisor:
                     self.store.store_robot_command(wait_cmd)
                     if is_verbose:
                         print(f"      |   |   |--- Action Dispatch: LOCAL_WAIT -> Pausing robot {robot_id} for 5.0s")
-                    robot.execute_command(wait_cmd)
+                    wait_report=robot.execute_command(wait_cmd)
+                    if wait_report.get("status") != "COMPLETED":
+                        self.store.update_robot_command_status(wait_cmd["cmd_id"],wait_report.get("status","FAILED"))
+                        return {"status":"FAILED","execution_status":wait_report.get("status","FAILED"),"reason":wait_report.get("message","Local wait failed")}
                     self.store.update_robot_command_status(wait_cmd["cmd_id"], "COMPLETED")
                     if is_verbose:
                         print(rf"      |   |   \--- Action Status  : COMPLETED (Wait finished; dynamic obstacle cleared)")
@@ -1199,6 +1227,10 @@ class EdgeSupervisor:
                     if is_verbose:
                         print(f"      |   |   |--- Action Dispatch: LOCAL_DETOUR -> Navigating via permitted bypass '{detour_wp}'")
                     detour_report = robot.execute_command(detour_cmd)
+                    if detour_report.get("status") != "COMPLETED" or not detour_report.get("arrival_verified",False):
+                        self.store.update_robot_command_status(detour_cmd["cmd_id"],detour_report.get("status","FAILED"))
+                        self.active_lease=None
+                        return {"status":"FAILED","execution_status":detour_report.get("status","FAILED"),"reason":detour_report.get("message","Detour arrival was not verified"),"failed_step":detour_report}
                     self.store.update_robot_command_status(detour_cmd["cmd_id"], "COMPLETED")
                     executed_steps.append(detour_report)
                     if is_verbose:
@@ -1264,6 +1296,20 @@ class EdgeSupervisor:
                     self.active_lease = None
                     return {"status": "FAILED", "reason": f"Obstacle encountered: {event_desc}"}
 
+            if exec_status != "COMPLETED":
+                self.active_lease=None
+                return {"status":"FAILED","execution_status":exec_status,"reason":"Sub-task did not explicitly complete","failed_step":exec_report}
+            if cmd == "go_to" and not exec_report.get("arrival_verified",False):
+                self.store.update_robot_command_status(cmd_payload["cmd_id"],"FAILED")
+                self.store.update_lease_status(lease_id,version,"FAILED")
+                self.active_lease=None
+                return {"status":"FAILED","execution_status":"LOCALIZATION_UNAVAILABLE","reason":"Robot reported completion without verified arrival","failed_step":exec_report}
+            if cmd == "photo" and getattr(robot,"execution_mode","mock") != "mock" and not exec_report.get("has_photo",False):
+                self.store.update_robot_command_status(cmd_payload["cmd_id"],"FAILED")
+                self.store.update_lease_status(lease_id,version,"FAILED")
+                self.active_lease=None
+                return {"status":"FAILED","execution_status":"CAPTURE_FAILED","reason":"Required camera postcondition was not satisfied","failed_step":exec_report}
+
             self.store.update_robot_command_status(cmd_payload["cmd_id"], "COMPLETED")
 
             self.store.log_decision(
@@ -1284,25 +1330,63 @@ class EdgeSupervisor:
             idx += 1
 
         # 5. Mission Completed -> Generate Artifacts & Emit OUTPUT_READY (FR-9, Table 2)
+        if any(str(step.get("status","")).upper() != "COMPLETED" for step in executed_steps):
+            self.store.update_lease_status(lease_id,version,"FAILED")
+            self.active_lease=None
+            return {"status":"FAILED","reason":"Mission contains a sub-task without explicit verified completion","executed_steps":executed_steps}
         end_time = time.time()
         final_robot = self.robots.get(active_robot_id, active_robot)
         img_bytes = getattr(final_robot, "last_photo_bytes", None)
-        storage_uri, artifact_path, sha256_hash = self.artifact_packager.generate_delivery_proof(
-            task_id=task_id,
-            robot_id=active_robot_id,
-            pose=final_robot.pose,
-            image_bytes=img_bytes,
-        )
+        snapshot=final_robot.pose_snapshot() if hasattr(final_robot,"pose_snapshot") else {"pose":list(final_robot.pose),"last_known_pose":list(final_robot.pose),"pose_source":getattr(final_robot,"pose_source","mock_simulation"),"pose_frame":getattr(final_robot,"pose_frame","simulated/world"),"pose_timestamp":getattr(final_robot,"pose_timestamp",time.time()),"pose_fresh":True}
+        final_pose=snapshot.get("pose")
+        if final_pose is None:
+            self.store.update_lease_status(lease_id,version,"FAILED"); self.active_lease=None
+            return {"status":"FAILED","execution_status":"LOCALIZATION_UNAVAILABLE","reason":"Final measured pose is unavailable or stale","executed_steps":executed_steps}
+        required_photo=any(st.get("cmd") == "photo" for st in task_sequence)
+        execution_mode=getattr(final_robot,"execution_mode","mock")
+        if required_photo and execution_mode != "mock" and not img_bytes:
+            self.store.update_lease_status(lease_id,version,"FAILED"); self.active_lease=None
+            return {"status":"FAILED","execution_status":"CAPTURE_FAILED","reason":"Required delivery-proof camera frame is unavailable","executed_steps":executed_steps}
+        proof_args={
+            "task_id":task_id,"robot_id":active_robot_id,"pose":final_pose,
+            "pose_source":snapshot.get("pose_source","unknown"),"pose_frame":snapshot.get("pose_frame","unknown"),
+            "pose_timestamp":snapshot.get("pose_timestamp"),"arrival_verified":bool(getattr(final_robot,"arrival_verified",False)),
+            "execution_mode":execution_mode,
+        }
+        if required_photo or img_bytes:
+            storage_uri, artifact_path, sha256_hash = self.artifact_packager.generate_delivery_proof(
+                **proof_args,image_bytes=img_bytes,allow_simulated=execution_mode in {"mock","sdk_mock"},
+            )
+        else:
+            storage_uri, artifact_path, sha256_hash = self.artifact_packager.generate_execution_receipt(**proof_args)
 
         battery_delta = battery_start - final_robot.battery_pct
         mission_duration = end_time - mission_start_time
 
+        distance_values=[]
+        for rid,robot in self.robots.items():
+            start=mission_distance_start.get(rid); current=getattr(robot,"measured_distance_m",None)
+            if start is not None and current is not None: distance_values.append(max(0.0,current-start))
+        measured_distance=sum(distance_values) if distance_values else None
+        planned_distance=0.0; planned_known=True
+        planned_positions={rid:list(pose) for rid,pose in mission_start_poses.items()}
+        for subtask in task_sequence:
+            if subtask.get("cmd") != "go_to": continue
+            rid=subtask.get("robot",active_robot_id); params=subtask.get("params",{}); target=params.get("target") or self.waypoints.get(params.get("to"))
+            previous=planned_positions.get(rid)
+            if target is None or previous is None: planned_known=False; continue
+            planned_distance += ((float(target[0])-previous[0])**2+(float(target[1])-previous[1])**2)**0.5
+            planned_positions[rid]=[float(target[0]),float(target[1]),0.0]
         self.artifact_packager.compile_mission_metrics(
             task_id=task_id,
             total_duration_sec=mission_duration,
-            total_distance_m=12.5,
+            total_distance_m=measured_distance,
             battery_used_pct=battery_delta,
             executed_steps_count=len(executed_steps),
+            planned_distance_m=round(planned_distance,2) if planned_known else None,
+            distance_source="measured_pose_history" if measured_distance is not None else "unavailable",
+            execution_mode=execution_mode,
+            arrival_verified=bool(getattr(final_robot,"arrival_verified",False)),
         )
 
         # Survey tasks (T7): if task sequence contains "report" or lease is survey

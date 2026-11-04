@@ -38,8 +38,7 @@ class TestSimRobotAdapter(unittest.TestCase):
         res = self.robot.execute_command(cmd)
         self.assertEqual(res["status"], "COMPLETED")
         self.assertEqual(res["zone"], "nurse_station_approach")
-        self.assertAlmostEqual(self.robot.pose[0], 0.0, places=1)
-        self.assertAlmostEqual(self.robot.pose[1], 5.0, places=1)
+        self.assertLessEqual(((self.robot.pose[0]-0.0)**2+(self.robot.pose[1]-5.0)**2)**0.5,0.25)
 
     def test_03_photo_capture(self):
         cmd = {
@@ -62,7 +61,7 @@ class TestSimRobotAdapter(unittest.TestCase):
 
     def test_05_report(self):
         res = self.robot.execute_command({"cmd_id": "c-rep", "action": "report", "params": {}})
-        self.assertEqual(res["status"], "IDLE")
+        self.assertEqual(res["status"], "COMPLETED")
         self.assertEqual(res["zone"], "nurse_station_approach")
         self.assertIn("report", res)
 

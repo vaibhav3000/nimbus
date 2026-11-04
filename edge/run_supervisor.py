@@ -37,6 +37,7 @@ def main():
     parser.add_argument("--topology", default=None, help="Path to custom hospital_topology.json")
     parser.add_argument("--waypoints", default=None, help="Path to custom topology_waypoints.json")
     parser.add_argument("--robot-backend", choices=["mock", "sim"], default="mock", help="Robot backend: mock (in-memory) or sim (Person 1 ground_robot_sdk/Gazebo)")
+    parser.add_argument("--gazebo-validation",choices=["odometry","ground_truth"],default="odometry",help="Final-arrival validation source for the sim backend")
     parser.add_argument("--system-mode", choices=["C1", "C2", "C3"], default="C1", help="System mode: C1 (Edge SLM), C2 (Cloud-Only Relay), C3 (Deterministic Rules)")
     parser.add_argument("--token", default=None, help="Nimbus edge authentication token (NFR-5)")
     parser.add_argument("--quiet", action="store_true", help="Suppress detailed per-step execution logs")
@@ -57,6 +58,7 @@ def main():
         waypoints_file=args.waypoints,
         verbose=verbose_mode,
         robot_backend=args.robot_backend,
+        gazebo_validation=args.gazebo_validation,
         system_mode=args.system_mode,
         token=token,
     )
@@ -65,7 +67,11 @@ def main():
     print(f"  NIMBUS EDGE SUPERVISOR DAEMON: [{args.cluster.upper()}]")
     print("=" * 70)
     print(f"  Cluster ID       : {args.cluster}")
-    print(f"  Robot Backend    : {args.robot_backend.upper()} ({'ground_robot_sdk / Gazebo' if args.robot_backend == 'sim' else 'in-memory mock'})")
+    print(f"  Robot Backend    : {args.robot_backend.upper()} ({'LIVE GAZEBO; no mock fallback' if args.robot_backend == 'sim' else 'SIMULATED IN-MEMORY; not physical verification'})")
+    if args.robot_backend == "sim":
+        print(f"  Arrival Validation: {args.gazebo_validation}")
+        states={rid:getattr(robot,"connection_state","UNKNOWN") for rid,robot in supervisor.robots.items()}
+        print(f"  Gazebo Readiness : {states}")
     print(f"  Cloud Endpoint   : {args.cloud_url}")
     print(f"  Local SQLite DB  : {db_path}")
     print(f"  Topology Graph   : {len(supervisor.topology.get('nodes', {}))} nodes, {len(supervisor.waypoints)} waypoints")

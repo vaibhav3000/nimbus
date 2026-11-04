@@ -8,8 +8,14 @@ WORLD="$ROOT/hospital_six_racecars.sdf"
 command -v ign >/dev/null || { echo "Gazebo Fortress (ign) is not installed." >&2; exit 127; }
 [[ -f "$ROBOT_MODEL" ]] || { echo "Vendored MIT RACECAR model not found: $ROBOT_MODEL" >&2; exit 1; }
 
-python3 "$ROOT/tools/generate_hospital_two_racecars.py" \
-  --robot-model "$ROBOT_MODEL" --robots 6 --output "$WORLD"
+# The generated six-robot world is tracked and is the reproducible default.
+# Regeneration is an explicit maintainer operation because the generator is
+# not part of runtime deployment bundles.
+if [[ "${NIMBUS_REGENERATE_WORLD:-0}" == "1" ]]; then
+  GENERATOR="$ROOT/tools/generate_hospital_two_racecars.py"
+  [[ -f "$GENERATOR" ]] || { echo "World generator not found: $GENERATOR" >&2; exit 1; }
+  python3 "$GENERATOR" --robot-model "$ROBOT_MODEL" --robots 6 --output "$WORLD"
+fi
 export IGN_GAZEBO_RESOURCE_PATH="$ROOT/models:$ROOT/models/robots:$ROOT/fuel_models${IGN_GAZEBO_RESOURCE_PATH:+:$IGN_GAZEBO_RESOURCE_PATH}"
 export GZ_SIM_RESOURCE_PATH="$ROOT/models:$ROOT/models/robots:$ROOT/fuel_models${GZ_SIM_RESOURCE_PATH:+:$GZ_SIM_RESOURCE_PATH}"
 export IGN_PARTITION="${HOSPITAL_IGN_PARTITION:-${IGN_PARTITION:-custom_hospital_world}}"

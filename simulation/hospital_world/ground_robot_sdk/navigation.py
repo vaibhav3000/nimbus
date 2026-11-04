@@ -8,7 +8,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass
 
-from .models import CommandResult, CommandStatus, Odometry, Pose2D
+from .models import CommandResult, CommandStatus, GroundTruthPose, Odometry, Pose2D
 
 
 def _angle(value: float) -> float:
@@ -24,6 +24,11 @@ class NavigationConfig:
     startup_odometry_timeout: float = 5.0
     odometry_timeout: float = 1.0
     goal_timeout: float = 270.0
+    require_obstacle_feedback: bool = False
+    obstacle_timeout: float = 1.0
+    validation_source: str = "odometry"
+    ground_truth_tolerance: float = 0.25
+    max_localization_discrepancy: float = 0.50
 
 
 class NavigationController:
@@ -43,6 +48,8 @@ class NavigationController:
         self._lock = threading.RLock()
         self._startup: Pose2D | None = None
         self._pose = Pose2D()
+        self._ground_truth_startup: Pose2D | None = None
+        self._ground_truth_pose: Pose2D | None = None
         self._active: CommandResult | None = None
         self._last: CommandResult | None = None
         self._target: Pose2D | None = None
@@ -52,6 +59,7 @@ class NavigationController:
         self._history = deque(maxlen=history_size)
         self._by_id = {}
         self._unsubscribe = sensors.subscribe("odometry", self._on_odometry)
+        self._unsubscribe_ground_truth = sensors.subscribe("ground_truth", self._on_ground_truth)
 
     @property
     def pose(self) -> Pose2D:
@@ -62,6 +70,18 @@ class NavigationController:
     def target(self) -> Pose2D | None:
         with self._lock:
             return self._target
+
+    @property
+    def ground_truth_pose(self) -> Pose2D | None:
+        with self._lock:
+            return self._ground_truth_pose
+
+    @property
+    def localization_discrepancy(self) -> float | None:
+        with self._lock:
+            if self._ground_truth_pose is None:
+                return None
+            return math.hypot(self._pose.x-self._ground_truth_pose.x,self._pose.y-self._ground_truth_pose.y)
 
     def goto(self, x: float, y: float, frame="world", speed: float | None = None) -> CommandResult:
         try:
@@ -146,6 +166,7 @@ class NavigationController:
             if thread is not threading.current_thread():
                 thread.join(timeout=max(1.0, self.config.control_period * 4))
         self._unsubscribe()
+        self._unsubscribe_ground_truth()
 
     def _on_odometry(self, odometry: Odometry) -> None:
         raw = odometry.pose
@@ -162,6 +183,21 @@ class NavigationController:
                 _angle(raw.yaw - self._startup.yaw),
             )
 
+    def _on_ground_truth(self, feedback: GroundTruthPose) -> None:
+        raw = feedback.pose
+        with self._lock:
+            if self._ground_truth_startup is None:
+                self._ground_truth_startup = raw
+                self._ground_truth_pose = Pose2D()
+                return
+            dx, dy = raw.x-self._ground_truth_startup.x, raw.y-self._ground_truth_startup.y
+            cosine, sine = math.cos(self._ground_truth_startup.yaw), math.sin(self._ground_truth_startup.yaw)
+            self._ground_truth_pose = Pose2D(
+                cosine*dx+sine*dy,
+                -sine*dx+cosine*dy,
+                _angle(raw.yaw-self._ground_truth_startup.yaw),
+            )
+
     def _run_goto(self, command_id: str, cancelled: threading.Event, requested_speed: float) -> None:
         started = time.monotonic()
         try:
@@ -170,7 +206,7 @@ class NavigationController:
                     return
                 elapsed = time.monotonic() - started
                 if elapsed > self.config.goal_timeout:
-                    self._fail_and_stop(command_id, "goal timed out")
+                    self._fail_and_stop(command_id, "goal timed out", CommandStatus.TIMEOUT)
                     return
                 with self._lock:
                     startup_ready = self._startup is not None
@@ -178,21 +214,65 @@ class NavigationController:
                     pose = self._pose
                 if not startup_ready:
                     if elapsed > self.config.startup_odometry_timeout:
-                        self._fail_and_stop(command_id, "no odometry received before startup timeout")
+                        self._fail_and_stop(command_id, "no odometry received before startup timeout", CommandStatus.LOCALIZATION_UNAVAILABLE)
                         return
                     cancelled.wait(self.config.control_period)
                     continue
                 health = self.sensors.get_health().odometry
                 if not health.fresh or health.age is None or health.age > self.config.odometry_timeout:
-                    self._fail_and_stop(command_id, "odometry is stale")
+                    self._fail_and_stop(command_id, "odometry is stale or unavailable", CommandStatus.LOCALIZATION_UNAVAILABLE)
                     return
+                if self.config.require_obstacle_feedback:
+                    range_health = self.sensors.get_health().range
+                    if not range_health.fresh or range_health.age is None or range_health.age > self.config.obstacle_timeout:
+                        self._fail_and_stop(command_id, "front range data is stale or unavailable", CommandStatus.SENSOR_UNAVAILABLE)
+                        return
+                    front = self.sensors.get_front_distance()
+                    if front is None or not math.isfinite(front) or front < 0:
+                        self._fail_and_stop(command_id, "front range data is invalid", CommandStatus.SENSOR_UNAVAILABLE)
+                        return
+                    safety_distance = getattr(getattr(self.motion,"safety",None),"config",None)
+                    safety_distance = getattr(safety_distance,"minimum_front_distance",0.25)
+                    if front < safety_distance:
+                        self._fail_and_stop(command_id, "front obstacle is inside safety distance", CommandStatus.BLOCKED)
+                        return
                 if target is None:
                     return
                 distance = math.hypot(target.x - pose.x, target.y - pose.y)
                 if distance <= self.config.position_tolerance:
-                    self.motion.stop(source="autonomy")
-                    self._finish(command_id, CommandStatus.COMPLETED)
-                    return
+                    details = {
+                        "arrival_verified": True,
+                        "verification_source": "odometry",
+                        "target": target.to_dict(),
+                        "odometry_pose": pose.to_dict(),
+                        "distance_to_goal": distance,
+                    }
+                    if self.config.validation_source == "ground_truth":
+                        ground_health = self.sensors.get_health().ground_truth
+                        with self._lock: ground_pose = self._ground_truth_pose
+                        if not ground_health.fresh or ground_pose is None:
+                            self.motion.stop(source="autonomy")
+                            self._finish(command_id,CommandStatus.LOCALIZATION_UNAVAILABLE,"ground-truth pose is stale or unavailable",{"arrival_verified":False,"verification_source":"ground_truth"})
+                            return
+                        discrepancy=math.hypot(pose.x-ground_pose.x,pose.y-ground_pose.y)
+                        ground_distance=math.hypot(target.x-ground_pose.x,target.y-ground_pose.y)
+                        details.update({"verification_source":"ground_truth","ground_truth_pose":ground_pose.to_dict(),"ground_truth_distance_to_goal":ground_distance,"localization_discrepancy":discrepancy})
+                        if discrepancy > self.config.max_localization_discrepancy:
+                            self.motion.stop(source="autonomy")
+                            details["arrival_verified"]=False
+                            self._finish(command_id,CommandStatus.GROUND_TRUTH_MISMATCH,"odometry and Gazebo ground truth do not verify arrival",details)
+                            return
+                        # Small odometry error near the threshold is expected.
+                        # Keep approaching until both sources independently
+                        # satisfy their configured tolerances.
+                        if ground_distance <= self.config.ground_truth_tolerance:
+                            self.motion.stop(source="autonomy")
+                            self._finish(command_id, CommandStatus.COMPLETED, details=details)
+                            return
+                    else:
+                        self.motion.stop(source="autonomy")
+                        self._finish(command_id, CommandStatus.COMPLETED, details=details)
+                        return
 
                 desired = math.atan2(target.y - pose.y, target.x - pose.x)
                 heading_error = _angle(desired - pose.yaw)
@@ -212,7 +292,9 @@ class NavigationController:
                     source="autonomy",
                 )
                 if low_level.status == CommandStatus.REJECTED:
-                    self._finish(command_id, CommandStatus.FAILED, low_level.reason)
+                    reason=low_level.reason or "motion rejected"
+                    status=CommandStatus.BLOCKED if "obstacle" in reason else CommandStatus.SENSOR_UNAVAILABLE if "range data" in reason else CommandStatus.FAILED
+                    self._fail_and_stop(command_id,reason,status)
                     return
                 if low_level.status == CommandStatus.FAILED:
                     self._fail_and_stop(command_id, low_level.reason or "motion controller failed")
@@ -224,18 +306,19 @@ class NavigationController:
 
         self._finish(command_id, CommandStatus.CANCELLED, "cancelled")
 
-    def _fail_and_stop(self, command_id: str, reason: str) -> None:
+    def _fail_and_stop(self, command_id: str, reason: str, status: CommandStatus=CommandStatus.FAILED) -> None:
         if self._is_active(command_id):
             self.motion.stop(source="autonomy")
-        self._finish(command_id, CommandStatus.FAILED, reason)
+        self._finish(command_id, status, reason, {"arrival_verified":False})
 
-    def _finish(self, command_id, status, reason=None) -> None:
+    def _finish(self, command_id, status, reason=None, details=None) -> None:
         with self._lock:
             result = self._by_id.get(command_id)
             if not result or result.status != CommandStatus.RUNNING:
                 return
             result.status = status
             result.reason = reason
+            if details: result.details.update(details)
             result.completion_time = time.time()
             self._last = result
             if self._active is result:

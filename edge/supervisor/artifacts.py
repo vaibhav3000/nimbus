@@ -66,6 +66,12 @@ class ArtifactPackager:
         pose: Optional[List[float]] = None,
         resolution: str = "1280x720",
         image_bytes: Optional[bytes] = None,
+        pose_source: str = "unknown",
+        pose_frame: str = "unknown",
+        pose_timestamp: Optional[float] = None,
+        arrival_verified: bool = False,
+        execution_mode: str = "mock",
+        allow_simulated: bool = True,
     ) -> Tuple[str, Path, str]:
         """
         Creates and writes delivery proof photo artifact to disk.
@@ -73,20 +79,24 @@ class ArtifactPackager:
         Returns:
             (storage_uri, file_path, sha256_hash)
         """
-        current_pose = pose or [0.0, 0.0, 0.0]
+        current_pose = list(pose) if pose is not None else None
         task_dir = self.base_dir / task_id
         task_dir.mkdir(parents=True, exist_ok=True)
 
         proof_path = task_dir / "delivery-proof.jpg"
+        proof_type="camera"
         if image_bytes:
             jpeg_bytes = image_bytes
-        else:
+        elif allow_simulated:
+            proof_type="simulated"
             jpeg_bytes = self._generate_mock_jpeg_bytes(
                 task_id=task_id,
                 robot_id=robot_id,
-                pose=current_pose,
+                pose=current_pose or [0.0,0.0,0.0],
                 resolution=resolution
             )
+        else:
+            raise ValueError("a real camera frame is required for physical delivery proof")
         proof_path.write_bytes(jpeg_bytes)
 
         sha256_hash = hashlib.sha256(jpeg_bytes).hexdigest()
@@ -101,11 +111,47 @@ class ArtifactPackager:
             "file_size_bytes": len(jpeg_bytes),
             "sha256": sha256_hash,
             "created_at": datetime.now(timezone.utc).isoformat()
+            ,"pose_source":pose_source
+            ,"pose_frame":pose_frame
+            ,"pose_timestamp":pose_timestamp
+            ,"arrival_verified":bool(arrival_verified)
+            ,"execution_mode":execution_mode
+            ,"proof_type":proof_type
+            ,"physical_verification":execution_mode == "gazebo" and proof_type == "camera" and bool(arrival_verified)
         }
         sidecar_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
         storage_uri = f"storage://results/{task_id}/delivery-proof.jpg"
         return storage_uri, proof_path, sha256_hash
+
+    def generate_execution_receipt(
+        self,
+        task_id: str,
+        robot_id: str,
+        pose: List[float],
+        *,
+        pose_source: str,
+        pose_frame: str,
+        pose_timestamp: Optional[float],
+        arrival_verified: bool,
+        execution_mode: str,
+    ) -> Tuple[str, Path, str]:
+        """Write a non-image receipt when the task did not request a photo."""
+        task_dir=self.base_dir/task_id
+        task_dir.mkdir(parents=True,exist_ok=True)
+        path=task_dir/"execution-receipt.json"
+        receipt={
+            "task_id":task_id,"robot_id":robot_id,"pose":list(pose),
+            "pose_source":pose_source,"pose_frame":pose_frame,
+            "pose_timestamp":pose_timestamp,"arrival_verified":bool(arrival_verified),
+            "execution_mode":execution_mode,"proof_type":"execution_receipt",
+            "physical_verification":execution_mode == "gazebo" and bool(arrival_verified),
+            "created_at":datetime.now(timezone.utc).isoformat(),
+        }
+        payload=json.dumps(receipt,indent=2).encode("utf-8")
+        path.write_bytes(payload)
+        digest=hashlib.sha256(payload).hexdigest()
+        return f"storage://results/{task_id}/execution-receipt.json",path,digest
 
     def compile_mission_metrics(
         self,
@@ -122,7 +168,7 @@ class ArtifactPackager:
         metrics = {
             "task_id": task_id,
             "execution_duration_sec": round(total_duration_sec, 3),
-            "distance_travelled_m": round(total_distance_m, 2),
+            "distance_travelled_m": None if total_distance_m is None else round(total_distance_m, 2),
             "subtasks_completed": executed_steps_count,
             "battery_consumed_pct": round(battery_used_pct, 1),
             "timestamp": time.time(),

@@ -68,6 +68,20 @@ Run the Edge Supervisor daemon for a specific cluster (e.g. `east-wing` or `west
 ```bash
 python edge/run_supervisor.py --cluster east-wing --system-mode C1
 ```
+That command deliberately uses the in-memory `mock` backend. Mock completion is
+labelled as simulated and is never physical verification. For live Gazebo use:
+
+```bash
+python3 edge/run_supervisor.py --cluster east-wing --system-mode C1 \
+  --robot-backend sim --gazebo-validation ground_truth
+```
+
+`sim` has no automatic mock fallback. Startup prints each robot's
+`INITIALIZING`, `READY`, `DEGRADED`, or `DISCONNECTED` state. Navigation is
+accepted only while odometry and the obstacle scan are fresh; ground truth is
+also required when `--gazebo-validation ground_truth` is selected. A missing
+required stream stops motion and produces a detailed failure rather than task
+completion.
 Modes: `--system-mode C1` (Edge SLM, default), `C2` (Cloud-Only Relay Baseline), or `C3` (Deterministic Rules Baseline).
 By default, the daemon streams detailed real-time execution steps for each ingested lease (use `--quiet` to suppress step traces). Use `--once` for a single poll pass.
 
@@ -103,5 +117,5 @@ python edge/benchmarks/e1_benchmark.py qwen2.5:1.5b
   - Cloud posts leases to `/outbox` or drops into `data/outbox.jsonl`.
   - Edge supervisor periodically polls `GET /outbox`, processes tasks, and forwards completed reports or escalations to `POST /escalations`.
 - **With Robot (Person 1):**
-  - Edge supervisor dispatches concrete commands using `MockRobot` primitives (`go_to`, `wait`, `photo`, `beep`, `stop`, `report`).
-  - When Person 1's ROS 2 bridge / Gazebo stack is active, `MockRobot` is swapped with `Ros2Robot` publishing to `/nimbus/robot_cmd`.
+  - `--robot-backend mock` dispatches to `MockRobot` for explicit development simulation.
+  - `--robot-backend sim` dispatches through `SimRobot`, `RobotRuntime`, and the namespaced Gazebo topics. It never silently substitutes `MockRobot`.
