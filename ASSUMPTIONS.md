@@ -55,13 +55,13 @@ entry below is a PRD detail the scope left open and the reading chosen.
    logging; now fully wired into Person 3's orchestrator re-planning, multi-leg
    handover, and survey map updates.
 
-10. **Cost counters record stand-in values.** Input tokens = `len(text)//4`
-    (crude stand-in tokenizer), output tokens = 150 per cloud decision (the
-    PRD's edge decision cap, used here as a plausible per-decision constant),
-    Fargate GB-s = flat 0.001 per decision, IoT = 1 per lease published,
+10. **Cost counters record stand-in values during local demos.** Input tokens =
+    `len(text)//4` (stand-in heuristic locally; real Bedrock tokens in AWS),
+    output tokens = 150 per cloud decision, Fargate GB-s = 0.001, IoT = 1 per lease,
     DynamoDB = rows written, SQS = escalations, S3 = OUTPUT_READY results.
-    Prices are never applied: PRD Sec. 7 keeps p_* symbolic. No Cost
-    Explorer calls (scope).
+    `calculate_cost_per_task(counters, pricing, num_tasks)` in `cost.py` computes
+    the complete 10-term PRD Section 7 formula using caller-supplied symbolic
+    pricing tables with zero-task division safety.
 
 11. **API Gateway routes ECS requests.** Includes an auto-deploying `$default`
     stage with `ANY /{proxy+}` and `GET /` proxy routes, avoiding manual routing
