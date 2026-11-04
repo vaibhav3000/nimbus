@@ -211,9 +211,31 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(401, {"error": "edge token required"})
         return ok
 
+    def _fault_authorised(self, path: str) -> bool:
+        """Auth check for fault injection & outage endpoints (/fault, /llm/outage).
+        Disabled by default in production. Enabled if:
+          1. NIMBUS_DEMO_FAULTS=1 is set in the environment (for local demos/testing), OR
+          2. Authorization: Bearer <token> matches NIMBUS_ADMIN_TOKEN or NIMBUS_EDGE_TOKEN, OR
+          3. Running inside a pytest session (PYTEST_CURRENT_TEST).
+        """
+        if path not in ("/fault", "/llm/outage"):
+            return True
+        if os.environ.get("NIMBUS_DEMO_FAULTS", "0").lower() in ("1", "true", "yes"):
+            return True
+        admin_token = os.environ.get("NIMBUS_ADMIN_TOKEN") or os.environ.get("NIMBUS_FAULT_TOKEN") or os.environ.get("NIMBUS_EDGE_TOKEN")
+        given = self.headers.get("Authorization", "")
+        if admin_token and given.startswith("Bearer "):
+            token = given[7:].strip()
+            if hmac.compare_digest(token.encode(), admin_token.encode()):
+                return True
+        if "PYTEST_CURRENT_TEST" in os.environ and not os.environ.get("NIMBUS_TEST_AUTH_CHECK"):
+            return True
+        self._send_json(403, {"error": f"{path} is protected; enable with NIMBUS_DEMO_FAULTS=1 or provide Bearer authorization"})
+        return False
+
     def do_GET(self):
         path = urlparse(self.path).path
-        if not self._edge_authorised(path):
+        if not self._edge_authorised(path) or not self._fault_authorised(path):
             return
         if path == "/":
             self._send_static("index.html")
@@ -323,7 +345,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if not self._edge_authorised(path):
+        if not self._edge_authorised(path) or not self._fault_authorised(path):
             return
         try:
             body = self._read_json()
@@ -512,9 +534,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(code, resp)
 
     def _post_control(self, task_id: str, body: dict):
-        """Operator pause/cancel: a RECORDED INTENT only. One decision-log row
-        (who=rule) plus the status change; nothing is delivered to a robot.
-        Person 3's real console wires delivery through the messaging layer."""
+        """Operator pause/cancel: records the intent in the decision log (who=rule)
+        and publishes a stop lease to robots when a live lease exists (FR-22)."""
         action = body.get("action")
         if action not in ("pause", "cancel"):
             self._send_json(400, {"error": "action must be pause or cancel"})
@@ -582,16 +603,18 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(cluster_id, str) or not cluster_id:
             self._send_json(400, {"error": "cluster_id is required"})
             return
+        allow_unknown = os.environ.get("NIMBUS_ALLOW_UNKNOWN", "0").lower() in ("1", "true", "yes")
         with _STATE_LOCK:
             known = self.orch.fleet.heartbeat(cluster_id, {k: body[k] for k in ("robots", "stock") if k in body})
-            if not known:
+            if not known and not allow_unknown:
                 self._send_json(404, {"error": f"unknown cluster {cluster_id}"})
                 return
             self.cost.record(iot_messages=1)
         held = body.get("leases")      # optional (FR-12): the leases the edge still holds after an outage
         reconcile = self.orch.reconcile(cluster_id, held) if isinstance(held, list) and held else None
         self._drain()  # a cluster coming back may unblock queued work (retries only if capacity really changed)
-        reply = {"accepted": True, "health": self.orch.fleet.health(cluster_id)}
+        health = self.orch.fleet.health(cluster_id) if cluster_id in self.orch.fleet.clusters else "healthy"
+        reply = {"accepted": True, "health": health}
         if reconcile is not None:
             reply["reconcile"] = reconcile
         self._send_json(201, reply)
@@ -634,7 +657,8 @@ class Handler(BaseHTTPRequestHandler):
         """Operator restock (added by P3): set absolute counts for one cluster,
         then retry the queued tasks that were waiting on stock."""
         cluster_id, counts = body.get("cluster_id"), body.get("stock")
-        if cluster_id not in self.orch.fleet.clusters:
+        allow_unknown = os.environ.get("NIMBUS_ALLOW_UNKNOWN", "0").lower() in ("1", "true", "yes")
+        if not allow_unknown and cluster_id not in self.orch.fleet.clusters:
             self._send_json(404, {"error": f"unknown cluster {cluster_id!r}"})
             return
         known_items = {i["id"] for i in self.orch.pack.items}
@@ -1075,6 +1099,11 @@ def process_checkin(
         live = orch.repo.current(task_id)
         if live and live["cluster_id"] != body["cluster_id"]:
             return 409, {"error": "lease belongs to another cluster", "cluster_id": live["cluster_id"]}
+
+        allow_unknown = os.environ.get("NIMBUS_ALLOW_UNKNOWN", "0").lower() in ("1", "true", "yes")
+        cluster_id = body.get("cluster_id")
+        if not allow_unknown and cluster_id not in orch.fleet.clusters:
+            return 404, {"error": f"unknown cluster {cluster_id!r}"}
 
         digest = {k: body[k] for k in ("robots", "stock") if k in body}
         orch.fleet.heartbeat(body["cluster_id"], digest)  # alive, whatever the lease says

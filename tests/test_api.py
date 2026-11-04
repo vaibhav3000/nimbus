@@ -355,7 +355,7 @@ def test_operator_page_served(api):
         ctype = resp.headers["Content-Type"]
     assert resp.status == 200 and "text/html" in ctype
     assert "Operator console" in html
-    assert "not yet delivered to robots" in html
+    assert "publish a stop lease to robots" in html
     with urlreq.urlopen(api + "/operator.js") as resp:
         assert "application/javascript" in resp.headers["Content-Type"]
 
@@ -366,6 +366,10 @@ def test_operator_pause_then_cancel_records_intents(api):
         "POST", api + f"/tasks/{task_id}/control", {"action": "pause", "message_id": "msg-op-1"}
     )
     assert status == 201 and p["status"] == "paused"
+    _, paused_task = http_json("GET", api + f"/tasks/{task_id}")
+    assert paused_task["lease"]["task_sequence"] == [{"cmd": "stop", "params": {}}]
+    assert paused_task["lease"]["version"] == 2
+
     status, c = http_json(
         "POST", api + f"/tasks/{task_id}/control", {"action": "cancel", "message_id": "msg-op-2"}
     )
@@ -411,3 +415,46 @@ def test_requester_app_served_at_root(api):
 
     with urlreq.urlopen(api + "/app.js") as resp:
         assert "application/javascript" in resp.headers["Content-Type"]
+
+
+def test_fault_endpoint_auth_guard(api, monkeypatch):
+    """Confirm /fault and /llm/outage are protected by default and require auth or NIMBUS_DEMO_FAULTS."""
+    monkeypatch.setenv("NIMBUS_TEST_AUTH_CHECK", "1")
+    monkeypatch.setenv("NIMBUS_DEMO_FAULTS", "0")
+    monkeypatch.delenv("NIMBUS_ADMIN_TOKEN", raising=False)
+    monkeypatch.delenv("NIMBUS_FAULT_TOKEN", raising=False)
+    monkeypatch.delenv("NIMBUS_EDGE_TOKEN", raising=False)
+
+    # 1. Unauthenticated request rejected with 403
+    status, err = http_json("POST", api + "/llm/outage", {"seconds": 0})
+    assert status == 403 and "protected" in err.get("error", "")
+
+    status, err = http_json("GET", api + "/fault")
+    assert status == 403 and "protected" in err.get("error", "")
+
+    # 2. Enabled with NIMBUS_DEMO_FAULTS=1
+    monkeypatch.setenv("NIMBUS_DEMO_FAULTS", "1")
+    status, ok = http_json("GET", api + "/fault")
+    assert status == 200
+
+    # 3. Enabled with admin token
+    monkeypatch.setenv("NIMBUS_DEMO_FAULTS", "0")
+    monkeypatch.setenv("NIMBUS_ADMIN_TOKEN", "secret-admin-123")
+    import json
+    from urllib import request as urlreq
+    req = urlreq.Request(api + "/fault", method="GET")
+    req.add_header("Authorization", "Bearer secret-admin-123")
+    with urlreq.urlopen(req) as resp:
+        assert resp.status == 200
+
+
+def test_unknown_cluster_rejected_by_default(api, monkeypatch):
+    """Confirm unknown clusters are rejected with 404 by default unless NIMBUS_ALLOW_UNKNOWN=1."""
+    monkeypatch.setenv("NIMBUS_ALLOW_UNKNOWN", "0")
+    status, body = http_json("POST", api + "/fleet/heartbeat", {"cluster_id": "totally-fake-wing"})
+    assert status == 404 and "unknown cluster" in body.get("error", "")
+
+    # When NIMBUS_ALLOW_UNKNOWN=1, unknown clusters are permitted
+    monkeypatch.setenv("NIMBUS_ALLOW_UNKNOWN", "1")
+    status, body = http_json("POST", api + "/fleet/heartbeat", {"cluster_id": "totally-fake-wing"})
+    assert status == 201 and body.get("accepted") is True

@@ -249,6 +249,22 @@ resource "aws_cloudwatch_event_rule" "task_events" {
   })
 }
 
+
+# Minimal CloudWatch alarm skeleton for missed check-ins (SKELETON ONLY: never applied).
+# In AWS production, edge supervisors emit heartbeat/checkin metrics via CloudWatch EMF
+# or IoT Core rule metrics; an alarm fires if no check-in metric arrives within the lease window.
+resource "aws_cloudwatch_metric_alarm" "missed_checkin" {
+  alarm_name          = "${local.name_prefix}-missed-checkin"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CheckinReceived"
+  namespace           = "Nimbus/Fleet"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  alarm_description   = "Triggers when edge supervisor fails to check in within 60s lease window"
+  treat_missing_data  = "breaching"
+}
 resource "aws_cloudwatch_event_target" "to_queue" {
   event_bus_name = aws_cloudwatch_event_bus.main.name
   rule           = aws_cloudwatch_event_rule.task_events.name

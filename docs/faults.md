@@ -101,6 +101,9 @@ PRD Section 7 specifies replaying 10 Hz RTT and packet loss traces recorded on c
 - `traces/iisc_lift.csv`: Elevator trip trace entering an enclosed lift shaft at $t=5$s (RTT spikes to 250–500 ms with 5–20% loss), exiting at $t=16$s.
 - `traces/iisc_basement.csv`: Complete network outage window between $t=5$s and $t=24$s (100% loss / partition), reconnecting at $t=25$s.
 
+> [!NOTE]
+> The IISc traces in `traces/` (`iisc_corridor.csv`, `iisc_lift.csv`, `iisc_basement.csv`) are short synthetic examples for local testing, not full 10 Hz recordings.
+
 ### Running with a Trace
 ```bash
 python scripts/fault_harness.py --listen 8001 --target 8000 --trace traces/iisc_lift.csv
