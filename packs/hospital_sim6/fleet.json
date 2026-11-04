@@ -1,0 +1,34 @@
+{
+  "note": "Seed fleet registry for P1's six-racecar Gazebo world (launch_hospital_six_racecars.sh). Robot ids R1..R6 are the names P2's edge reports (R<n> drives Gazebo namespace /robot_<n>); the split east R1-R3, west R4-R5-R6 is P2's. 'start' is each robot's spawn node from P1's config/robot_deployment.json (R2 spawns between north_hall and nurse_station_approach; P2's edge starts it at nurse_station_approach, so the cloud does too, and its first heartbeat corrects the zone). Stock counts as in hospital_sim.",
+  "clusters": {
+    "east-wing": {
+      "home": "south_equipment_approach",
+      "robots": ["R1", "R2", "R3"],
+      "start": {"R1": "north_hall", "R2": "nurse_station_approach", "R3": "east_waiting_approach"},
+      "stock": {
+        "infusion_pump": 3,
+        "infusion_pump_paediatric": 2,
+        "wheelchair": 4,
+        "iv_pole": 5,
+        "monitor": 2,
+        "blanket": 20
+      },
+      "area": "east"
+    },
+    "west-wing": {
+      "home": "south_equipment_approach",
+      "robots": ["R4", "R5", "R6"],
+      "start": {"R4": "west_waiting_approach", "R5": "west_mid_hall", "R6": "west_south_hall"},
+      "stock": {
+        "infusion_pump": 2,
+        "infusion_pump_paediatric": 1,
+        "wheelchair": 2,
+        "iv_pole": 3,
+        "monitor": 1,
+        "blanket": 15
+      },
+      "area": "west"
+    }
+  },
+  "places": {"west_waiting_approach": {"infusion_pump": 2}}
+}

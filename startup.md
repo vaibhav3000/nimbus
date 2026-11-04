@@ -20,6 +20,7 @@ python edge/run_supervisor.py --cluster east-wing             # or P2's real edg
 - Change the port with `PORT=8010`, the data folder with `DATA_DIR=/tmp/nimbus`.
 - The default map is P1's Gazebo topology (pack `hospital_sim`; rebuild it after P1 updates their map: `python scripts/build_sim_topology.py`).
   The older hand-made map is `NIMBUS_PACK=hospital`.
+  For P1's six-racecar world with P2's edge (robots R1-R6), use `NIMBUS_PACK=hospital_sim6`.
 - Set stock: `curl -X POST localhost:8000/fleet/stock -H 'Content-Type: application/json' -d '{"cluster_id":"east-wing","stock":{"wheelchair":5}}'`
 
 ## Evaluation configurations (C1 / C2 / C3)

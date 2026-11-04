@@ -36,7 +36,7 @@ class FleetRegistry:
             self.clusters[cid] = {
                 "area": c["area"],
                 "home": c["home"],
-                "robots": {r: {"state": "idle", "zone": c["home"], "battery": 1.0} for r in c["robots"]},
+                "robots": {r: {"state": "idle", "zone": c.get("start", {}).get(r, c["home"]), "battery": 1.0} for r in c["robots"]},
                 "stock": dict(c["stock"]),
                 "last_seen": None,  # datetime | None
             }
