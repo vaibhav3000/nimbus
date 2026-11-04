@@ -14,6 +14,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 TOPO_DIR = HERE.parent / "hospital_world" / "topology"
 POSES, LOCK = {}, threading.Lock()
+BLOCKED = set()   # zones the operator clicked closed (kinematic robots treat them as obstacles)
 CLOUD = "http://127.0.0.1:8000"
 
 
@@ -47,6 +48,9 @@ class H(BaseHTTPRequestHandler):
             self._send(200, static_map())
         elif self.path == "/background.png":
             self._send(200, (TOPO_DIR / "hospital_topology.png").read_bytes(), "image/png")
+        elif self.path == "/obstacles":
+            with LOCK:
+                self._send(200, {"blocked": sorted(BLOCKED)})
         elif self.path == "/poses":
             with LOCK:
                 self._send(200, {"now": time.time(), "robots": POSES})
@@ -65,6 +69,11 @@ class H(BaseHTTPRequestHandler):
             with LOCK:
                 POSES[d["id"]] = d
             self._send(200, {"ok": True})
+        elif self.path == "/obstacle":
+            d = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+            with LOCK:
+                (BLOCKED.add if d.get("blocked", True) else BLOCKED.discard)(d["zone"])
+                self._send(200, {"blocked": sorted(BLOCKED)})
         else:
             self._send(404, {"error": "not found"})
 

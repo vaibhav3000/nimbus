@@ -11,6 +11,7 @@ pip install -r requirements.txt
 ./run_all.sh            # cloud + east-wing edge + west-wing edge + simulator   (stop: ./stop_all.sh)
 python3 scripts/demo_e2e.py     # sends SC-1 ("Need an infusion pump at 2B-12, urgent") + a West-wing request
 ```
+In the viewer, click a node to close it (obstacle) and watch the edge escalate.
 Then open **http://127.0.0.1:8000** (requester app; also `/operator`, `/map`) and watch robots move at
 **http://127.0.0.1:8090** (no Gazebo installed) or in the Gazebo window.
 

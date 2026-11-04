@@ -12,7 +12,7 @@ h1{font-size:16px;margin:0 0 4px}.mut{color:var(--mut)}
 </style></head><body>
 <canvas id="c"></canvas>
 <div id="side"><h1>Nimbus — hospital simulator (kinematic stand-in)</h1>
-<div class="mut">P1's first-floor map · live robot poses · cloud leases</div>
+<div class="mut">P1's first-floor map · live robot poses · cloud leases · <b>click a node to close/reopen it (obstacle)</b></div>
 <div id="robots"></div><h1 style="margin-top:14px">Tasks</h1><div id="tasks" class="mut">…</div></div>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
@@ -21,7 +21,8 @@ const IMG={x0:-17.21,x1:14.56,y0:-39.74,y1:24.52};
 const XR=[-14,14],YR=[-36,22];
 let M=null,bg=new Image();bg.src='/background.png';
 const COL=['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4','#008080'];
-const trails={};
+const trails={};let BL=[];
+cv.onclick=async e=>{if(!M)return;const r=cv.getBoundingClientRect(),x=XR[0]+(e.clientX-r.left)/r.width*(XR[1]-XR[0]),y=YR[1]-(e.clientY-r.top)/r.height*(YR[1]-YR[0]);let best=null,bd=1.5;for(const[n,d]of Object.entries(M.nodes)){const q=Math.hypot(d.xy[0]-x,d.xy[1]-y);if(q<bd){bd=q;best=n}}if(best){const b=!BL.includes(best);await fetch('/obstacle',{method:'POST',body:JSON.stringify({zone:best,blocked:b})});}};
 function fit(){const h=innerHeight;cv.height=h;cv.width=h*(XR[1]-XR[0])/(YR[1]-YR[0]);}
 addEventListener('resize',fit);fit();
 const sx=x=>(x-XR[0])/(XR[1]-XR[0])*cv.width, sy=y=>(YR[1]-y)/(YR[1]-YR[0])*cv.height;
@@ -29,6 +30,7 @@ function draw(P){
  ctx.clearRect(0,0,cv.width,cv.height);
  if(bg.complete)ctx.drawImage(bg,sx(IMG.x0),sy(IMG.y1),sx(IMG.x1)-sx(IMG.x0),sy(IMG.y0)-sy(IMG.y1));
  if(M){ctx.strokeStyle='#222';ctx.lineWidth=2;for(const[a,b]of M.edges){ctx.beginPath();ctx.moveTo(sx(M.nodes[a].xy[0]),sy(M.nodes[a].xy[1]));ctx.lineTo(sx(M.nodes[b].xy[0]),sy(M.nodes[b].xy[1]));ctx.stroke();}}
+ if(M)for(const z of BL){const d=M.nodes[z];ctx.strokeStyle='#d00';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(sx(d.xy[0])-12,sy(d.xy[1])-12);ctx.lineTo(sx(d.xy[0])+12,sy(d.xy[1])+12);ctx.moveTo(sx(d.xy[0])+12,sy(d.xy[1])-12);ctx.lineTo(sx(d.xy[0])-12,sy(d.xy[1])+12);ctx.stroke();}
  Object.entries(P).forEach(([id,r],i)=>{
   const c=COL[(parseInt(id.slice(1))||i+1)-1]||'#000',t=trails[id]=trails[id]||[];
   t.push([r.x,r.y]);if(t.length>300)t.shift();
@@ -38,7 +40,7 @@ function draw(P){
   ctx.fillStyle='#000';ctx.font='bold 13px sans-serif';ctx.fillText(id,sx(r.x)+12,sy(r.y)-8);});
 }
 async function tick(){
- try{const P=(await (await fetch('/poses')).json()).robots;draw(P);
+ try{BL=(await (await fetch('/obstacles')).json()).blocked;const P=(await (await fetch('/poses')).json()).robots;draw(P);
   document.getElementById('robots').innerHTML=Object.entries(P).map(([id,r],i)=>`<div class="card"><span class="dot" style="background:${COL[(parseInt(id.slice(1))||i+1)-1]}"></span><b>${id}</b> ${r.status||''} · zone ${r.zone||'?'} · (${r.x.toFixed(1)}, ${r.y.toFixed(1)})</div>`).join('');}catch(e){}
 }
 async function tasks(){try{const t=(await (await fetch('/cloud/tasks')).json()).tasks||[];

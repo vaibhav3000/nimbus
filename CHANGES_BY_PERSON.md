@@ -8,7 +8,7 @@ Nothing was deleted: removed files are in `archive/` (see the end). All 467 test
 | Change | Why |
 |---|---|
 | **No existing P1 file was modified.** | The map, `hospital_six_racecars.sdf`, topics (`/robot_N/...`), world name (`hospital`) and spawn poses were checked against what P2's edge and P3's `hospital_sim6` pack expect: they agree (R1-R6 = robot_1..6, same spawn nodes). |
-| **Added** `simulation/lite/viewer.py` + `viewer.html` | A Gazebo-less live view of P1's hospital map (uses P1's `topology/` and `hospital_topology.png`): the six robots move live, with the cloud's tasks/leases beside them. Used when Gazebo is not installed. |
+| **Added** `simulation/lite/viewer.py` + `viewer.html` (click a node = close/reopen that zone as an obstacle) | A Gazebo-less live view of P1's hospital map (uses P1's `topology/` and `hospital_topology.png`): the six robots move live, with the cloud's tasks/leases beside them. Used when Gazebo is not installed. |
 
 ## Person 2 — Edge (`edge/`)
 | Change | File | Why |
@@ -19,6 +19,8 @@ Nothing was deleted: removed files are in `archive/` (see the end). All 467 test
 | Delivery leases no longer treated as surveys | `supervisor/supervisor.py` | Every lease ends in `report`, so every delivery produced a `survey.json` result instead of `delivery-proof.jpg`. A lease with a `delivery_proof` photo is a delivery. |
 | De-duplicated `Notice received: BUNDLE` spam; heartbeat log is one line | `supervisor/supervisor.py` | The whole outbox was re-printed every 2 s. |
 | Test updated for the new outbox URL | `edge/tests/test_prd_person2_compliance.py` | Mock cloud now accepts `/outbox?...`. |
+| Blocked corridor now reaches the cloud (FR-4/FR-9, SC-2) | `supervisor/supervisor.py` | A "detour" through the blocked zone itself, or a detour that is also blocked, ended in a silent FAILED. It now sends UNEXPECTED_EVENT; verified live: cloud marks the zone closed, tries a re-plan, alerts the operator when no route is left. |
+| Kinematic obstacles are per route zone | `mock/sim_robot.py` | Any injected obstacle used to shrink every robot's range sensor (all robots 'blocked'). Now a leg is blocked only if a zone on its route is closed. Zones can be closed by clicking them in the viewer. |
 | Generated run output moved out of the source tree | `edge/artifacts/`, result `.md` files → `archive/edge_generated/` | Runtime output; `edge/artifacts/` is now git-ignored. |
 
 ## Person 3 — Cloud decision plane (`cloud/`, `packs/`)
@@ -40,6 +42,10 @@ Nothing was deleted: removed files are in `archive/` (see the end). All 467 test
 * `pyproject.toml` runs `edge/tests` as well as `tests`.
 * `README.md` rewritten as a short run guide. PRD and roadmap copied to `docs/`.
 * `demo/nimbus_demo.mp4`: screen recording of the live run (two requests, robots R2 → pickup → ward, lease panel).
+
+## Second pass (organise)
+Also moved to `archive/`: `aws_tools/` (aws_verify, bedrock_hello, smoke_live, build_push.sh and their two skipped tests), `sim_boilerplate/` (upstream CODE_OF_CONDUCT, CONTRIBUTING, cross-group example), `edge_generated/benchmark_notes/`, `root_scratch/demo_ms2.py`.
+Live checks run on the kinematic sim: SC-3 (ward isolation: 2 extraction tasks created and both completed by robots), SC-2 corridor closure (edge escalates, cloud closes the zone and alerts the operator because no alternative route exists in the east wing).
 
 ## What is in `archive/` (all moved with `git mv`, restorable)
 `root_scratch/` one-off scripts (pose dumps, page printers, ollama launcher, old start scripts, dot_scratch) ·

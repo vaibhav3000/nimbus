@@ -1222,6 +1222,17 @@ class EdgeSupervisor:
                         print(rf"      |   |   \--- Action Status  : COMPLETED (Wait finished; dynamic obstacle cleared)")
                     continue
 
+                elif tac_action == "LOCAL_DETOUR" and decision.get("target_waypoint") == blocked_zone:
+                    # a "detour" through the blocked zone itself is no detour: ask the cloud (FR-4)
+                    reason_msg = f"No detour inside the lease avoids {blocked_zone}: {event_desc}"
+                    self.trigger_unexpected_event(task_id=task_id, what=reason_msg, where=blocked_zone,
+                                                  robots_saw=[f"{robot_id} reported: {event_desc} at {blocked_zone}"],
+                                                  lease_version=version)
+                    if is_verbose:
+                        print(f"      |   |   \--- No usable detour -> UNEXPECTED_EVENT sent to Cloud")
+                    self.active_lease = None
+                    return {"status": "ESCALATED_UNEXPECTED", "reason": reason_msg}
+
                 elif tac_action == "LOCAL_DETOUR":
                     detour_wp = decision.get("target_waypoint")
                     is_valid_detour, detour_err, _ = self.geofence.validate_destination(
@@ -1251,6 +1262,14 @@ class EdgeSupervisor:
                     if is_verbose:
                         print(f"      |   |   |--- Action Dispatch: LOCAL_DETOUR -> Navigating via permitted bypass '{detour_wp}'")
                     detour_report = robot.execute_command(detour_cmd)
+                    if detour_report.get("status") == "BLOCKED":
+                        self.store.update_robot_command_status(detour_cmd["cmd_id"], "BLOCKED")
+                        reason_msg = f"Detour via {detour_wp} also blocked: {detour_report.get('message', '')}"
+                        self.trigger_unexpected_event(task_id=task_id, what=reason_msg,
+                                                      where=detour_report.get("blocked_zone") or blocked_zone,
+                                                      robots_saw=[f"{robot_id}: {reason_msg}"], lease_version=version)
+                        self.active_lease = None
+                        return {"status": "ESCALATED_UNEXPECTED", "reason": reason_msg}
                     if detour_report.get("status") != "COMPLETED" or not detour_report.get("arrival_verified",False):
                         self.store.update_robot_command_status(detour_cmd["cmd_id"],detour_report.get("status","FAILED"))
                         self.active_lease=None

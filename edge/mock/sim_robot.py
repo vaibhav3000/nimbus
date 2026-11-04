@@ -502,15 +502,33 @@ class SimRobot:
 
             # Maintain fresh range sensor
             front_dist = 2.0
-            if self.injected_obstacles:
-                front_dist = 0.15  # within obstacle guard trigger range (< 0.25m)
+            # (obstacles are modelled per route zone in execute_command, not as a global short range)
             if self._mock_range_enabled:
                 adapter.set_range_scan(RangeScan((front_dist, front_dist, front_dist), front_dist, front_dist, timestamp=now))
 
             self._publish_viewer_pose(cur_x, cur_y, cur_yaw, now)
+            self._sync_viewer_obstacles(now)
             time.sleep(dt)
 
     _viewer_last = 0.0
+    _obs_last = 0.0
+
+    def _sync_viewer_obstacles(self, now: float) -> None:
+        """Kinematic mode: zones the operator closed in the viewer become persistent obstacles."""
+        url = os.environ.get("NIMBUS_SIM_VIEWER_URL")
+        if not url or now - self._obs_last < 1.0:
+            return
+        self._obs_last = now
+        try:
+            import urllib.request
+            blocked = set(json.loads(urllib.request.urlopen(url.rstrip("/") + "/obstacles", timeout=0.3).read())["blocked"])
+        except Exception:
+            return
+        for z in blocked:
+            if z not in self.injected_obstacles:
+                self.inject_obstacle(z, "persistent", f"{z} closed by operator in the simulator viewer")
+        for z in [k for k, v in self.injected_obstacles.items() if v["description"].endswith("viewer") and k not in blocked]:
+            del self.injected_obstacles[z]
 
     def _publish_viewer_pose(self, x: float, y: float, yaw: float, now: float) -> None:
         """Kinematic mode only: stream the pose to the Gazebo-less viewer (simulation/lite/viewer.py)."""
@@ -765,6 +783,13 @@ class SimRobot:
                     blocked_zone = "corridor-2B"
                 elif "east_mid_hall" in self.injected_obstacles:
                     blocked_zone = "east_mid_hall"
+
+            if not blocked_zone and self.injected_obstacles and target_name:
+                # an obstacle anywhere along the corridor route blocks the leg
+                for node in self._find_route(self.current_zone, target_name)[1:]:
+                    if node in self.injected_obstacles:
+                        blocked_zone = node
+                        break
 
             if blocked_zone:
                 obs_info = self.injected_obstacles[blocked_zone]
