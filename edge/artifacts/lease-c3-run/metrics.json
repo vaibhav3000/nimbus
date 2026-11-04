@@ -1,8 +1,12 @@
 {
   "task_id": "lease-c3-run",
-  "execution_duration_sec": 0.167,
-  "distance_travelled_m": 12.5,
+  "execution_duration_sec": 0.2,
+  "distance_travelled_m": 26.56,
   "subtasks_completed": 3,
   "battery_consumed_pct": 0.0,
-  "timestamp": 1793734676.2989728
+  "timestamp": 1793818117.7777107,
+  "planned_distance_m": null,
+  "distance_source": "measured_pose_history",
+  "execution_mode": "mock",
+  "arrival_verified": true
 }

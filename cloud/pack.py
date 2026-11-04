@@ -55,7 +55,7 @@ class Pack:
 
     @classmethod
     def load(cls, name: str | None = None) -> "Pack":
-        name = name or os.environ.get("NIMBUS_PACK") or (PACKS_DIR / "DEFAULT").read_text(encoding="utf-8").strip()
+        name = name or os.environ.get("NIMBUS_PACK") or os.environ.get("PACK") or (PACKS_DIR / "DEFAULT").read_text(encoding="utf-8").strip()
         root = Path(name) if os.sep in name or name.startswith(".") else PACKS_DIR / name
         return cls(root)
 

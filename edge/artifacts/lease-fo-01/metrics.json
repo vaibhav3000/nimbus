@@ -1,8 +1,12 @@
 {
   "task_id": "lease-fo-01",
-  "execution_duration_sec": 0.074,
-  "distance_travelled_m": 12.5,
+  "execution_duration_sec": 0.082,
+  "distance_travelled_m": 16.12,
   "subtasks_completed": 4,
   "battery_consumed_pct": 0.0,
-  "timestamp": 1793734678.230003
+  "timestamp": 1793818122.8195443,
+  "planned_distance_m": null,
+  "distance_source": "measured_pose_history",
+  "execution_mode": "mock",
+  "arrival_verified": true
 }

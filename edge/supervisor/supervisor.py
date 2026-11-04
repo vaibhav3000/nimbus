@@ -487,6 +487,8 @@ class EdgeSupervisor:
             ]
 
         req_data = json.dumps(body).encode("utf-8")
+        if self.verbose:
+            print(f"[{self.cluster_id}] Sending Heartbeat to Cloud ({url}):\n{json.dumps(body, indent=2)}")
         headers = {"Content-Type": "application/json"}
         if getattr(self, "token", None):
             headers["Authorization"] = f"Bearer {self.token}"
@@ -509,8 +511,9 @@ class EdgeSupervisor:
                                 self.trigger_expiry_interrupt(reason="Cloud reconciled lease termination (stop)")
                                 self.active_lease = None
                     return True, data
-        except Exception:
-            pass
+        except Exception as e:
+            if self.verbose:
+                print(f"[{self.cluster_id}] Heartbeat network error: {e}")
         return False, {}
 
     def send_checkin_to_cloud(
@@ -1052,13 +1055,29 @@ class EdgeSupervisor:
                     input_context={"step":idx,"subtask":subtask},decision_action="EXECUTION_FAILED",
                     decision_output=exec_report,latency_ms=1.0,
                 )
+                try:
+                    self.trigger_unexpected_event(
+                        task_id=task_id,
+                        what=f"Terminal robot failure: {exec_status} - {exec_report.get('message', '')}",
+                        where=robot.current_zone,
+                        robots_saw=[f"{robot_id} failed: {exec_status}"],
+                        lease_version=version,
+                    )
+                except Exception:
+                    pass
                 self.active_lease=None
                 return {"status":"FAILED","execution_status":exec_status,"reason":exec_report.get("message",f"Robot returned {exec_status}"),"executed_steps":executed_steps,"failed_step":exec_report}
 
             # Check if execution failed or was blocked by obstacle
             if exec_report["status"] in ("BLOCKED", "FAILED"):
                 self.store.update_robot_command_status(cmd_payload["cmd_id"],exec_status)
-                blocked_zone = exec_report.get("blocked_zone", robot.current_zone)
+                blocked_zone = exec_report.get("blocked_zone")
+                if not blocked_zone or blocked_zone == robot.current_zone:
+                    m = re.search(r"failed to reach\s+([\w-]+)", exec_report.get("message", ""))
+                    if m:
+                        blocked_zone = m.group(1)
+                    else:
+                        blocked_zone = exec_report.get("blocked_zone", robot.current_zone)
                 event_desc = exec_report.get("message", "Obstruction encountered")
                 time_remaining = max(0.0, (expiry_dt - datetime.now(timezone.utc)).total_seconds())
 
@@ -1282,8 +1301,8 @@ class EdgeSupervisor:
                     self.trigger_unexpected_event(
                         task_id=task_id,
                         what=reason_msg,
-                        where=str(target_dest),
-                        robots_saw=[f"{robot_id} reported: {reason_msg} at {target_dest}"],
+                        where=blocked_zone,
+                        robots_saw=[f"{robot_id} reported: {reason_msg} at {blocked_zone}"],
                         lease_version=version,
                     )
                     if is_verbose:

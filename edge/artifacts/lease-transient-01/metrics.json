@@ -1,8 +1,12 @@
 {
   "task_id": "lease-transient-01",
-  "execution_duration_sec": 0.239,
-  "distance_travelled_m": 12.5,
+  "execution_duration_sec": 0.21,
+  "distance_travelled_m": 26.56,
   "subtasks_completed": 3,
   "battery_consumed_pct": 0.0,
-  "timestamp": 1793734699.1632512
+  "timestamp": 1793818144.2299008,
+  "planned_distance_m": null,
+  "distance_source": "measured_pose_history",
+  "execution_mode": "mock",
+  "arrival_verified": true
 }

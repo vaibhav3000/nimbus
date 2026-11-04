@@ -3,7 +3,7 @@
     {
       "robot": "R1",
       "counts": {
-        "north_hall": {
+        "central-supply": {
           "infusion_pump": 1
         }
       }

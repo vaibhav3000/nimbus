@@ -8,6 +8,13 @@
   ],
   "resolution": "1280x720",
   "file_size_bytes": 1031,
-  "sha256": "41fa1007b3a6441094372e67e440a1af447af84e04acb31ea455b88a95d6ce48",
-  "created_at": "2026-11-03T19:37:58.229720+00:00"
+  "sha256": "53e1cf03e287aa3f9e862645c5336a87bcf3c8a708deeab37e83e532fed9e404",
+  "created_at": "2026-11-04T18:48:42.818927+00:00",
+  "pose_source": "mock_simulation",
+  "pose_frame": "simulated/world",
+  "pose_timestamp": 1793818122.7669368,
+  "arrival_verified": true,
+  "execution_mode": "mock",
+  "proof_type": "simulated",
+  "physical_verification": false
 }
