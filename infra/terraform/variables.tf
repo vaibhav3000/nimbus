@@ -56,3 +56,9 @@ variable "knowledge_base_id" {
   type        = string
   default     = ""
 }
+
+variable "ecs_target_url" {
+  description = "Target HTTP URL for the ECS Fargate service / container proxy. Can be set to a task public IP, internal ALB, or mock URL at apply time."
+  type        = string
+  default     = "http://127.0.0.1:8000"
+}

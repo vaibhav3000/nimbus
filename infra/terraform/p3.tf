@@ -150,6 +150,13 @@ resource "aws_iam_role_policy" "task_p3" {
           "arn:aws:iot:${var.aws_region}:${data.aws_caller_identity.current.account_id}:topic/nimbus/*/${t}"
         ]
       },
+      {
+        Sid      = "AppSecretsRead"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+        Resource = [aws_secretsmanager_secret.app_secrets.arn]
+      },
+
     ]
   })
 }
