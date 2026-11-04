@@ -1,4 +1,4 @@
-# IISc Department Corridor Route Trace (10 Hz)
+# IISc Department Corridor Route Trace (short synthetic example for local testing)
 # Time(s), RTT(ms), Loss(%)
 time_sec,rtt_ms,loss_pct
 0.0,18.2,0.0

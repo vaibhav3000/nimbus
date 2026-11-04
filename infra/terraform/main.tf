@@ -127,6 +127,32 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
+resource "aws_security_group" "app" {
+  name        = "${local.name_prefix}-app-sg"
+  description = "Security group for Nimbus ECS service allowing inbound HTTP on port 8000"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "Allow inbound port 8000 for Nimbus web app and API"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-app-sg"
+  }
+}
+
 resource "aws_ecs_service" "app" {
   name            = "${local.name_prefix}-service"
   cluster         = aws_ecs_cluster.main.id
@@ -136,6 +162,7 @@ resource "aws_ecs_service" "app" {
 
   network_configuration {
     subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.app.id]
     assign_public_ip = var.egress_mode == "public_ip" # see p3.tf: private subnets had no route out
   }
 }
@@ -153,8 +180,9 @@ resource "aws_apigatewayv2_api" "main" {
 
 resource "aws_apigatewayv2_integration" "placeholder" {
   api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "MOCK"
-  integration_uri        = "placeholder"
+  integration_type       = "HTTP_PROXY"
+  integration_uri        = "https://httpbin.org/post"
+  integration_method     = "POST"
   payload_format_version = "1.0"
 }
 
@@ -162,6 +190,40 @@ resource "aws_apigatewayv2_route" "requests" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "POST /requests"
   target    = "integrations/${aws_apigatewayv2_integration.placeholder.id}"
+}
+
+resource "aws_apigatewayv2_stage" "default" {
+  api_id      = aws_apigatewayv2_api.main.id
+  name        = "$default"
+  auto_deploy = true
+}
+
+resource "aws_apigatewayv2_integration" "proxy" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "HTTP_PROXY"
+  integration_uri        = "https://httpbin.org/anything/{proxy}"
+  integration_method     = "ANY"
+  payload_format_version = "1.0"
+}
+
+resource "aws_apigatewayv2_route" "proxy" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.proxy.id}"
+}
+
+resource "aws_apigatewayv2_integration" "root" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "HTTP_PROXY"
+  integration_uri        = "https://httpbin.org/get"
+  integration_method     = "GET"
+  payload_format_version = "1.0"
+}
+
+resource "aws_apigatewayv2_route" "root" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "GET /"
+  target    = "integrations/${aws_apigatewayv2_integration.root.id}"
 }
 
 # ---------------------------------------------------------------------------
@@ -178,14 +240,31 @@ resource "aws_cloudwatch_event_bus" "main" {
 }
 
 resource "aws_cloudwatch_event_rule" "task_events" {
-  name        = "${local.name_prefix}-task-events"
-  description = "Route Nimbus task/lease events to the escalations queue"
-  event_pattern = jsonencode({
+  name           = "${local.name_prefix}-task-events"
+  description    = "Route Nimbus task/lease events to the escalations queue"
+  event_bus_name = aws_cloudwatch_event_bus.main.name
+  event_pattern  = jsonencode({
     source      = ["nimbus.app"]
     detail-type = ["lease_issued", "escalation", "checkin_missed"]
   })
 }
 
+
+# Minimal CloudWatch alarm skeleton for missed check-ins (SKELETON ONLY: never applied).
+# In AWS production, edge supervisors emit heartbeat/checkin metrics via CloudWatch EMF
+# or IoT Core rule metrics; an alarm fires if no check-in metric arrives within the lease window.
+resource "aws_cloudwatch_metric_alarm" "missed_checkin" {
+  alarm_name          = "${local.name_prefix}-missed-checkin"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CheckinReceived"
+  namespace           = "Nimbus/Fleet"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  alarm_description   = "Triggers when edge supervisor fails to check in within 60s lease window"
+  treat_missing_data  = "breaching"
+}
 resource "aws_cloudwatch_event_target" "to_queue" {
   event_bus_name = aws_cloudwatch_event_bus.main.name
   rule           = aws_cloudwatch_event_rule.task_events.name
