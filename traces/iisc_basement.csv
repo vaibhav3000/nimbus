@@ -1,4 +1,4 @@
-# IISc Basement Corridor Outage Trace (10 Hz)
+# IISc Basement Corridor Outage Trace (short synthetic example for local testing)
 # Time(s), RTT(ms), Loss(%)
 # t=0..4s: staircase descent; t=5..24s: shielded basement dead zone (100% loss / outage); t=25..30s: exit ramp reconnection
 time_sec,rtt_ms,loss_pct
