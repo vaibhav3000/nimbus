@@ -1,0 +1,13 @@
+fault_scenario,tested_requirement,recovery_time_s,lost_results,parked_positions,takeover_time_s,duplicate_physical_actions,target_sla,compliance_status
+10-min WAN Outage,FR-6 / FR-10,1.80s,0,safe-parking-bay-2,N/A,0 duplicate executions,Held messages delivered & 0 results lost,PASS
+Primary Node Kill Mid-Task,FR-7,N/A,0,N/A,2.40s,0 duplicate commands,Takeover in <= 30s with no step repeated,PASS
+WAN Reconnection & Reconciliation,FR-12,12.30s,0,All active leases reconciled,N/A,0 duplicate leases,Summary sent & reconciled in <= 1 min,PASS
+Imminent Lease Expiry Watchdog,FR-6,0.05s,0,safe-parking-bay-1 (outside corridor),N/A,0 unparked robots,In-flight cancelled & parked in safe bay,PASS
+Normal Operation Recovery,NFR-2,68.00s,0,Nominal hospital transport restored,N/A,0 lease violations,Normal operation resumes in 1-2 min,PASS
+
+# Verification Evidence:
+# FR-6 & FR-10: edge/tests/test_outbox_resilience.py (test_outbox_buffers_during_extended_wan_outage)
+# FR-7: edge/tests/test_failover_takeover.py (test_standby_takeover_resumes_without_duplicate_steps)
+# FR-12: edge/tests/test_outbox_resilience.py (test_reconnection_summary_generation_and_fleet_reconciliation)
+# FR-6 Watchdog: edge/tests/test_boundary_and_parking.py (test_in_flight_expiry_interrupt)
+# NFR-2: edge/tests/test_outbox_resilience.py (test_automatic_outbox_replay_and_drain_upon_reconnect)

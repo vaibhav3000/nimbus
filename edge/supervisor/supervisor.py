@@ -178,6 +178,8 @@ class EdgeSupervisor:
                 "R6": self._create_robot("R6", [-4.5, -8.0, 0.0], "west_south_hall"),
             }
         self.active_lease: Optional[Dict[str, Any]] = None
+        self.active_robot_id: Optional[str] = None
+        self.failed_robot_ids: Set[str] = set()
 
         # Store-and-Forward Outbox Worker (FR-10, NFR-2)
         self.outbox_worker = OutboxUploadWorker(
@@ -460,14 +462,17 @@ class EdgeSupervisor:
         url = f"{self.cloud_url}/fleet/heartbeat"
         if robots_digest is None:
             robots_digest = []
+            failed_set = getattr(self, "failed_robot_ids", set())
+            active_id = getattr(self, "active_robot_id", None)
             for rid, r in self.robots.items():
-                is_busy = bool(self.active_lease and rid in self.active_lease.get("assigned_robots", []))
+                is_failed = rid in failed_set or getattr(r, "has_fault", False) or getattr(r, "status", "") == "FAILED"
+                is_busy = not is_failed and bool(self.active_lease and (rid == active_id or rid in self.active_lease.get("assigned_robots", [])))
                 r_zone = getattr(r, "current_zone", self.home_zone)
                 if r_zone in ("home", "transit", "unknown") or r_zone not in self.topology.get("nodes", {}):
                     r_zone = self.home_zone
                 robots_digest.append({
                     "id": rid,
-                    "state": "busy" if is_busy else "idle",
+                    "state": "failed" if is_failed else ("busy" if is_busy else "idle"),
                     "zone": r_zone,
                     "battery": getattr(r, "battery_pct", 100.0),
                 })
@@ -542,13 +547,17 @@ class EdgeSupervisor:
         message_id = f"msg-ci-{int(time.time()*1000)}-{uuid.uuid4().hex[:6]}"
 
         robots_digest = []
+        failed_set = getattr(self, "failed_robot_ids", set())
+        active_id = getattr(self, "active_robot_id", None)
         for rid, r in self.robots.items():
             r_zone = getattr(r, "current_zone", self.home_zone)
             if r_zone in ("home", "transit", "unknown") or r_zone not in self.topology.get("nodes", {}):
                 r_zone = self.home_zone
+            is_failed = rid in failed_set or getattr(r, "has_fault", False) or getattr(r, "status", "") == "FAILED"
+            is_busy = not is_failed and bool(active_id == rid or (not active_id and getattr(r, "status", "") == "RUNNING"))
             robots_digest.append({
                 "id": rid,
-                "state": "busy",
+                "state": "failed" if is_failed else ("busy" if is_busy else "idle"),
                 "zone": r_zone,
                 "battery": getattr(r, "battery_pct", 95.0),
             })
@@ -1098,12 +1107,17 @@ class EdgeSupervisor:
                     decision_output=exec_report,latency_ms=1.0,
                 )
                 try:
+                    where_zone = exec_report.get("blocked_zone")
+                    if not where_zone:
+                        m_fail = re.search(r"failed to reach\s+([\w-]+)", exec_report.get("message", ""))
+                        where_zone = m_fail.group(1) if m_fail else robot.current_zone
                     self.trigger_unexpected_event(
                         task_id=task_id,
                         what=f"Terminal robot failure: {exec_status} - {exec_report.get('message', '')}",
-                        where=robot.current_zone,
+                        where=where_zone,
                         robots_saw=[f"{robot_id} failed: {exec_status}"],
                         lease_version=version,
+                        robot_zone=robot.current_zone,
                     )
                 except Exception:
                     pass
@@ -1119,7 +1133,7 @@ class EdgeSupervisor:
                     if m:
                         blocked_zone = m.group(1)
                     else:
-                        blocked_zone = exec_report.get("blocked_zone", robot.current_zone)
+                        blocked_zone = robot.current_zone
                 event_desc = exec_report.get("message", "Obstruction encountered")
                 time_remaining = max(0.0, (expiry_dt - datetime.now(timezone.utc)).total_seconds())
 
@@ -1196,7 +1210,7 @@ class EdgeSupervisor:
                     "assigned_robots": list(dict.fromkeys(lease.get("assigned_robots", []) + list(self.robots.keys()))),
                     "failed_robots": list(failed_robots),
                     "event_description": event_desc,
-                    "has_fault": exec_report.get("has_fault", False) or exec_report.get("status") == "FAILED",
+                    "has_fault": exec_report.get("has_fault", False),
                     "wait_count": step_wait_counts.get(idx, 0),
                 }
 
@@ -1264,7 +1278,7 @@ class EdgeSupervisor:
                     reason_msg = f"No detour inside the lease avoids {blocked_zone}: {event_desc}"
                     self.trigger_unexpected_event(task_id=task_id, what=reason_msg, where=blocked_zone,
                                                   robots_saw=[f"{robot_id} reported: {event_desc} at {blocked_zone}"],
-                                                  lease_version=version)
+                                                  lease_version=version, robot_zone=robot.current_zone)
                     if is_verbose:
                         print(f"      |   |   \--- No usable detour -> UNEXPECTED_EVENT sent to Cloud")
                     self.active_lease = None
@@ -1302,9 +1316,11 @@ class EdgeSupervisor:
                     if detour_report.get("status") == "BLOCKED":
                         self.store.update_robot_command_status(detour_cmd["cmd_id"], "BLOCKED")
                         reason_msg = f"Detour via {detour_wp} also blocked: {detour_report.get('message', '')}"
+                        detour_blocked = detour_report.get("blocked_zone") or detour_wp
                         self.trigger_unexpected_event(task_id=task_id, what=reason_msg,
-                                                      where=detour_report.get("blocked_zone") or blocked_zone,
-                                                      robots_saw=[f"{robot_id}: {reason_msg}"], lease_version=version)
+                                                      where=detour_blocked,
+                                                      robots_saw=[f"{robot_id}: {reason_msg}"], lease_version=version,
+                                                      robot_zone=robot.current_zone)
                         self.active_lease = None
                         return {"status": "ESCALATED_UNEXPECTED", "reason": reason_msg}
                     if detour_report.get("status") != "COMPLETED" or not detour_report.get("arrival_verified",False):
@@ -1335,14 +1351,37 @@ class EdgeSupervisor:
                         })
                         robot_id = new_robot_id
                         active_robot_id = new_robot_id
+                        self.active_robot_id = new_robot_id
+                        self.failed_robot_ids = set(failed_robots)
                         if robot_id not in self.robots:
                             self.robots[robot_id] = self._create_robot(robot_id=robot_id)
                         robot = self.robots[robot_id]
+                        robot.status = "RUNNING"
+                        if faulted_id in self.robots:
+                            self.robots[faulted_id].status = "FAILED"
 
                         # Update remaining subtasks in sequence to use the new robot
                         for rem_sub in task_sequence[idx:]:
                             if rem_sub.get("robot") == faulted_id:
                                 rem_sub["robot"] = new_robot_id
+
+                        # Update active lease assigned_robots
+                        assigned = list(dict.fromkeys([new_robot_id] + list(lease.get("assigned_robots", []))))
+                        lease["assigned_robots"] = assigned
+                        if self.active_lease:
+                            self.active_lease["assigned_robots"] = assigned
+                        try:
+                            self.store.save_lease(lease)
+                        except Exception:
+                            pass
+
+                        # Notify Cloud immediately of the swap via check-in telemetry
+                        try:
+                            self.send_checkin_to_cloud(lease)
+                        except Exception as e:
+                            if is_verbose:
+                                print(f"      |   |   |--- Check-in after swap failed: {e}")
+
                         if is_verbose:
                             print(f"      |   |   |--- Action Dispatch: SWAP_ROBOT -> Stopped faulted {faulted_id}; transferred task to {new_robot_id}")
                             print(rf"      |   |   \--- Action Status  : COMPLETED (Active robot is now {new_robot_id})")
@@ -1365,6 +1404,7 @@ class EdgeSupervisor:
                         where=blocked_zone,
                         robots_saw=[f"{robot_id} reported: {reason_msg} at {blocked_zone}"],
                         lease_version=version,
+                        robot_zone=robot.current_zone,
                     )
                     if is_verbose:
                         print(f"      |   |   |--- Action Dispatch: ESCALATE_UNEXPECTED -> Emitted UNEXPECTED_EVENT to Cloud")

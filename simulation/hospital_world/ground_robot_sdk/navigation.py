@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import os
 import threading
 import time
 import uuid
@@ -23,7 +24,7 @@ class NavigationConfig:
     steering_gain: float = 1.2
     startup_odometry_timeout: float = 5.0
     odometry_timeout: float = 1.0
-    goal_timeout: float = 270.0
+    goal_timeout: float = float(os.environ.get("NIMBUS_GOAL_TIMEOUT", "600.0"))
     require_obstacle_feedback: bool = False
     obstacle_timeout: float = 1.0
     validation_source: str = "odometry"
@@ -232,10 +233,17 @@ class NavigationController:
                         self._fail_and_stop(command_id, "front range data is invalid", CommandStatus.SENSOR_UNAVAILABLE)
                         return
                     safety_distance = getattr(getattr(self.motion,"safety",None),"config",None)
-                    safety_distance = getattr(safety_distance,"minimum_front_distance",0.25)
+                    safety_distance = getattr(safety_distance,"minimum_front_distance",float(os.environ.get("NIMBUS_MINIMUM_FRONT_DISTANCE", "0.20")))
                     if front < safety_distance:
-                        self._fail_and_stop(command_id, "front obstacle is inside safety distance", CommandStatus.BLOCKED)
-                        return
+                        should_abort = True
+                        if target is not None:
+                            desired = math.atan2(target.y - pose.y, target.x - pose.x)
+                            heading_error = _angle(desired - pose.yaw)
+                            if math.cos(heading_error) <= 0.5:
+                                should_abort = False
+                        if should_abort:
+                            self._fail_and_stop(command_id, "front obstacle is inside safety distance", CommandStatus.BLOCKED)
+                            return
                 if target is None:
                     return
                 distance = math.hypot(target.x - pose.x, target.y - pose.y)

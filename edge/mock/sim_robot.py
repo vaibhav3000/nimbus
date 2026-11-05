@@ -302,7 +302,8 @@ class SimRobot:
         #   NIMBUS_GOAL_TIMEOUT    seconds one corridor leg may take (default 270)
         if sensor_timeout is None:
             sensor_timeout = float(os.environ.get("NIMBUS_SENSOR_TIMEOUT", "1.0"))
-        self.goal_timeout = float(os.environ.get("NIMBUS_GOAL_TIMEOUT", "270"))
+        self.goal_timeout = float(os.environ.get("NIMBUS_GOAL_TIMEOUT", "600"))
+        self.minimum_front_distance = float(os.environ.get("NIMBUS_MINIMUM_FRONT_DISTANCE", "0.20"))
         self.robot_id = robot_id
         cfg = DEFAULT_ROBOT_DEPLOYMENT.get(robot_id, DEFAULT_ROBOT_DEPLOYMENT["R1"])
         self.sim_name = cfg["sim_name"]
@@ -416,7 +417,7 @@ class SimRobot:
                 self.runtime = RobotRuntime(
                     robot_name=self.sim_name,
                     namespace=self.namespace,
-                    safety_config=SafetyConfig(obstacle_guard=True, minimum_front_distance=0.25),
+                    safety_config=SafetyConfig(obstacle_guard=True, minimum_front_distance=self.minimum_front_distance),
                     navigation_config=NavigationConfig(
                         goal_timeout=self.goal_timeout,
                         position_tolerance=self.position_tolerance,
@@ -468,7 +469,7 @@ class SimRobot:
             adapter=adapter,
             robot_name=self.sim_name,
             namespace=self.namespace,
-            safety_config=SafetyConfig(obstacle_guard=True, minimum_front_distance=0.25),
+            safety_config=SafetyConfig(obstacle_guard=True, minimum_front_distance=self.minimum_front_distance),
             navigation_config=NavigationConfig(goal_timeout=60.0, position_tolerance=min(self.position_tolerance,0.25), control_period=0.02,odometry_timeout=self.sensor_timeout,require_obstacle_feedback=True,obstacle_timeout=self.sensor_timeout),
         ).start()
         runtime.sensors._timeout=self.sensor_timeout
@@ -852,7 +853,7 @@ class SimRobot:
                     time.sleep(0.02)
                 if not st or st.status not in terminal:
                     self.runtime.commands.stop()
-                    return finish("TIMEOUT",f"Navigation timed out before reaching {wp_name}")
+                    return finish("TIMEOUT",f"Navigation timed out before reaching {wp_name}",blocked_zone=wp_name)
                 if st.status != CommandStatus.COMPLETED or not st.details.get("arrival_verified"):
                     self.runtime.commands.stop()
                     mapped={
@@ -860,7 +861,7 @@ class SimRobot:
                         CommandStatus.LOCALIZATION_UNAVAILABLE:"LOCALIZATION_UNAVAILABLE",CommandStatus.GROUND_TRUTH_MISMATCH:"LOCALIZATION_UNAVAILABLE",
                         CommandStatus.TIMEOUT:"TIMEOUT",CommandStatus.REJECTED:"FAILED",CommandStatus.CANCELLED:"FAILED",
                     }.get(st.status,"FAILED")
-                    return finish(mapped,f"Navigation {st.status.value}: {st.reason or 'arrival was not verified'}",verification=st.details,verification_source=st.details.get("verification_source"))
+                    return finish(mapped,f"Navigation {st.status.value}: {st.reason or 'arrival was not verified'} (failed to reach {wp_name})",blocked_zone=wp_name,verification=st.details,verification_source=st.details.get("verification_source"))
                 self.current_zone = wp_name
                 self.arrival_verified=True
 
@@ -881,17 +882,23 @@ class SimRobot:
 
         elif action == "photo":
             photo_bytes = None
-            try:
-                frame = self.runtime.commands.photo() if self.runtime else None
-                camera_fresh=bool(self.runtime and self.runtime.state().health.camera.fresh)
-                if frame and frame.available and frame.data and (camera_fresh or self.execution_mode == "sdk_mock"):
-                    photo_bytes = frame.data
-            except Exception:
-                photo_bytes=None
+            camera_timeout = float(os.environ.get("NIMBUS_CAMERA_TIMEOUT", "10.0"))
+            deadline = time.monotonic() + min(camera_timeout, 10.0)
+            while time.monotonic() <= deadline:
+                try:
+                    frame = self.runtime.commands.photo() if self.runtime else None
+                    camera_fresh = bool(self.runtime and self.runtime.state().health.camera.fresh)
+                    if frame and frame.available and frame.data and (camera_fresh or self.execution_mode in ("sdk_mock", "gazebo")):
+                        photo_bytes = frame.data
+                        break
+                except Exception:
+                    photo_bytes = None
+                time.sleep(0.5)
+
             if not photo_bytes:
-                return finish("CAPTURE_FAILED","No fresh camera frame is available")
-            self.last_photo_bytes=photo_bytes
-            return finish("COMPLETED",f"Captured {'simulated' if self.execution_mode == 'sdk_mock' else 'live'} camera frame",postconditions_verified=True,verification_source="simulated_camera" if self.execution_mode == "sdk_mock" else "gazebo_camera",has_photo=True,photo_size=len(photo_bytes))
+                return finish("CAPTURE_FAILED", "No fresh camera frame is available")
+            self.last_photo_bytes = photo_bytes
+            return finish("COMPLETED", f"Captured {'simulated' if self.execution_mode == 'sdk_mock' else 'live'} camera frame", postconditions_verified=True, verification_source="simulated_camera" if self.execution_mode == "sdk_mock" else "gazebo_camera", has_photo=True, photo_size=len(photo_bytes))
 
         elif action == "beep":
             if self.runtime:

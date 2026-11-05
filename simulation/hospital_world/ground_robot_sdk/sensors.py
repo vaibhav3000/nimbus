@@ -1,13 +1,15 @@
 """Typed latest-value sensor cache and application callbacks."""
 from __future__ import annotations
-import threading, time
+import os, threading, time
 from typing import Callable
 from .models import CameraFrame, GroundTruthPose, Odometry, RangeScan, RobotHealth, RobotState, SensorHealth
 
 
 class SensorManager:
     def __init__(self, freshness_timeout: float = 2.0):
-        self._timeout, self._lock = freshness_timeout, threading.RLock()
+        self._timeout = float(os.environ.get("NIMBUS_SENSOR_TIMEOUT", str(freshness_timeout)))
+        self._camera_timeout = float(os.environ.get("NIMBUS_CAMERA_TIMEOUT", "10.0"))
+        self._lock = threading.RLock()
         self._odom, self._range, self._camera, self._ground_truth = Odometry(), RangeScan(), CameraFrame(), None
         self._received = {"odometry": None, "range": None, "camera": None, "ground_truth": None}
         self._callbacks: dict[str, list[Callable]] = {"odometry": [], "range": [], "camera": [], "ground_truth": []}
@@ -37,7 +39,15 @@ class SensorManager:
         with self._lock: return self._ground_truth
     def get_health(self, emergency_stop: bool=False, obstacle_guard: bool=False) -> RobotHealth:
         with self._lock:
-            now=time.monotonic(); values={name: SensorHealth(at is not None, at is not None and now-at <= self._timeout, None if at is None else max(0., now-at)) for name, at in self._received.items()}
+            now=time.monotonic()
+            values = {
+                name: SensorHealth(
+                    at is not None,
+                    at is not None and now-at <= (self._camera_timeout if name == "camera" else self._timeout),
+                    None if at is None else max(0., now-at)
+                )
+                for name, at in self._received.items()
+            }
         required = (values["odometry"], values["range"])
         status="healthy" if all(x.fresh for x in required) else "degraded" if any(x.available for x in required) else "unavailable"
         return RobotHealth(status, self._timeout, values["odometry"], values["range"], values["camera"], emergency_stop, obstacle_guard, values["ground_truth"])

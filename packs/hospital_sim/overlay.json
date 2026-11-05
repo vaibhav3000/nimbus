@@ -80,6 +80,14 @@
     "east_south_hall": {
       "kind": "corridor",
       "area": "east"
+    },
+    "east_south_hall_corner": {
+      "kind": "corridor",
+      "area": "east"
+    },
+    "west_south_hall_corner": {
+      "kind": "corridor",
+      "area": "west"
     }
   }
 }
