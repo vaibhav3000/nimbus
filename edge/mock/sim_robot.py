@@ -472,13 +472,18 @@ class SimRobot:
             adapter=adapter,
             robot_name=self.sim_name,
             namespace=self.namespace,
-<<<<<<< HEAD
             safety_config=SafetyConfig(obstacle_guard=True, minimum_front_distance=self.minimum_front_distance),
-            navigation_config=NavigationConfig(goal_timeout=60.0, position_tolerance=min(self.position_tolerance,0.25), control_period=0.02,odometry_timeout=self.sensor_timeout,require_obstacle_feedback=True,obstacle_timeout=self.sensor_timeout),
-=======
-            safety_config=SafetyConfig(obstacle_guard=True, minimum_front_distance=0.25),
-            navigation_config=NavigationConfig(goal_timeout=60.0, position_tolerance=min(self.position_tolerance,0.25), control_period=0.02,odometry_timeout=self.sensor_timeout,require_obstacle_feedback=True,obstacle_timeout=self.sensor_timeout,enable_path_planning=True,enable_dynamic_avoidance=True,obstacle_wait_timeout=.25),
->>>>>>> c7e5d2c (added a* logic)
+            navigation_config=NavigationConfig(
+                goal_timeout=60.0,
+                position_tolerance=min(self.position_tolerance, 0.25),
+                control_period=0.02,
+                odometry_timeout=self.sensor_timeout,
+                require_obstacle_feedback=True,
+                obstacle_timeout=self.sensor_timeout,
+                enable_path_planning=True,
+                enable_dynamic_avoidance=True,
+                obstacle_wait_timeout=0.25,
+            ),
         ).start()
         runtime.sensors._timeout=self.sensor_timeout
 

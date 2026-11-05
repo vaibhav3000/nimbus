@@ -346,20 +346,6 @@ class NavigationController:
                     if front is None or not math.isfinite(front) or front < 0:
                         self._fail_and_stop(command_id, "front range data is invalid", CommandStatus.SENSOR_UNAVAILABLE)
                         return
-<<<<<<< HEAD
-                    safety_distance = getattr(getattr(self.motion,"safety",None),"config",None)
-                    safety_distance = getattr(safety_distance,"minimum_front_distance",float(os.environ.get("NIMBUS_MINIMUM_FRONT_DISTANCE", "0.20")))
-                    if front < safety_distance:
-                        should_abort = True
-                        if target is not None:
-                            desired = math.atan2(target.y - pose.y, target.x - pose.x)
-                            heading_error = _angle(desired - pose.yaw)
-                            if math.cos(heading_error) <= 0.5:
-                                should_abort = False
-                        if should_abort:
-                            self._fail_and_stop(command_id, "front obstacle is inside safety distance", CommandStatus.BLOCKED)
-                            return
-=======
                     scan=self.sensors.get_range_scan()
                     avoidance=self._avoider.evaluate(scan,pose)
                     now=time.monotonic()
@@ -381,7 +367,6 @@ class NavigationController:
                         cancelled.wait(self.config.control_period)
                         continue
                     with self._lock: self._blocked_since=None
->>>>>>> c7e5d2c (added a* logic)
                 if target is None:
                     return
                 distance = math.hypot(target.x - pose.x, target.y - pose.y)
