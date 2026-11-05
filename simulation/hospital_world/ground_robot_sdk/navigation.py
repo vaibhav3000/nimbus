@@ -25,9 +25,12 @@ class NavigationConfig:
     control_period: float = 0.05
     # Damped and rate-limited steering: the vehicle must not zig-zag across
     # a narrow corridor after a planner turn.
-    steering_gain: float = 0.85
-    steering_derivative_gain: float = 0.12
-    max_steering_rate: float = 1.50
+    steering_gain: float = 0.65
+    steering_derivative_gain: float = 0.06
+    max_steering_rate: float = 0.80
+    heading_deadband: float = 0.04
+    derivative_filter_time_constant: float = 0.20
+    maximum_forward_heading_error: float = 2.0
     curvature_slowdown: float = 2.0
     min_turn_speed: float = 0.08
     startup_odometry_timeout: float = 5.0
@@ -314,6 +317,7 @@ class NavigationController:
     def _run_goto(self, command_id: str, cancelled: threading.Event, requested_speed: float) -> None:
         started = time.monotonic()
         previous_heading_error: float | None = None
+        filtered_heading_rate = 0.0
         previous_steering = 0.0
         previous_control_time: float | None = None
         try:
@@ -418,8 +422,11 @@ class NavigationController:
                 tracking_x,tracking_y=self._tracking_point(pose,target)
                 desired = math.atan2(tracking_y - pose.y, tracking_x - pose.x)
                 heading_error = _angle(desired - pose.yaw)
-                if abs(heading_error) >= self.config.reverse_required_angle and distance <= max(1.,self.config.path_lookahead*2):
-                    self._fail_and_stop(command_id,"safe path recovery would require reversing without rear obstacle sensing",CommandStatus.BLOCKED)
+                # This platform has no rear obstacle sensor.  A waypoint that
+                # is effectively behind it must trigger a replan/escalation,
+                # not a slow forward U-turn through the corridor.
+                if abs(heading_error) >= self.config.maximum_forward_heading_error:
+                    self._fail_and_stop(command_id,"planned bearing is behind the robot; refusing an unsafe forward U-turn",CommandStatus.BLOCKED)
                     return
                 avoidance_bias=avoidance.steering_bias if avoidance else 0.
                 if self._planner and avoidance_bias*heading_error < 0:
@@ -429,10 +436,15 @@ class NavigationController:
                     avoidance_bias=0.
                 now = time.monotonic()
                 dt = self.config.control_period if previous_control_time is None else max(0.001, now - previous_control_time)
-                heading_rate = 0.0 if previous_heading_error is None else _angle(heading_error - previous_heading_error) / dt
+                if abs(heading_error) < self.config.heading_deadband:
+                    heading_error = 0.0
+                raw_heading_rate = 0.0 if previous_heading_error is None else _angle(heading_error - previous_heading_error) / dt
+                alpha = dt / (self.config.derivative_filter_time_constant + dt)
+                filtered_heading_rate += alpha * (raw_heading_rate - filtered_heading_rate)
+                derivative_term = max(-0.12, min(0.12, self.config.steering_derivative_gain * filtered_heading_rate))
                 requested_steering = (
                     self.config.steering_gain * heading_error
-                    + self.config.steering_derivative_gain * heading_rate
+                    + derivative_term
                     + avoidance_bias
                 )
                 requested_steering = max(
