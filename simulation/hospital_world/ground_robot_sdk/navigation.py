@@ -10,6 +10,8 @@ from collections import deque
 from dataclasses import dataclass
 
 from .models import CommandResult, CommandStatus, GroundTruthPose, Odometry, Pose2D
+from .avoidance import AvoidanceConfig, DynamicObstacleAvoider
+from .planning import AStarPlanner, OccupancyGrid, path_length
 
 
 def _angle(value: float) -> float:
@@ -30,6 +32,19 @@ class NavigationConfig:
     validation_source: str = "odometry"
     ground_truth_tolerance: float = 0.25
     max_localization_discrepancy: float = 0.50
+    enable_path_planning: bool = False
+    enable_dynamic_avoidance: bool = True
+    path_lookahead: float = 0.40
+    replan_interval: float = 0.35
+    dynamic_obstacle_ttl: float = 2.0
+    obstacle_wait_timeout: float = 3.0
+    avoidance_distance: float = 1.50
+    obstacle_inflation: float = 0.85
+    minimum_control_speed: float = 0.10
+    minimum_alignment_scale: float = 0.30
+    approach_speed_gain: float = 0.35
+    reverse_required_angle: float = 2.50
+    heading_correction_gain: float = 0.60
 
 
 class NavigationController:
@@ -54,6 +69,21 @@ class NavigationController:
         self._active: CommandResult | None = None
         self._last: CommandResult | None = None
         self._target: Pose2D | None = None
+        self._costmap: OccupancyGrid | None = None
+        self._planner: AStarPlanner | None = None
+        self._path: list[tuple[float,float]] = []
+        self._path_index = 0
+        self._dynamic_cells: dict[tuple[int,int],float] = {}
+        self._last_replan = 0.0
+        self._blocked_since: float | None = None
+        self._replans = 0
+        self._avoidance_events = 0
+        safety_distance=getattr(getattr(getattr(motion,"safety",None),"config",None),"minimum_front_distance",.25)
+        self._avoider=DynamicObstacleAvoider(AvoidanceConfig(
+            safety_distance=safety_distance,
+            caution_distance=self.config.avoidance_distance,
+            obstacle_inflation=self.config.obstacle_inflation,
+        ))
         self._cancel = threading.Event()
         self._threads: set[threading.Thread] = set()
         self._closed = False
@@ -84,6 +114,19 @@ class NavigationController:
                 return None
             return math.hypot(self._pose.x-self._ground_truth_pose.x,self._pose.y-self._ground_truth_pose.y)
 
+    @property
+    def path(self) -> tuple[tuple[float,float], ...]:
+        with self._lock: return tuple(self._path)
+
+    def configure_costmap(self, costmap: OccupancyGrid | None) -> None:
+        """Install a startup-local costmap without changing the command API."""
+        with self._lock:
+            if self._active and self._active.status == CommandStatus.RUNNING:
+                raise RuntimeError("cannot replace the costmap during active navigation")
+            self._costmap=costmap.copy() if costmap is not None else None
+            self._planner=AStarPlanner(self._costmap) if self._costmap is not None else None
+            self._path=[]; self._path_index=0; self._dynamic_cells.clear()
+
     def goto(self, x: float, y: float, frame="world", speed: float | None = None) -> CommandResult:
         try:
             x, y = float(x), float(y)
@@ -109,10 +152,23 @@ class NavigationController:
                 if frame == "base_link"
                 else Pose2D(x, y)
             )
+            if self.config.enable_path_planning and self._planner:
+                if not self._costmap.contains_point((target.x,target.y)):
+                    return self._result("goto",CommandStatus.INVALID_DESTINATION,"goal is outside the configured navigation costmap")
+                if self._costmap.is_occupied(self._costmap.world_to_cell(target.x,target.y)):
+                    return self._result("goto",CommandStatus.INVALID_DESTINATION,"goal lies outside the configured traversable corridors")
+                path=self._planner.plan((current.x,current.y),(target.x,target.y))
+                if not path:
+                    return self._result("goto",CommandStatus.NO_PATH,"A* found no traversable path to the goal")
+                self._path=list(path); self._path_index=1 if len(path)>1 else 0
+            else:
+                self._path=[(current.x,current.y),(target.x,target.y)]; self._path_index=1
             result = self._result("goto", CommandStatus.RUNNING)
+            result.details.update({"planner":"astar_costmap" if self.config.enable_path_planning and self._planner else "direct","planned_path":[{"x":p[0],"y":p[1]} for p in self._path],"planned_distance_m":path_length(self._path)})
             result.start_time = time.time()
             self._active = result
             self._target = target
+            self._dynamic_cells.clear(); self._blocked_since=None; self._replans=0; self._avoidance_events=0; self._last_replan=0.
             self._cancel = threading.Event()
             thread = threading.Thread(
                 target=self._run_goto,
@@ -199,6 +255,56 @@ class NavigationController:
                 _angle(raw.yaw-self._ground_truth_startup.yaw),
             )
 
+    def _active_dynamic_cells(self, now: float) -> set[tuple[int,int]]:
+        with self._lock:
+            expired=[cell for cell,deadline in self._dynamic_cells.items() if deadline <= now]
+            for cell in expired: self._dynamic_cells.pop(cell,None)
+            return set(self._dynamic_cells)
+
+    def _record_dynamic_obstacles(self, points: tuple[tuple[float,float],...], now: float) -> bool:
+        with self._lock:
+            if not self._costmap or not points: return False
+            cells=self._costmap.inflated_cells(points,self.config.obstacle_inflation)
+            centers={self._costmap.world_to_cell(*point) for point in points}
+            deadline=now+self.config.dynamic_obstacle_ttl
+            # Range noise moves the inflation boundary by a cell. Replan only
+            # when the measured obstacle centre enters genuinely new space.
+            changed=not self._dynamic_cells or any(cell not in self._dynamic_cells for cell in centers)
+            for cell in cells: self._dynamic_cells[cell]=deadline
+            return changed
+
+    def _replan(self, pose: Pose2D, target: Pose2D, now: float, force: bool=False) -> bool:
+        with self._lock:
+            planner=self._planner
+            if not planner: return True
+            if not force and now-self._last_replan < self.config.replan_interval: return bool(self._path)
+            self._last_replan=now
+        dynamic=self._active_dynamic_cells(now)
+        path=planner.plan((pose.x,pose.y),(target.x,target.y),dynamic)
+        if not path: return False
+        with self._lock:
+            self._path=list(path); self._path_index=1 if len(path)>1 else 0; self._replans+=1
+            active=self._active
+            if active:
+                active.details.update({"planned_path":[{"x":p[0],"y":p[1]} for p in path],"planned_distance_m":path_length(path),"replans":self._replans})
+        return True
+
+    def _tracking_point(self, pose: Pose2D, target: Pose2D) -> tuple[float,float]:
+        with self._lock:
+            if not self._path: return target.x,target.y
+            start=max(0,self._path_index-2)
+            closest=min(range(start,len(self._path)),key=lambda index:math.hypot(self._path[index][0]-pose.x,self._path[index][1]-pose.y))
+            self._path_index=max(self._path_index,closest)
+            travelled=0.; lookahead_index=self._path_index
+            while lookahead_index < len(self._path)-1 and travelled < self.config.path_lookahead:
+                left,right=self._path[lookahead_index],self._path[lookahead_index+1]
+                travelled+=math.hypot(right[0]-left[0],right[1]-left[1]); lookahead_index+=1
+            return self._path[lookahead_index]
+
+    def _planning_details(self) -> dict:
+        with self._lock:
+            return {"planner":"astar_costmap" if self.config.enable_path_planning and self._planner else "direct","replans":self._replans,"avoidance_events":self._avoidance_events,"planned_path":[{"x":p[0],"y":p[1]} for p in self._path],"planned_distance_m":path_length(self._path)}
+
     def _run_goto(self, command_id: str, cancelled: threading.Event, requested_speed: float) -> None:
         started = time.monotonic()
         try:
@@ -223,27 +329,44 @@ class NavigationController:
                 if not health.fresh or health.age is None or health.age > self.config.odometry_timeout:
                     self._fail_and_stop(command_id, "odometry is stale or unavailable", CommandStatus.LOCALIZATION_UNAVAILABLE)
                     return
-                if self.config.require_obstacle_feedback:
-                    range_health = self.sensors.get_health().range
-                    if not range_health.fresh or range_health.age is None or range_health.age > self.config.obstacle_timeout:
-                        self._fail_and_stop(command_id, "front range data is stale or unavailable", CommandStatus.SENSOR_UNAVAILABLE)
+                with self._lock: costmap=self._costmap
+                if self.config.enable_path_planning and costmap:
+                    pose_cell=costmap.world_to_cell(pose.x,pose.y)
+                    if costmap.is_occupied(pose_cell):
+                        self._fail_and_stop(command_id,"robot departed the traversable costmap",CommandStatus.BLOCKED)
                         return
+                avoidance=None
+                range_health = self.sensors.get_health().range
+                use_range=range_health.fresh and range_health.age is not None and range_health.age <= self.config.obstacle_timeout
+                if self.config.require_obstacle_feedback and not use_range:
+                    self._fail_and_stop(command_id, "front range data is stale or unavailable", CommandStatus.SENSOR_UNAVAILABLE)
+                    return
+                if self.config.enable_dynamic_avoidance and use_range:
                     front = self.sensors.get_front_distance()
                     if front is None or not math.isfinite(front) or front < 0:
                         self._fail_and_stop(command_id, "front range data is invalid", CommandStatus.SENSOR_UNAVAILABLE)
                         return
-                    safety_distance = getattr(getattr(self.motion,"safety",None),"config",None)
-                    safety_distance = getattr(safety_distance,"minimum_front_distance",float(os.environ.get("NIMBUS_MINIMUM_FRONT_DISTANCE", "0.20")))
-                    if front < safety_distance:
-                        should_abort = True
-                        if target is not None:
-                            desired = math.atan2(target.y - pose.y, target.x - pose.x)
-                            heading_error = _angle(desired - pose.yaw)
-                            if math.cos(heading_error) <= 0.5:
-                                should_abort = False
-                        if should_abort:
-                            self._fail_and_stop(command_id, "front obstacle is inside safety distance", CommandStatus.BLOCKED)
+                    scan=self.sensors.get_range_scan()
+                    avoidance=self._avoider.evaluate(scan,pose)
+                    now=time.monotonic()
+                    changed=self._record_dynamic_obstacles(avoidance.obstacle_points,now) if self.config.enable_dynamic_avoidance else False
+                    if changed:
+                        with self._lock: self._avoidance_events+=1
+                    route_available=True
+                    if changed and target is not None and self.config.enable_path_planning:
+                        route_available=self._replan(pose,target,now)
+                    if avoidance.blocked or not route_available:
+                        self.motion.stop(source="autonomy")
+                        with self._lock:
+                            if self._blocked_since is None: self._blocked_since=now
+                            blocked_for=now-self._blocked_since
+                        if blocked_for >= self.config.obstacle_wait_timeout:
+                            reason="dynamic obstacle did not clear before avoidance timeout" if avoidance.blocked else "A* found no route around the detected obstacle"
+                            self._finish(command_id,CommandStatus.BLOCKED,reason,{"arrival_verified":False,**self._planning_details(),"front_clearance":avoidance.front_clearance})
                             return
+                        cancelled.wait(self.config.control_period)
+                        continue
+                    with self._lock: self._blocked_since=None
                 if target is None:
                     return
                 distance = math.hypot(target.x - pose.x, target.y - pose.y)
@@ -254,6 +377,7 @@ class NavigationController:
                         "target": target.to_dict(),
                         "odometry_pose": pose.to_dict(),
                         "distance_to_goal": distance,
+                        **self._planning_details(),
                     }
                     if self.config.validation_source == "ground_truth":
                         ground_health = self.sensors.get_health().ground_truth
@@ -282,17 +406,30 @@ class NavigationController:
                         self._finish(command_id, CommandStatus.COMPLETED, details=details)
                         return
 
-                desired = math.atan2(target.y - pose.y, target.x - pose.x)
+                tracking_x,tracking_y=self._tracking_point(pose,target)
+                desired = math.atan2(tracking_y - pose.y, tracking_x - pose.x)
                 heading_error = _angle(desired - pose.yaw)
+                if abs(heading_error) >= self.config.reverse_required_angle and distance <= max(1.,self.config.path_lookahead*2):
+                    self._fail_and_stop(command_id,"safe path recovery would require reversing without rear obstacle sensing",CommandStatus.BLOCKED)
+                    return
+                lookahead_distance=max(.05,math.hypot(tracking_x-pose.x,tracking_y-pose.y))
+                pure_pursuit=math.atan2(2*self.limits.wheelbase*math.sin(heading_error),lookahead_distance)
+                avoidance_bias=avoidance.steering_bias if avoidance else 0.
+                if self._planner and avoidance_bias*heading_error < 0:
+                    # The global path has already selected a collision-free
+                    # side. Do not let noisy five-ray asymmetry counter-steer
+                    # across that planned bypass.
+                    avoidance_bias=0.
                 steering = max(
                     -self.limits.max_steering_angle,
-                    min(self.limits.max_steering_angle, self.config.steering_gain * heading_error),
+                    min(self.limits.max_steering_angle, pure_pursuit+self.config.heading_correction_gain*heading_error+avoidance_bias),
                 )
                 # An Ackermann vehicle cannot pivot. Slow it while its heading
                 # is far from the goal so it turns onto the target path instead
                 # of tracing a wide, high-speed circle.
-                alignment = max(0.15, math.cos(heading_error))
-                speed = min(requested_speed, max(0.05, distance)) * alignment
+                alignment = max(self.config.minimum_alignment_scale,math.cos(heading_error))
+                approach_speed=max(self.config.minimum_control_speed,distance*self.config.approach_speed_gain)
+                speed=min(requested_speed,approach_speed)*alignment*(avoidance.speed_scale if avoidance else 1.)
                 low_level = self.motion.drive(
                     speed,
                     steering,
