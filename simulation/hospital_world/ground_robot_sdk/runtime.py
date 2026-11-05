@@ -13,13 +13,14 @@ class RobotRuntime:
     def __init__(self, adapter=None, limits: MotionLimits=MotionLimits(), safety_config: SafetyConfig | None=None, robot_name="ground_robot", namespace="", navigation_config: NavigationConfig | None=None):
         self.identity=RobotIdentity(robot_name,namespace); self.topics=self.identity.topics
         self.limits=limits; self.adapter=adapter or GazeboAdapter(identity=self.identity); self.sensors=SensorManager(); self.adapter.bind_sensor_callbacks(self.sensors.update_odometry,self.sensors.update_range_scan,self.sensors.update_camera,self.sensors.update_ground_truth)
-        self.arbiter=CommandArbiter(); self.safety=SafetySupervisor(self.sensors,limits,safety_config); self.controller=RobotController(self.adapter,self.sensors,limits,self.arbiter,self.safety); self.motion=self.controller
+        self.arbiter=CommandArbiter(); self.safety=SafetySupervisor(self.sensors,limits,safety_config); self.controller=RobotController(self.adapter,self.sensors,limits,self.arbiter,self.safety); self.safety.attach_reflex(self.controller.stop,self.controller.is_motion_active); self.motion=self.controller
         self.navigation=NavigationController(self.motion,self.sensors,limits,navigation_config)
         self.commands=TaskCommands(self.navigation, self.sensors, self.report)
     def start(self): self.adapter.start(); return self
     def close(self):
         # Navigation joins its worker before the controller and adapter are
         # torn down, so no background task can publish into a closed ROS context.
+        self.safety.close()
         self.navigation.close()
         self.controller.close()
         self.adapter.close()

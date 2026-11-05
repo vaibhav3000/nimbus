@@ -48,6 +48,27 @@ class SDKTest(unittest.TestCase):
             self.assertEqual(runtime.motion.drive(-.1,0).status.value,"running")
         finally: runtime.close()
 
+    def test_reflex_stops_active_command_when_obstacle_appears(self):
+        runtime=RobotRuntime(MockAdapter(),safety_config=SafetyConfig(True,.25,reflex_period=.01)).start()
+        try:
+            runtime.adapter.set_range_scan(RangeScan((1.,),1.,1.,time.time()))
+            self.assertEqual(runtime.motion.drive(.2,0,duration=1).status.value,"running")
+            runtime.adapter.set_range_scan(RangeScan((.1,),.1,.1,time.time()))
+            time.sleep(.06)
+            self.assertEqual(runtime.adapter.last_command,Twist2D())
+            self.assertIn("obstacle",runtime.safety.reflex_stop_reason)
+        finally: runtime.close()
+
+    def test_reflex_stops_active_command_when_range_contact_times_out(self):
+        runtime=RobotRuntime(MockAdapter(),safety_config=SafetyConfig(True,.25,lost_contact_timeout=.03,reflex_period=.01)).start()
+        try:
+            runtime.adapter.set_range_scan(RangeScan((1.,),1.,1.,time.time()))
+            self.assertEqual(runtime.motion.drive(.2,0,duration=1).status.value,"running")
+            time.sleep(.08)
+            self.assertEqual(runtime.adapter.last_command,Twist2D())
+            self.assertIn("contact lost",runtime.safety.reflex_stop_reason)
+        finally: runtime.close()
+
     def test_topic_construction_preserves_global_default(self):
         legacy=RobotIdentity().topics
         self.assertEqual(legacy.cmd_vel,"/cmd_vel")
