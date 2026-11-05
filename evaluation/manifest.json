@@ -2,7 +2,7 @@
   "note": "Every dataset used by the experiments. Only synthetic data is allowed (PRD NFR-5, checked by scripts/audit_data.py).",
   "datasets": [
     {
-      "path": "data/e2_situations.json",
+      "path": "P2_Results/e2_situations.json",
       "synthetic": true,
       "description": "40 hospital tactical autonomy situations across 6 clinical categories"
     },

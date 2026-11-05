@@ -51,7 +51,7 @@
   {
     "id": "SOP-SPEED-05",
     "title": "Ward speed limit",
-    "text": "Inside any ward the speed limit is 0.5 m/s; elsewhere 0.8 m/s.",
+    "text": "Speed limit is 1.0 m/s in the simulated hospital.",
     "keywords": [
       "speed",
       "ward",

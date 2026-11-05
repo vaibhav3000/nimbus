@@ -336,7 +336,7 @@
   },
   "default_template": "delivery",
   "lease": {
-    "speed_limit": 0.8,
+    "speed_limit": 1.0,
     "expiry_grace_seconds": 180,
     "when_to_escalate": [
       "door_closed",

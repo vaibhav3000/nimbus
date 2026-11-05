@@ -98,7 +98,8 @@ def main():
             now_time = time.time()
 
             # 2. Send periodic heartbeat to POST /fleet/heartbeat
-            if now_time - last_heartbeat_time >= args.heartbeat_interval:
+            if getattr(supervisor, "probe_requested", False) or now_time - last_heartbeat_time >= args.heartbeat_interval:
+                supervisor.probe_requested = False
                 ok, hb_data = supervisor.send_heartbeat_to_cloud()
                 if ok:
                     print(f"[{args.cluster}] Heartbeat sent -> cluster health: {hb_data.get('health', 'healthy')}")
@@ -125,7 +126,7 @@ def main():
                     print(f"[{args.cluster}]     Result Ref : {result.get('result_ref')}")
                     if "sha256" in result:
                         print(f"[{args.cluster}]     SHA-256    : {result.get('sha256')}")
-                elif status in ("REJECTED", "FAILED_BOUNDARY", "DROPPED_STALE", "STOPPED", "FAILED", "ESCALATED_UNEXPECTED", "ESCALATED_CLOUD"):
+                elif status in ("REJECTED", "FAILED_BOUNDARY", "DROPPED_STALE", "STOPPED", "FAILED", "ESCALATED_UNEXPECTED", "ESCALATED_CLOUD", "SUPERSEDED", "EXPIRED_PARKED"):
                     print(f"[{args.cluster}]     Reason     : {result.get('reason')}")
                     if result.get("execution_status"):
                         print(f"[{args.cluster}]     Robot status: {result.get('execution_status')}")

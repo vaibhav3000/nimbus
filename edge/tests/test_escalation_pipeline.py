@@ -165,8 +165,12 @@ def test_output_ready_escalation_schema_compliance():
     assert not is_valid, "Expected schema error when missing result_ref"
 
 
-def test_ambiguous_destination_triggers_clarify(supervisor):
-    """FR-9: Ambiguous subtask instruction halts execution and emits CLARIFY escalation."""
+def test_ambiguous_destination_triggers_clarify(supervisor, monkeypatch):
+    """FR-9: an ambiguous sub-task makes the edge send CLARIFY, hold the robots and wait for the cloud's answer.
+    With no answer before the timeout the lease is parked safely (the cloud's answer path is tested in
+    test_lease_watch_and_clarify.py)."""
+    monkeypatch.setenv("NIMBUS_CLARIFY_TIMEOUT", "1")
+    monkeypatch.setattr(supervisor, "_fetch_outbox_items", lambda: [])
     lease = _make_sample_lease(
         lease_id="lease-ambig-01",
         task_seq=[
@@ -185,8 +189,7 @@ def test_ambiguous_destination_triggers_clarify(supervisor):
     )
 
     res = supervisor.process_lease(lease)
-    assert res["status"] == "ESCALATED_CLARIFY"
-    assert "Bed 4A" in res["possible_readings"]
+    assert res["status"] == "EXPIRED_PARKED" and "clarification" in res["reason"]
 
     # Verify outbox has stored the CLARIFY escalation
     pending = supervisor.store.get_pending_outbox()
