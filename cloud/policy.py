@@ -85,6 +85,19 @@ class PolicyBook:
             if self.durable is not None:
                 self.durable.delete("restriction", node)
 
+    def reset_restrictions(self) -> list[str]:
+        with self._lock:
+            cleared = list(self._active.keys())
+            self._active.clear()
+            self.version += 1
+            if self.durable is not None:
+                if hasattr(self.durable, "clear_kind"):
+                    self.durable.clear_kind("restriction")
+                else:
+                    for node in cleared:
+                        self.durable.delete("restriction", node)
+            return cleared
+
     def restrictions(self) -> dict[str, dict]:
         """zone -> {kind, policy, effect, exempt_priorities, source}."""
         with self._lock:

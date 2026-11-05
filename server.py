@@ -469,6 +469,8 @@ class Handler(BaseHTTPRequestHandler):
             self._post_stock(body)
         elif path == "/inventory/reset":
             self._post_inventory_reset(body)
+        elif path in ("/reset-memory", "/memory/reset"):
+            self._post_reset_memory(body)
         elif path.startswith("/tasks/") and path.endswith("/replan"):
             self._post_replan(path.split("/")[2], body)
         elif path == "/checkins":
@@ -826,6 +828,60 @@ class Handler(BaseHTTPRequestHandler):
         if "infusion_pump_paediatric" in res_stock:
             res_stock["pediatric_infusion_pump"] = res_stock["infusion_pump_paediatric"]
         self._send_json(200, {"accepted": True, "cluster_id": cluster_id, "stock": res_stock})
+
+    def _post_reset_memory(self, body: dict):
+        """Operator reset request memory and learned path/exploration state.
+
+        Deletes DynamoDB state table items:
+          - DUR#closure#*     (learned map closures / blocked corridors from exploration)
+          - DUR#habit#*       (request memory / place habits)
+          - DUR#restriction#* (runtime restrictions declared dynamically)
+
+        Resets corresponding in-memory orchestrator states and unblocks queued tasks.
+        """
+        cleared_closures = []
+        cleared_habits = []
+        cleared_restrictions = []
+        dynamo_deleted = []
+
+        with _STATE_LOCK:
+            dur = getattr(self.orch, "durable", None)
+            from cloud.durable import DynamoDurable
+            if isinstance(dur, DynamoDurable):
+                for k in ("closure", "habit", "restriction"):
+                    dynamo_deleted.extend(dur.clear_kind(k))
+            else:
+                try:
+                    ddb = DynamoDurable.from_env()
+                    for k in ("closure", "habit", "restriction"):
+                        dynamo_deleted.extend(ddb.clear_kind(k))
+                except (Exception, ImportError):
+                    pass
+
+            if hasattr(self.orch, "mapstate") and self.orch.mapstate is not None:
+                cleared_closures = self.orch.mapstate.reset()
+            if hasattr(self.orch, "memory") and self.orch.memory is not None:
+                cleared_habits = self.orch.memory.reset()
+            if hasattr(self.orch, "policies") and self.orch.policies is not None:
+                cleared_restrictions = self.orch.policies.reset_restrictions()
+            if hasattr(self.orch, "waits") and isinstance(self.orch.waits, dict):
+                self.orch.waits.clear()
+
+            ops = len(dynamo_deleted) if dynamo_deleted else (len(cleared_closures) + len(cleared_habits) + len(cleared_restrictions))
+            if ops > 0:
+                self.cost.record(dynamodb_ops=ops)
+
+            self._drain()
+
+        self._send_json(200, {
+            "accepted": True,
+            "cleared": {
+                "closures": cleared_closures,
+                "habits": cleared_habits,
+                "restrictions": cleared_restrictions,
+            },
+            "dynamodb_deleted": dynamo_deleted,
+        })
 
     def _post_replan(self, task_id: str, body: dict):
         """Issue lease v(n+1) avoiding blocked zones: the explicit trigger for

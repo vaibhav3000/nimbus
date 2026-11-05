@@ -47,6 +47,19 @@ class MapState:
             if self.durable is not None:
                 self.durable.delete("closure", node)
 
+    def reset(self) -> list[str]:
+        with self._lock:
+            cleared = list(self._closed.keys())
+            self._closed.clear()
+            self.version += 1
+            if self.durable is not None:
+                if hasattr(self.durable, "clear_kind"):
+                    self.durable.clear_kind("closure")
+                else:
+                    for node in cleared:
+                        self.durable.delete("closure", node)
+            return cleared
+
     def expire(self, now: datetime) -> list[str]:
         """Drop closures whose time is up; returns the zones that reopened (the ticker tells people)."""
         with self._lock:

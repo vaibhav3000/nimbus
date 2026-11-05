@@ -32,6 +32,12 @@ class MemoryDurable:
         with self._lock:
             return {k: dict(v) for k, v in self._d.get(kind, {}).items()}
 
+    def clear_kind(self, kind: str) -> list[str]:
+        with self._lock:
+            keys = list(self._d.get(kind, {}).keys())
+            self._d.pop(kind, None)
+            return [f"DUR#{kind}#{k}" for k in keys]
+
     def put_robot(self, robot_id: str, rec: dict) -> None:
         self.put("robot", robot_id, rec)
 
@@ -60,6 +66,12 @@ class FileDurable(MemoryDurable):
         super().delete(kind, key)
         with self._lock:
             self._save()
+
+    def clear_kind(self, kind: str) -> list[str]:
+        keys = super().clear_kind(kind)
+        with self._lock:
+            self._save()
+        return keys
 
 
 class DynamoDurable:
@@ -97,6 +109,24 @@ class DynamoDurable:
             if "LastEvaluatedKey" not in page:
                 return out
             kw["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+    def clear_kind(self, kind: str) -> list[str]:
+        deleted = []
+        kw = {"TableName": self.t["state"], "ConsistentRead": True, "FilterExpression": "begins_with(pk, :p)",
+              "ExpressionAttributeValues": {":p": {"S": f"DUR#{kind}#"}}}
+        while True:
+            page = self.c.scan(**kw)
+            for it in page.get("Items", []):
+                pk = it["pk"]["S"]
+                try:
+                    self.c.delete_item(TableName=self.t["state"], Key={"pk": {"S": pk}})
+                    deleted.append(pk)
+                except Exception:
+                    pass
+            if "LastEvaluatedKey" not in page:
+                break
+            kw["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+        return deleted
 
     def put_robot(self, robot_id: str, rec: dict) -> None:
         self.c.put_item(TableName=self.t["robot_status"], Item={
