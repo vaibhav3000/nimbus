@@ -10,6 +10,7 @@ Incorporates Person 1's Gazebo hospital topology and waypoints for spatial autho
 
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
 import time
@@ -103,6 +104,10 @@ class EdgeSupervisor:
         self.sim_mode = (sim_mode or os.environ.get("NIMBUS_SIM_MODE") or "auto").lower()
         self._seen_notices = set()
         self.probe_requested = False
+        self._preempt: Optional[Dict[str, Any]] = None      # set by the lease watcher: a newer lease / stale version arrived
+        self._answers: List[Dict[str, Any]] = []            # ANSWER notices from the cloud (replies to our CLARIFY)
+        self._seen_answers: set = set()
+        self._preempt_lock = __import__("threading").Lock()
         self.token = token or os.environ.get("NIMBUS_EDGE_TOKEN")
         self.cluster_id = cluster_id
         self.cloud_url = cloud_url.rstrip("/")
@@ -808,30 +813,198 @@ class EdgeSupervisor:
         verbose: Optional[bool] = None,
         allow_resumption: bool = False,
     ) -> Dict[str, Any]:
-        """Runs a lease with a background renewer (PRD Sec. 6: the edge renews with a short, regular
-        check-in, independent of what the robots are doing). Without it, one long drive (or a slow
-        simulator) outlived the lease because check-ins only happened between steps."""
+        """Runs a lease with a background watcher (PRD Sec. 6: regular check-ins; FR-8/FR-16/FR-22: a newer lease
+        version replaces the running one). While the robots are busy the watcher
+          * checks in every 5 s (renewal; a 409 means this lease version is outdated -> stop),
+          * reads the cloud outbox every 2 s: a higher version of THIS task (re-plan, operator stop, hand-over)
+            stops the robots at once; a renewal moves the expiry; an ANSWER notice answers our CLARIFY.
+        Without it a cancel/re-plan was only seen after the whole lease finished."""
         if simulated_now is not None or not isinstance(lease, dict) or not lease.get("lease_id"):
             return self._process_lease_impl(lease, simulated_now, verbose, allow_resumption)
         import threading
         stop = threading.Event()
+        self._preempt = None
+        self._answers = []
+        task_id = self._extract_task_id(lease)
+        version = lease.get("version", 1)
 
-        def _renew() -> None:
-            while not stop.wait(5.0):
+        def _watch() -> None:
+            last_checkin = time.time()
+            while not stop.wait(2.0):
                 try:
-                    _ok, why, reply = self.send_checkin_to_cloud(lease)
-                    new_exp = reply.get("renewed_until") if why == "renewed" else None
-                    if new_exp and new_exp > str(lease.get("expiry_ts", "")):
-                        lease["expiry_ts"] = new_exp
+                    self._watch_outbox(lease, task_id, version)
+                    if time.time() - last_checkin >= 5.0:
+                        last_checkin = time.time()
+                        _ok, why, reply = self.send_checkin_to_cloud(lease)
+                        new_exp = reply.get("renewed_until") if why == "renewed" else None
+                        if new_exp and new_exp > str(lease.get("expiry_ts", "")):
+                            lease["expiry_ts"] = new_exp
+                        elif why == "stale_version":
+                            self._request_preempt(lease, f"cloud says lease v{version} is outdated (current v{reply.get('current')})")
                 except Exception:
                     pass
 
-        t = threading.Thread(target=_renew, name=f"lease-renew-{lease.get('lease_id')}", daemon=True)
+        t = threading.Thread(target=_watch, name=f"lease-watch-{lease.get('lease_id')}", daemon=True)
         t.start()
         try:
             return self._process_lease_impl(lease, simulated_now, verbose, allow_resumption)
         finally:
             stop.set()
+
+    # -- lease watcher helpers ---------------------------------------------------------------
+
+    def _fetch_outbox_items(self) -> List[Dict[str, Any]]:
+        """Raw cloud->edge messages for this cluster (HTTP GET /outbox?active=1)."""
+        headers = {"Accept": "application/json"}
+        if getattr(self, "token", None):
+            headers["Authorization"] = f"Bearer {self.token}"
+        try:
+            req = urllib.request.Request(f"{self.cloud_url}/outbox?active=1", headers=headers)
+            with urllib.request.urlopen(req, timeout=3.0) as resp:
+                items = json.loads(resp.read().decode("utf-8")).get("outbox", [])
+        except Exception:
+            return []
+        return [i for i in items if isinstance(i, dict) and str(i.get("topic", "")).startswith(f"nimbus/{self.cluster_id}/")]
+
+    def _watch_outbox(self, lease: Dict[str, Any], task_id: str, version: int) -> None:
+        for item in self._fetch_outbox_items():
+            kind = item["topic"].rsplit("/", 1)[-1]
+            pl = item.get("payload")
+            if not isinstance(pl, dict):
+                continue
+            if kind == "lease" and "lease_id" in pl:
+                if self._extract_task_id(pl) == task_id and int(pl.get("version", 1)) > int(version):
+                    self._request_preempt(lease, f"cloud issued lease v{pl.get('version')} for {task_id} (replaces v{version})")
+            elif kind == "renewal" and pl.get("lease_id") == lease.get("lease_id") and pl.get("version") == version:
+                if str(pl.get("expiry_ts", "")) > str(lease.get("expiry_ts", "")):
+                    lease["expiry_ts"] = pl["expiry_ts"]
+            elif kind == "notice" and pl.get("type") == "ANSWER" and pl.get("task_id") == task_id:
+                mid = pl.get("message_id")
+                if pl.get("lease_version") in (None, version) and mid and mid not in self._seen_answers:
+                    self._seen_answers.add(mid)
+                    self._answers.append(pl)
+
+    def _request_preempt(self, lease: Dict[str, Any], reason: str) -> None:
+        """A newer authority exists: record why and stop this lease's robots immediately."""
+        with self._preempt_lock:
+            if self._preempt is not None:
+                return
+            self._preempt = {"reason": reason, "ts": time.time()}
+        print(f"[{self.cluster_id}] {time.strftime('%H:%M:%S')} !! LEASE SUPERSEDED: {reason} -> stopping robots", flush=True)
+        for rid in list(dict.fromkeys(lease.get("assigned_robots", []))):
+            robot = self.robots.get(rid)
+            if robot is None:
+                continue
+            try:
+                robot.execute_command({"cmd_id": f"cmd-stop-superseded-{rid}-{int(time.time()*1000)}", "action": "stop",
+                                       "params": {"reason": "lease superseded"}, "robot_id": rid})
+            except Exception:
+                pass
+
+    def _supersede(self, lease: Dict[str, Any], lease_id: str, version: int, executed_steps: list) -> Dict[str, Any]:
+        reason = (self._preempt or {}).get("reason", "superseded")
+        self.store.update_lease_status(lease_id, version, "SUPERSEDED")
+        self.store.log_decision(
+            decision_id=f"dec-superseded-{lease_id}-{int(time.time()*1000)}", lease_id=lease_id, decided_by="RULE",
+            input_context={"lease_id": lease_id, "version": version}, decision_action="LEASE_SUPERSEDED",
+            decision_output={"reason": reason}, latency_ms=1.0)
+        self.active_lease = None
+        return {"status": "SUPERSEDED", "reason": reason, "executed_steps": executed_steps}
+
+    # -- CLARIFY (PRD FR-9 / Table 2) ----------------------------------------------------------
+
+    def _is_known_zone(self, name: str) -> bool:
+        if name in self.topology.get("nodes", {}) or name in self.waypoints:
+            return True
+        if name in getattr(self.geofence, "registry", {}):
+            return True
+        try:
+            from edge.mock import sim_robot as _sr
+            if name in _sr.CLOUD_TO_SIM_ALIASES:
+                return True
+            if _sr.HAS_SDK:
+                _sr.resolve_destination(name)
+                return True
+        except Exception:
+            pass
+        return False
+
+    @staticmethod
+    def _resolve_reading(text: str, readings: List[str], allowed_zones: List[str]) -> Optional[str]:
+        t = (text or "").strip().lower()
+        if not t:
+            return None
+        for r in readings:
+            if t == r.lower():
+                return r
+        for r in readings:
+            if r.lower() in t or t in r.lower():
+                return r
+        for z in allowed_zones:
+            if t == z.lower():
+                return z
+        return None
+
+    def _await_clarification(self, lease: Dict[str, Any], task_id: str, version: int, question: str,
+                             readings: List[str]) -> Dict[str, Any]:
+        """Send CLARIFY, hold the robots, and wait for the cloud's ANSWER (it asks the requester or answers
+        from memory). Outcomes: answered / superseded (a new lease arrived) / expired (lease ran out)."""
+        try:  # ignore answers that were already in the outbox before we asked
+            for item in self._fetch_outbox_items():
+                pl = item.get("payload") or {}
+                if item["topic"].endswith("/notice") and pl.get("type") == "ANSWER" and pl.get("message_id"):
+                    self._seen_answers.add(pl["message_id"])
+        except Exception:
+            pass
+        self._answers = []
+        self.trigger_clarify(task_id=task_id, question=question, possible_readings=readings, lease_version=version)
+        print(f"[{self.cluster_id}] {time.strftime('%H:%M:%S')} EDGE -> CLOUD: CLARIFY '{question}' readings={readings}; "
+              f"robots held, waiting for the answer", flush=True)
+        for rid in dict.fromkeys(lease.get("assigned_robots", [])):
+            robot = self.robots.get(rid)
+            if robot is not None:
+                try:
+                    robot.execute_command({"cmd_id": f"cmd-stop-clarify-{rid}-{int(time.time()*1000)}", "action": "stop",
+                                           "params": {"reason": "waiting for clarification"}, "robot_id": rid})
+                except Exception:
+                    pass
+        timeout = float(os.environ.get("NIMBUS_CLARIFY_TIMEOUT", "0") or 0)
+        t0 = time.time()
+        while True:
+            if self._preempt:
+                return {"outcome": "superseded"}
+            if self._answers:
+                ans = self._answers.pop(0)
+                allowed = list(lease.get("allowed_zones", []))
+                choice = self._resolve_reading(ans.get("text", ""), readings, allowed)
+                print(f"[{self.cluster_id}] {time.strftime('%H:%M:%S')} CLOUD -> EDGE: ANSWER '{ans.get('text')}' "
+                      f"(chosen reading: {choice}); resuming", flush=True)
+                self.store.log_decision(
+                    decision_id=f"dec-answer-{task_id}-{int(time.time()*1000)}", lease_id=lease.get("lease_id", ""),
+                    decided_by="RULE", input_context={"question": question, "readings": readings},
+                    decision_action="CLARIFY_ANSWERED", decision_output={"answer": ans.get("text"), "choice": choice}, latency_ms=1.0)
+                return {"outcome": "answered", "text": ans.get("text", ""), "choice": choice}
+            try:
+                e = str(lease["expiry_ts"]); e = e[:-1] + "+00:00" if e.endswith("Z") else e
+                if datetime.now(timezone.utc) >= datetime.fromisoformat(e):
+                    return {"outcome": "expired"}
+            except Exception:
+                pass
+            if timeout and time.time() - t0 > timeout:
+                return {"outcome": "expired"}
+            time.sleep(0.5)
+
+    def _clarify_outcome_result(self, clar: Dict[str, Any], lease: Dict[str, Any], lease_id: str, version: int,
+                                executed_steps: list) -> Optional[Dict[str, Any]]:
+        """Non-answer outcomes of _await_clarification -> the result process_lease must return."""
+        if clar["outcome"] == "superseded":
+            return self._supersede(lease, lease_id, version, executed_steps)
+        if clar["outcome"] == "expired":
+            park = self._handle_lease_expiry_parking(lease)
+            self.active_lease = None
+            return {"status": "EXPIRED_PARKED", "reason": "Lease expired while waiting for a clarification answer; parked safely",
+                    "executed_steps": executed_steps, "parking": park}
+        return None
 
     def _process_lease_impl(
         self,
@@ -987,6 +1160,8 @@ class EdgeSupervisor:
         while idx < len(task_sequence):
             subtask = task_sequence[idx]
             step_num = idx + 1
+            if self._preempt:
+                return self._supersede(lease, lease_id, version, executed_steps)
             now_dt = simulated_now or datetime.now(timezone.utc)
             try:  # pick up renewals made by the background renewer during a long step
                 _e = str(lease["expiry_ts"]); _e = _e[:-1] + "+00:00" if _e.endswith("Z") else _e
@@ -1028,25 +1203,41 @@ class EdgeSupervisor:
             robot_id = subtask.get("robot", active_robot_id)
             params = dict(subtask.get("params", {}))
 
-            # Check for ambiguous destination or instructions (FR-9 CLARIFY trigger)
+            # CLARIFY (FR-9, Table 2): the instruction is too ambiguous for the edge -> ask, hold, resume on the answer
+            clarify_q = None
             if params.get("ambiguous") is True or cmd == "clarify":
-                question = params.get("question", f"Destination '{params.get('to')}' is ambiguous")
-                readings = params.get("possible_readings", [f"Bed {params.get('to', 'unknown')}-A", f"Bed {params.get('to', 'unknown')}-B"])
-                clarify_res = self.trigger_clarify(
-                    task_id=task_id,
-                    question=question,
-                    possible_readings=readings,
-                    lease_version=version,
-                )
+                clarify_q = (params.get("question", f"Destination '{params.get('to')}' is ambiguous"),
+                             list(params.get("possible_readings") or [f"{params.get('to', 'unknown')}-A", f"{params.get('to', 'unknown')}-B"]))
+            elif (cmd == "go_to" and isinstance(params.get("to"), str) and "target" not in params
+                  and params["to"] not in allowed_zones and params["to"] not in forbidden_zones
+                  and not self._is_known_zone(params["to"])):
+                import difflib
+                cands = difflib.get_close_matches(params["to"], list(allowed_zones), n=3, cutoff=0.3) or list(allowed_zones)[:3]
+                clarify_q = (f"Destination '{params['to']}' is not on the hospital map. Which place was meant?", cands)
+            if clarify_q:
+                question, readings = clarify_q
                 if is_verbose:
-                    print(f"      |-- [Step {step_num}/{len(task_sequence)}] Ambiguity detected -> ESCALATE_CLARIFY")
-                return {
-                    "status": "ESCALATED_CLARIFY",
-                    "reason": question,
-                    "possible_readings": readings,
-                    "executed_steps": executed_steps,
-                    "escalation": clarify_res["escalation"],
-                }
+                    print(f"      |-- [Step {step_num}/{len(task_sequence)}] Ambiguity detected -> CLARIFY")
+                clar = self._await_clarification(lease, task_id, version, question, readings)
+                res = self._clarify_outcome_result(clar, lease, lease_id, version, executed_steps)
+                if res is not None:
+                    return res
+                if cmd == "clarify":          # the step was only the question: carry on with the next one
+                    idx += 1
+                    continue
+                choice = clar.get("choice")
+                if params.get("to") is not None and choice and (choice in allowed_zones or self._is_known_zone(choice)):
+                    params["to"] = choice
+                    subtask.setdefault("params", {})["to"] = choice
+                    for k in ("ambiguous", "question", "possible_readings"):
+                        params.pop(k, None); subtask["params"].pop(k, None)
+                elif params.get("to") is not None:
+                    self.trigger_unexpected_event(
+                        task_id=task_id, what=f"Clarification answer '{clar.get('text')}' does not name a usable place for step {step_num}",
+                        where=str(params.get("to")), robots_saw=[f"{robot_id} is waiting at {robot.current_zone if (robot:=self.robots.get(robot_id)) else '?'}"],
+                        lease_version=version)
+                    self.active_lease = None
+                    return {"status": "ESCALATED_UNEXPECTED", "reason": "clarification answer unusable", "executed_steps": executed_steps}
 
             # Spatial boundary check on sub-task (FR-5)
             is_valid_boundary, boundary_err = self.geofence.validate_subtask(
@@ -1137,6 +1328,8 @@ class EdgeSupervisor:
                 print(f"      |-- [Step {step_num}/{len(task_sequence)}] Sub-task: {cmd}{target_str} (Robot: {robot_id})")
 
             exec_report = robot.execute_command(cmd_payload)
+            if self._preempt:      # a newer lease arrived while this step ran: the watcher stopped the robot
+                return self._supersede(lease, lease_id, version, executed_steps)
             exec_report.setdefault("action",cmd)
             exec_report.setdefault("params",params)
             exec_status = str(exec_report.get("status", "FAILED")).upper()
@@ -1441,6 +1634,26 @@ class EdgeSupervisor:
                         if is_verbose:
                             print(rf"      |   |   \--- Action Rejected: All available cluster robots {list(failed_robots)} have failed")
                         return {"status": "ESCALATED_UNEXPECTED", "reason": "No standby robot available for swap"}
+
+                elif tac_action == "ESCALATE_CLARIFY":
+                    readings = ["wait for it to clear", "treat the route as closed"]
+                    clar = self._await_clarification(
+                        lease, task_id, version,
+                        f"{robot_id} reports: {event_desc} (at {blocked_zone}). Should it wait for this to clear, or is the route closed?",
+                        readings)
+                    res = self._clarify_outcome_result(clar, lease, lease_id, version, executed_steps)
+                    if res is not None:
+                        return res
+                    if clar.get("choice") == readings[0] or "wait" in str(clar.get("text", "")).lower():
+                        step_wait_counts[idx] = step_wait_counts.get(idx, 0) + 1
+                        robot.execute_command({"cmd_id": f"cmd-wait-clarified-{lease_id}-{idx+1}-{int(time.time()*1000)}",
+                                               "lease_id": lease_id, "robot_id": robot_id, "action": "wait",
+                                               "params": {"duration_sec": 5.0}, "timestamp": time.time()})
+                        continue
+                    self.trigger_unexpected_event(task_id=task_id, what=f"Route closed after clarification: {event_desc}",
+                                                  where=blocked_zone, robots_saw=[f"{robot_id}: {event_desc}"], lease_version=version)
+                    self.active_lease = None
+                    return {"status": "ESCALATED_UNEXPECTED", "reason": "route closed per clarification"}
 
                 elif tac_action == "ESCALATE_UNEXPECTED":
                     reason_msg = decision.get("reason", "Corridor blocked, no alternate detour")

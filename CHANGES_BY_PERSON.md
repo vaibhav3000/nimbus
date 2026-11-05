@@ -21,6 +21,10 @@ Nothing was deleted: removed files are in `archive/` (see the end). All 467 test
 | Test updated for the new outbox URL | `edge/tests/test_prd_person2_compliance.py` | Mock cloud now accepts `/outbox?...`. |
 | Blocked corridor now reaches the cloud (FR-4/FR-9, SC-2) | `supervisor/supervisor.py` | A "detour" through the blocked zone itself, or a detour that is also blocked, ended in a silent FAILED. It now sends UNEXPECTED_EVENT; verified live: cloud marks the zone closed, tries a re-plan, alerts the operator when no route is left. |
 | Kinematic obstacles are per route zone | `mock/sim_robot.py` | Any injected obstacle used to shrink every robot's range sensor (all robots 'blocked'). Now a leg is blocked only if a zone on its route is closed. Zones can be closed by clicking them in the viewer. |
+| Lease watcher while robots are busy (2 s outbox read + 5 s check-in): a newer lease version / stop lease / 409 stops the robots at once, renewal extends expiry | `supervisor/supervisor.py` (`process_lease`, `_watch_outbox`, `_request_preempt`, `_supersede`) | Cancel / re-plan used to be seen only after the whole lease ended (FR-22: "cancel reaches the robots within seconds"). New status `SUPERSEDED`. |
+| CLARIFY round trip: send, hold robots, wait for the cloud's ANSWER notice, resume (unknown destination, unclear obstacle, explicit ambiguous step) | `supervisor/supervisor.py` (`_await_clarification`, `_resolve_reading`), `run_supervisor.py` | CLARIFY used to abandon the lease with no way to resume; SLM's `ESCALATE_CLARIFY` was not wired at all (FR-9). |
+| New tests (7) and one test rewritten | `edge/tests/test_lease_watch_and_clarify.py`, `test_escalation_pipeline.py` | The old test expected CLARIFY to end the lease immediately. |
+| Shift-click in the viewer = "unclear obstacle" | `simulation/lite/viewer.*`, `mock/sim_robot.py` | Lets the CLARIFY loop be demonstrated without Gazebo. |
 | Generated run output moved out of the source tree | `edge/artifacts/`, result `.md` files → `archive/edge_generated/` | Runtime output; `edge/artifacts/` is now git-ignored. |
 
 ## Person 3 — Cloud decision plane (`cloud/`, `packs/`)

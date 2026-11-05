@@ -12,7 +12,7 @@ h1{font-size:16px;margin:0 0 4px}.mut{color:var(--mut)}
 </style></head><body>
 <canvas id="c"></canvas>
 <div id="side"><h1>Nimbus — hospital simulator (kinematic stand-in)</h1>
-<div class="mut">P1's first-floor map · live robot poses · cloud leases · <b>click a node to close/reopen it (obstacle)</b></div>
+<div class="mut">P1's first-floor map · live robot poses · cloud leases · <b>click a node to close/reopen it (obstacle); shift-click = an <i>unclear</i> obstacle (makes the edge ask the cloud, CLARIFY)</b></div>
 <div id="robots"></div><h1 style="margin-top:14px">Tasks</h1><div id="tasks" class="mut">…</div></div>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
@@ -22,7 +22,7 @@ const XR=[-14,14],YR=[-36,22];
 let M=null,bg=new Image();bg.src='/background.png';
 const COL=['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4','#008080'];
 const trails={};let BL=[];
-cv.onclick=async e=>{if(!M)return;const r=cv.getBoundingClientRect(),x=XR[0]+(e.clientX-r.left)/r.width*(XR[1]-XR[0]),y=YR[1]-(e.clientY-r.top)/r.height*(YR[1]-YR[0]);let best=null,bd=1.5;for(const[n,d]of Object.entries(M.nodes)){const q=Math.hypot(d.xy[0]-x,d.xy[1]-y);if(q<bd){bd=q;best=n}}if(best){const b=!BL.includes(best);await fetch('/obstacle',{method:'POST',body:JSON.stringify({zone:best,blocked:b})});}};
+cv.onclick=async e=>{if(!M)return;const r=cv.getBoundingClientRect(),x=XR[0]+(e.clientX-r.left)/r.width*(XR[1]-XR[0]),y=YR[1]-(e.clientY-r.top)/r.height*(YR[1]-YR[0]);let best=null,bd=1.5;for(const[n,d]of Object.entries(M.nodes)){const q=Math.hypot(d.xy[0]-x,d.xy[1]-y);if(q<bd){bd=q;best=n}}if(best){const b=!BL.includes(best);await fetch('/obstacle',{method:'POST',body:JSON.stringify({zone:best,blocked:b,note:(b&&e.shiftKey)?'unidentified object, unclear whether it is a person or equipment':''})});}};
 function fit(){const h=innerHeight;cv.height=h;cv.width=h*(XR[1]-XR[0])/(YR[1]-YR[0]);}
 addEventListener('resize',fit);fit();
 const sx=x=>(x-XR[0])/(XR[1]-XR[0])*cv.width, sy=y=>(YR[1]-y)/(YR[1]-YR[0])*cv.height;

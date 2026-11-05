@@ -85,13 +85,30 @@ does not mention, that is said too. Nothing here is assumed: every "does not exi
    * If not: it logs `replan_failed` / `reassign_failed` and raises an **operator alert**; the task stays `leased` until someone acts.
 4. Seen live: the zone `east_mid_hall` closed → cloud replied `replanned: false`, operator alert (no other route in the east wing).
 
-### Scenario C. Edge needs a clarification — PRD FR-9 `CLARIFY`
-* The edge sends `CLARIFY {question, possible_readings[]}`. The cloud sets the task to `needs_clarification` and shows the question
-  to the requester (or answers from memory); the answer produces a new lease version.
-* **In the running system the edge never actually sends CLARIFY**: the edge only does so if a lease step has `params.ambiguous = true`
-  or `cmd = "clarify"`, and the cloud never produces such a step (the cloud asks its questions to the nurse *before* issuing a lease,
-  and `clarify` is not even an allowed command in `robot_subtask.schema.json`). The path works (tested by hand, HTTP 201) but is not
-  triggered by any scenario today.
+### Scenario C. Edge needs a clarification: CLARIFY round trip (PRD FR-9, Table 2, FR-4)
+PRD: the edge sends CLARIFY "when the instruction or situation is too ambiguous or complex for the edge model"; the cloud may
+"answer from memory; ask the user or the room owner".
+**When the edge sends it (three situations, all implemented):**
+1. A lease step cannot be resolved: a `go_to` whose destination is not on the edge's map and not in the lease's allowed zones
+   (candidates = closest allowed zones, so the question is "which place was meant?").
+2. The edge model's tactical decision is `ESCALATE_CLARIFY`: an obstacle the robot reports as unclear (words such as
+   "unclear", "unidentified", "which", "confirm"). The question is "wait for it to clear, or is the route closed?".
+3. A lease step explicitly marked ambiguous (`params.ambiguous = true` with `question` / `possible_readings`) or `cmd: "clarify"`.
+   The current cloud never produces such steps; this is for completeness.
+**What happens, step by step:**
+1. Edge → cloud: `CLARIFY {question, possible_readings}`. The edge **stops the lease's robots and waits**; check-ins continue.
+2. Cloud: records it, sets the task to `needs_clarification` and shows the question to the requester (or the model answers from
+   memory, in LLM mode).
+3. Requester answers in the app → the cloud logs it and sends a notice `{type: "ANSWER", text, task_id, lease_version, message_id}`
+   to the cluster in the outbox (same lease version; the task goes back to `leased`).
+4. The watcher on the edge reads the ANSWER within 2 s, matches the text against `possible_readings` (or an allowed zone name) and
+   **resumes**: situation 1 continues the step with the chosen zone; situation 2 waits and retries (answer "wait") or sends
+   UNEXPECTED_EVENT (answer "closed"); situation 3 likewise. An answer that names no usable place → UNEXPECTED_EVENT.
+5. While waiting: a newer lease version from the cloud supersedes the wait; if the lease expires first, the robots park safely
+   (EXPIRED_PARKED). Optional cap: `NIMBUS_CLARIFY_TIMEOUT` seconds.
+6. Answers that were already in the outbox before the question was asked are ignored (they belong to older questions).
+Verified live on the stand-in: a shift-clicked "unclear obstacle" in the viewer made the edge send CLARIFY; the cloud showed
+`needs_clarification`; my answer "wait for it to clear" reached the edge ~3 s later; R2 waited, retried and the task completed.
 
 ### Scenario D. What the cloud does with each check-in (lease renewal)
 For every `POST /checkins` the cloud, in this order:
@@ -113,6 +130,21 @@ For every `POST /checkins` the cloud, in this order:
   With a very slow simulator this cap can end a task even though the robot is still driving.
 * The edge treats a lease as expired when its own clock passes `expiry_ts`; when it expires mid-mission the robots go to a safe
   parking zone (PRD FR-5/FR-6) and the cloud is told.
+
+### Scenario D2. While a lease is running: what the edge keeps watching
+A background watcher runs for the whole lease (the main thread is busy driving):
+* **Check-in every 5 s**: a `409 outdated lease_version` means the cloud has a newer version → the edge stops its robots and drops the lease.
+* **Outbox read every 2 s** (`GET /outbox?active=1`, same as when idle):
+  * a **higher version of the same task** (re-plan, operator pause/cancel = stop lease, hand-over to another cluster) → robots are
+    stopped immediately (`!! LEASE SUPERSEDED ... stopping robots`), the old lease is marked `SUPERSEDED`, and the new lease is run on
+    the main loop's next pass;
+  * a **renewal** of this lease → expiry moves forward;
+  * an **ANSWER** notice for this task → used by a waiting CLARIFY (Scenario C).
+* Why both 409 and outbox: they are two views of the same event and each covers the other's blind spot. The 409 is the cloud's
+  authoritative "your version is dead" (works even if the outbox read failed once) but carries no content; the outbox carries the
+  new lease itself. Either one stops the robots; the outbox is what supplies the replacement.
+* Not read during a lease: probes (the 5 s check-in already proves liveness) and MAP/BUNDLE notices (informational).
+* Verified live: operator cancel at 20:05:11 → edge stopped R2 at 20:05:12 and then ran the stop lease (v2).
 
 ### Scenario E. Network cut and reconnection — PRD FR-6, FR-10, FR-12
 1. While cut off, the edge keeps working on the current lease. Escalations it wants to send are stored in its local SQLite outbox
@@ -158,8 +190,8 @@ pass it ignored probes and answered at its next regular heartbeat).
 |---|---|---|
 | `nimbus/<cluster>/lease` | the lease: `lease_id, version, priority (routine/urgent), deadline_ts, expiry_ts, allowed_zones, forbidden_zones, speed_limit, assigned_robots, task_sequence[{cmd: go_to/wait/stop/photo/beep/report, robot, params}], cluster_id, when_to_escalate` | validates, runs it; a higher version replaces the old one. **Note:** the edge does not use `when_to_escalate`; it decides when to escalate from what the robots report. |
 | `nimbus/<cluster>/renewal` | `lease_id, version, expiry_ts, message_id` | extends the running lease's expiry |
-| `nimbus/<cluster>/probe` | `type: "PROBE", cluster_id, message_id, ts` | answers with a heartbeat |
-| `nimbus/<cluster>/notice` | `type`, `message_id`, `ts`, plus: `MAP` → `text, cluster_id` (a zone closed/reopened); `BUNDLE` → `task_id, lease_id, lease_version, bundle{map nodes with speed caps and positions, rules}` | prints it once; the edge does not act on the contents today |
+| `nimbus/<cluster>/probe` | `type: "PROBE", cluster_id, message_id, ts` | when idle: answers with a heartbeat. During a lease: not read (the check-in does the same job) |
+| `nimbus/<cluster>/notice` | `type`, `message_id`, `ts`, plus: `MAP` → `text, cluster_id` (a zone closed/reopened); `BUNDLE` → `task_id, lease_id, lease_version, bundle{map nodes with speed caps and positions, rules}`; `ANSWER` → `text, task_id, lease_version, message_id` (the reply to a CLARIFY) | prints MAP/BUNDLE once and does not act on their contents today; **acts on ANSWER** (resumes a waiting CLARIFY) |
 
 `GET /outbox?active=1` omits lease messages of tasks that are already completed or rejected (stop leases are always kept), so a
 restarted edge does not repeat old work. Plain `GET /outbox` returns the whole history.
@@ -185,5 +217,5 @@ restarted edge does not repeat old work. Plain `GET /outbox` returns the whole h
 4. `notice` is not listed in `contracts/topics.md`.
 5. Authentication is off unless `NIMBUS_EDGE_TOKEN` is set.
 6. The edge ignores `when_to_escalate`.
-7. Edge-originated `CLARIFY` is never triggered by any current scenario.
+7. `CLARIFY` from the edge is now triggered by an unresolvable destination or an unclear obstacle (Scenario C), but the cloud itself still never issues an ambiguous step, so in normal cloud-issued leases it appears only for unclear obstacles. The answer-matching is simple (reading text / zone name), not a language-model judgement.
 8. A task cannot run past deadline + 10 min (see Scenario D); relevant when the simulator is much slower than real time.

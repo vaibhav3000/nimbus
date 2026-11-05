@@ -528,13 +528,15 @@ class SimRobot:
         self._obs_last = now
         try:
             import urllib.request
-            blocked = set(json.loads(urllib.request.urlopen(url.rstrip("/") + "/obstacles", timeout=0.3).read())["blocked"])
+            data = json.loads(urllib.request.urlopen(url.rstrip("/") + "/obstacles", timeout=0.3).read())
+            blocked, notes = set(data["blocked"]), data.get("notes", {})
         except Exception:
             return
         for z in blocked:
-            if z not in self.injected_obstacles:
-                self.inject_obstacle(z, "persistent", f"{z} closed by operator in the simulator viewer")
-        for z in [k for k, v in self.injected_obstacles.items() if v["description"].endswith("viewer") and k not in blocked]:
+            desc = (notes.get(z) or f"{z} closed") + " (set by operator in the simulator viewer)"
+            if z not in self.injected_obstacles or self.injected_obstacles[z]["description"] != desc:
+                self.inject_obstacle(z, "persistent", desc)
+        for z in [k for k, v in self.injected_obstacles.items() if v["description"].endswith("viewer)") and k not in blocked]:
             del self.injected_obstacles[z]
 
     def _publish_viewer_pose(self, x: float, y: float, yaw: float, now: float) -> None:
