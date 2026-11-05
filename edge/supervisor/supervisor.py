@@ -753,6 +753,38 @@ class EdgeSupervisor:
         verbose: Optional[bool] = None,
         allow_resumption: bool = False,
     ) -> Dict[str, Any]:
+        """Runs a lease with a background renewer (PRD Sec. 6: the edge renews with a short, regular
+        check-in, independent of what the robots are doing). Without it, one long drive (or a slow
+        simulator) outlived the lease because check-ins only happened between steps."""
+        if simulated_now is not None or not isinstance(lease, dict) or not lease.get("lease_id"):
+            return self._process_lease_impl(lease, simulated_now, verbose, allow_resumption)
+        import threading
+        stop = threading.Event()
+
+        def _renew() -> None:
+            while not stop.wait(5.0):
+                try:
+                    _ok, why, reply = self.send_checkin_to_cloud(lease)
+                    new_exp = reply.get("renewed_until") if why == "renewed" else None
+                    if new_exp and new_exp > str(lease.get("expiry_ts", "")):
+                        lease["expiry_ts"] = new_exp
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_renew, name=f"lease-renew-{lease.get('lease_id')}", daemon=True)
+        t.start()
+        try:
+            return self._process_lease_impl(lease, simulated_now, verbose, allow_resumption)
+        finally:
+            stop.set()
+
+    def _process_lease_impl(
+        self,
+        lease: Dict[str, Any],
+        simulated_now: Optional[datetime] = None,
+        verbose: Optional[bool] = None,
+        allow_resumption: bool = False,
+    ) -> Dict[str, Any]:
         """
         Ingests, validates, and executes an authority lease.
         Enforces:
@@ -901,6 +933,11 @@ class EdgeSupervisor:
             subtask = task_sequence[idx]
             step_num = idx + 1
             now_dt = simulated_now or datetime.now(timezone.utc)
+            try:  # pick up renewals made by the background renewer during a long step
+                _e = str(lease["expiry_ts"]); _e = _e[:-1] + "+00:00" if _e.endswith("Z") else _e
+                expiry_dt = max(expiry_dt, datetime.fromisoformat(_e))
+            except Exception:
+                pass
             if now_dt >= expiry_dt:
                 park_result = self._handle_lease_expiry_parking(lease)
                 if is_verbose:
