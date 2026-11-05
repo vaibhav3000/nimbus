@@ -1,0 +1,1195 @@
+{
+  "status": "REVIEWED_GOLD",
+  "synthetic": true,
+  "total_scenarios": 40,
+  "description": "40 hand-labelled hospital edge tactical autonomy situations across 6 clinical categories (Task 2.5, FR-3, FR-4)",
+  "categories": {
+    "Transient Obstacle": 10,
+    "Static Detour": 8,
+    "Hardware Fault": 6,
+    "Ambiguity": 6,
+    "Route Closure": 6,
+    "Lease Expiry": 4
+  },
+  "situations": [
+    {
+      "id": "E2-01",
+      "category": "Transient Obstacle",
+      "description": "Visitor temporarily standing in corridor with phone",
+      "expected_action": "LOCAL_WAIT",
+      "context": {
+        "lease_id": "lease-e2-01",
+        "version": 1,
+        "time_remaining_sec": 300.0,
+        "robot_id": "R1",
+        "current_pos": [
+          4.5,
+          3.0
+        ],
+        "current_zone": "east_mid_hall",
+        "allowed_zones": [
+          "east_waiting_approach",
+          "east_mid_hall",
+          "nurse_station_approach"
+        ],
+        "forbidden_zones": [
+          "west_mid_hall"
+        ],
+        "allowed_waypoints": [
+          "nurse_station_approach"
+        ],
+        "event_description": "Male visitor standing on phone in front of robot in east_mid_hall; transient pedestrian",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-02",
+      "category": "Transient Obstacle",
+      "description": "Cleaning cart parked temporarily while orderly empties bin",
+      "expected_action": "LOCAL_WAIT",
+      "context": {
+        "lease_id": "lease-e2-02",
+        "version": 1,
+        "time_remaining_sec": 280.0,
+        "robot_id": "R1",
+        "current_pos": [
+          -4.5,
+          3.0
+        ],
+        "current_zone": "west_mid_hall",
+        "allowed_zones": [
+          "west_waiting_approach",
+          "west_mid_hall",
+          "west_south_hall"
+        ],
+        "forbidden_zones": [
+          "east_mid_hall"
+        ],
+        "allowed_waypoints": [
+          "west_south_hall"
+        ],
+        "event_description": "Mobile janitor cleaning trolley parked in corridor; orderly moving bins",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-03",
+      "category": "Transient Obstacle",
+      "description": "Nurse pushing medication dispenser",
+      "expected_action": "LOCAL_WAIT",
+      "context": {
+        "lease_id": "lease-e2-03",
+        "version": 1,
+        "time_remaining_sec": 410.0,
+        "robot_id": "R2",
+        "current_pos": [
+          0.0,
+          5.0
+        ],
+        "current_zone": "nurse_station_approach",
+        "allowed_zones": [
+          "north_hall",
+          "nurse_station_approach"
+        ],
+        "forbidden_zones": [
+          "west_mid_hall"
+        ],
+        "allowed_waypoints": [
+          "north_hall"
+        ],
+        "event_description": "Staff nurse pushing medication cart across junction; path temporarily occupied",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-04",
+      "category": "Transient Obstacle",
+      "description": "Patient in wheelchair crossing corridor",
+      "expected_action": "LOCAL_WAIT",
+      "context": {
+        "lease_id": "lease-e2-04",
+        "version": 1,
+        "time_remaining_sec": 350.0,
+        "robot_id": "R4",
+        "current_pos": [
+          -4.5,
+          8.0
+        ],
+        "current_zone": "west_waiting_approach",
+        "allowed_zones": [
+          "west_waiting_approach",
+          "west_mid_hall"
+        ],
+        "forbidden_zones": [
+          "east_waiting_approach"
+        ],
+        "allowed_waypoints": [
+          "west_mid_hall"
+        ],
+        "event_description": "Patient in wheelchair crossing from Ward 2C doorway; path clear in a moment",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-05",
+      "category": "Transient Obstacle",
+      "description": "Food service trolley unloading breakfast trays",
+      "expected_action": "LOCAL_WAIT",
+      "context": {
+        "lease_id": "lease-e2-05",
+        "version": 1,
+        "time_remaining_sec": 500.0,
+        "robot_id": "R3",
+        "current_pos": [
+          4.5,
+          8.0
+        ],
+        "current_zone": "east_waiting_approach",
+        "allowed_zones": [
+          "east_waiting_approach",
+          "east_mid_hall"
+        ],
+        "forbidden_zones": [
+          "west_waiting_approach"
+        ],
+        "allowed_waypoints": [
+          "east_mid_hall"
+        ],
+        "event_description": "Dietary meal cart unloading trays outside room 2B; orderly indicates 10 seconds",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-06",
+      "category": "Transient Obstacle",
+      "description": "Automated floor scrubber traversing corridor",
+      "expected_action": "LOCAL_WAIT",
+      "context": {
+        "lease_id": "lease-e2-06",
+        "version": 1,
+        "time_remaining_sec": 320.0,
+        "robot_id": "R5",
+        "current_pos": [
+          -4.5,
+          3.0
+        ],
+        "current_zone": "west_mid_hall",
+        "allowed_zones": [
+          "west_mid_hall",
+          "west_south_hall"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "west_south_hall"
+        ],
+        "event_description": "Floor scrubber moving down corridor centerline; pause until machine passes",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-07",
+      "category": "Transient Obstacle",
+      "description": "Doctor pausing to write chart notes",
+      "expected_action": "LOCAL_WAIT",
+      "context": {
+        "lease_id": "lease-e2-07",
+        "version": 1,
+        "time_remaining_sec": 240.0,
+        "robot_id": "R1",
+        "current_pos": [
+          0.0,
+          12.0
+        ],
+        "current_zone": "north_hall",
+        "allowed_zones": [
+          "lift_lobby",
+          "north_hall",
+          "nurse_station_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "nurse_station_approach"
+        ],
+        "event_description": "Clinician reviewing patient clipboard in center hallway",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-08",
+      "category": "Transient Obstacle",
+      "description": "Laundry trolley unloading linen bags",
+      "expected_action": "LOCAL_WAIT",
+      "context": {
+        "lease_id": "lease-e2-08",
+        "version": 1,
+        "time_remaining_sec": 420.0,
+        "robot_id": "R6",
+        "current_pos": [
+          -4.5,
+          -8.0
+        ],
+        "current_zone": "west_south_hall",
+        "allowed_zones": [
+          "west_south_hall",
+          "south_equipment_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "south_equipment_approach"
+        ],
+        "event_description": "Linen hamper being rolled across doorway; temporary 10-second obstruction",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-09",
+      "category": "Transient Obstacle",
+      "description": "Hospital bed being transferred into elevator",
+      "expected_action": "LOCAL_WAIT",
+      "context": {
+        "lease_id": "lease-e2-09",
+        "version": 1,
+        "time_remaining_sec": 380.0,
+        "robot_id": "R1",
+        "current_pos": [
+          0.0,
+          18.0
+        ],
+        "current_zone": "lift_lobby",
+        "allowed_zones": [
+          "lift_lobby",
+          "north_hall"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "north_hall"
+        ],
+        "event_description": "Patient gurney rolling into elevator; brief pause required",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-10",
+      "category": "Transient Obstacle",
+      "description": "Visitor asking directions at junction",
+      "expected_action": "LOCAL_WAIT",
+      "context": {
+        "lease_id": "lease-e2-10",
+        "version": 1,
+        "time_remaining_sec": 310.0,
+        "robot_id": "R2",
+        "current_pos": [
+          0.0,
+          9.5
+        ],
+        "current_zone": "nurse_station_approach",
+        "allowed_zones": [
+          "north_hall",
+          "nurse_station_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "north_hall"
+        ],
+        "event_description": "Two visitors standing at intersection; transient delay",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-11",
+      "category": "Static Detour",
+      "description": "Maintenance spill in east_mid_hall; east_north_gate bypass permitted",
+      "expected_action": "LOCAL_DETOUR",
+      "context": {
+        "lease_id": "lease-e2-11",
+        "version": 1,
+        "time_remaining_sec": 350.0,
+        "robot_id": "R1",
+        "current_pos": [
+          4.5,
+          8.0
+        ],
+        "current_zone": "east_waiting_approach",
+        "allowed_zones": [
+          "east_waiting_approach",
+          "east_mid_hall",
+          "east_north_gate",
+          "nurse_station_approach"
+        ],
+        "forbidden_zones": [
+          "west_mid_hall"
+        ],
+        "allowed_waypoints": [
+          "east_north_gate"
+        ],
+        "event_description": "Floor polish spill blocks east_mid_hall; bypass route available via east_north_gate",
+        "has_fault": false,
+        "wait_count": 2
+      }
+    },
+    {
+      "id": "E2-12",
+      "category": "Static Detour",
+      "description": "Corridor scaffolding under maintenance; bypass available",
+      "expected_action": "LOCAL_DETOUR",
+      "context": {
+        "lease_id": "lease-e2-12",
+        "version": 1,
+        "time_remaining_sec": 420.0,
+        "robot_id": "R4",
+        "current_pos": [
+          -4.5,
+          8.0
+        ],
+        "current_zone": "west_waiting_approach",
+        "allowed_zones": [
+          "west_waiting_approach",
+          "west_north_gate",
+          "north_hall"
+        ],
+        "forbidden_zones": [
+          "east_waiting_approach"
+        ],
+        "allowed_waypoints": [
+          "west_north_gate"
+        ],
+        "event_description": "Ceiling tile maintenance ladder completely blocks west hallway; detour via west_north_gate allowed",
+        "has_fault": false,
+        "wait_count": 2
+      }
+    },
+    {
+      "id": "E2-13",
+      "category": "Static Detour",
+      "description": "Blocked central approach; route around via north corridor",
+      "expected_action": "LOCAL_DETOUR",
+      "context": {
+        "lease_id": "lease-e2-13",
+        "version": 1,
+        "time_remaining_sec": 290.0,
+        "robot_id": "R1",
+        "current_pos": [
+          0.0,
+          12.0
+        ],
+        "current_zone": "north_hall",
+        "allowed_zones": [
+          "north_hall",
+          "east_north_gate",
+          "east_waiting_approach"
+        ],
+        "forbidden_zones": [
+          "nurse_station_approach"
+        ],
+        "allowed_waypoints": [
+          "east_north_gate"
+        ],
+        "event_description": "Nurse station hall under bio-hazard cleaning; alternate path open through east_north_gate",
+        "has_fault": false,
+        "wait_count": 1
+      }
+    },
+    {
+      "id": "E2-14",
+      "category": "Static Detour",
+      "description": "Equipment pallets stored in passage; alternate bypass clear",
+      "expected_action": "LOCAL_DETOUR",
+      "context": {
+        "lease_id": "lease-e2-14",
+        "version": 1,
+        "time_remaining_sec": 310.0,
+        "robot_id": "R3",
+        "current_pos": [
+          4.5,
+          3.0
+        ],
+        "current_zone": "east_mid_hall",
+        "allowed_zones": [
+          "east_mid_hall",
+          "east_south_hall",
+          "nurse_station_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "nurse_station_approach"
+        ],
+        "event_description": "Pallets of PPE boxes stacked blocking south corridor; bypass via nurse_station_approach permitted",
+        "has_fault": false,
+        "wait_count": 2
+      }
+    },
+    {
+      "id": "E2-15",
+      "category": "Static Detour",
+      "description": "HVAC technician ladder in south corridor; alternate bypass ready",
+      "expected_action": "LOCAL_DETOUR",
+      "context": {
+        "lease_id": "lease-e2-15",
+        "version": 1,
+        "time_remaining_sec": 400.0,
+        "robot_id": "R5",
+        "current_pos": [
+          -4.5,
+          3.0
+        ],
+        "current_zone": "west_mid_hall",
+        "allowed_zones": [
+          "west_mid_hall",
+          "nurse_station_approach",
+          "north_hall"
+        ],
+        "forbidden_zones": [
+          "west_south_hall"
+        ],
+        "allowed_waypoints": [
+          "nurse_station_approach"
+        ],
+        "event_description": "HVAC ladder and tools blocking forward hallway; alternate passage through nurse station allowed",
+        "has_fault": false,
+        "wait_count": 2
+      }
+    },
+    {
+      "id": "E2-16",
+      "category": "Static Detour",
+      "description": "Wet floor signs in main aisle; side bypass permitted",
+      "expected_action": "LOCAL_DETOUR",
+      "context": {
+        "lease_id": "lease-e2-16",
+        "version": 1,
+        "time_remaining_sec": 360.0,
+        "robot_id": "R2",
+        "current_pos": [
+          0.0,
+          9.5
+        ],
+        "current_zone": "nurse_station_approach",
+        "allowed_zones": [
+          "nurse_station_approach",
+          "east_mid_hall",
+          "north_hall"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "east_mid_hall"
+        ],
+        "event_description": "Freshly mopped slick surface blocks central path; detour via east_mid_hall",
+        "has_fault": false,
+        "wait_count": 1
+      }
+    },
+    {
+      "id": "E2-17",
+      "category": "Static Detour",
+      "description": "Defibrillator crash cart parked during round; bypass open",
+      "expected_action": "LOCAL_DETOUR",
+      "context": {
+        "lease_id": "lease-e2-17",
+        "version": 1,
+        "time_remaining_sec": 480.0,
+        "robot_id": "R6",
+        "current_pos": [
+          -4.5,
+          -8.0
+        ],
+        "current_zone": "west_south_hall",
+        "allowed_zones": [
+          "west_south_hall",
+          "south_equipment_approach",
+          "south_room_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "south_equipment_approach"
+        ],
+        "event_description": "Emergency crash cart stationed in doorway; alternative approach to store is clear",
+        "has_fault": false,
+        "wait_count": 2
+      }
+    },
+    {
+      "id": "E2-18",
+      "category": "Static Detour",
+      "description": "Electrical inspection in corridor-2B; north detour verified",
+      "expected_action": "LOCAL_DETOUR",
+      "context": {
+        "lease_id": "lease-e2-18",
+        "version": 1,
+        "time_remaining_sec": 330.0,
+        "robot_id": "R1",
+        "current_pos": [
+          4.5,
+          8.0
+        ],
+        "current_zone": "east_waiting_approach",
+        "allowed_zones": [
+          "east_waiting_approach",
+          "east_north_gate",
+          "north_hall"
+        ],
+        "forbidden_zones": [
+          "corridor-2B-south"
+        ],
+        "allowed_waypoints": [
+          "east_north_gate"
+        ],
+        "event_description": "Conduit inspection blocking corridor-2B; alternate north detour allowed",
+        "has_fault": false,
+        "wait_count": 2
+      }
+    },
+    {
+      "id": "E2-19",
+      "category": "Hardware Fault",
+      "description": "Primary robot drive motor stall; idle robot R2 available",
+      "expected_action": "SWAP_ROBOT",
+      "context": {
+        "lease_id": "lease-e2-19",
+        "version": 1,
+        "time_remaining_sec": 300.0,
+        "robot_id": "R1",
+        "current_pos": [
+          0.0,
+          12.0
+        ],
+        "current_zone": "north_hall",
+        "allowed_zones": [
+          "north_hall",
+          "nurse_station_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "nurse_station_approach"
+        ],
+        "assigned_robots": [
+          "R1",
+          "R2"
+        ],
+        "failed_robots": [
+          "R1"
+        ],
+        "event_description": "Robot R1 hardware fault: drive motor controller overcurrent stall",
+        "has_fault": true,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-20",
+      "category": "Hardware Fault",
+      "description": "Steering servo failure on R4; idle peer R5 in cluster",
+      "expected_action": "SWAP_ROBOT",
+      "context": {
+        "lease_id": "lease-e2-20",
+        "version": 1,
+        "time_remaining_sec": 400.0,
+        "robot_id": "R4",
+        "current_pos": [
+          -4.5,
+          8.0
+        ],
+        "current_zone": "west_waiting_approach",
+        "allowed_zones": [
+          "west_waiting_approach",
+          "west_mid_hall"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "west_mid_hall"
+        ],
+        "assigned_robots": [
+          "R4",
+          "R5",
+          "R6"
+        ],
+        "failed_robots": [
+          "R4"
+        ],
+        "event_description": "Robot R4 Ackermann steering servo locked; steering unavailable",
+        "has_fault": true,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-21",
+      "category": "Hardware Fault",
+      "description": "Critical battery depletion on R3; swap to standby R1",
+      "expected_action": "SWAP_ROBOT",
+      "context": {
+        "lease_id": "lease-e2-21",
+        "version": 1,
+        "time_remaining_sec": 500.0,
+        "robot_id": "R3",
+        "current_pos": [
+          4.5,
+          8.0
+        ],
+        "current_zone": "east_waiting_approach",
+        "allowed_zones": [
+          "east_waiting_approach",
+          "east_mid_hall"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "east_mid_hall"
+        ],
+        "assigned_robots": [
+          "R3",
+          "R1"
+        ],
+        "failed_robots": [
+          "R3"
+        ],
+        "event_description": "Robot R3 battery voltage collapsed to 4%; safety shutdown triggered",
+        "has_fault": true,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-22",
+      "category": "Hardware Fault",
+      "description": "Ultrasonic collision sensor disconnect on R5; swap to R6",
+      "expected_action": "SWAP_ROBOT",
+      "context": {
+        "lease_id": "lease-e2-22",
+        "version": 1,
+        "time_remaining_sec": 380.0,
+        "robot_id": "R5",
+        "current_pos": [
+          -4.5,
+          3.0
+        ],
+        "current_zone": "west_mid_hall",
+        "allowed_zones": [
+          "west_mid_hall",
+          "west_south_hall"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "west_south_hall"
+        ],
+        "assigned_robots": [
+          "R5",
+          "R6"
+        ],
+        "failed_robots": [
+          "R5"
+        ],
+        "event_description": "Robot R5 range sensor bus failure; obstacle guard disabled",
+        "has_fault": true,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-23",
+      "category": "Hardware Fault",
+      "description": "Wheel encoder failure on R2; swap to R3",
+      "expected_action": "SWAP_ROBOT",
+      "context": {
+        "lease_id": "lease-e2-23",
+        "version": 1,
+        "time_remaining_sec": 450.0,
+        "robot_id": "R2",
+        "current_pos": [
+          0.0,
+          9.5
+        ],
+        "current_zone": "nurse_station_approach",
+        "allowed_zones": [
+          "nurse_station_approach",
+          "east_mid_hall"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "east_mid_hall"
+        ],
+        "assigned_robots": [
+          "R2",
+          "R3"
+        ],
+        "failed_robots": [
+          "R2"
+        ],
+        "event_description": "Robot R2 left optical encoder offline; odometry lost",
+        "has_fault": true,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-24",
+      "category": "Hardware Fault",
+      "description": "Camera communication error before delivery snapshot; swap to R4",
+      "expected_action": "SWAP_ROBOT",
+      "context": {
+        "lease_id": "lease-e2-24",
+        "version": 1,
+        "time_remaining_sec": 320.0,
+        "robot_id": "R6",
+        "current_pos": [
+          -4.5,
+          -8.0
+        ],
+        "current_zone": "west_south_hall",
+        "allowed_zones": [
+          "west_south_hall",
+          "south_equipment_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "south_equipment_approach"
+        ],
+        "assigned_robots": [
+          "R6",
+          "R4"
+        ],
+        "failed_robots": [
+          "R6"
+        ],
+        "event_description": "Robot R6 camera sensor disconnected; cannot produce proof artifact",
+        "has_fault": true,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-25",
+      "category": "Ambiguity",
+      "description": "Ward 2B has beds 2B-12A and 2B-12B; prompt gave 2B-12",
+      "expected_action": "ESCALATE_CLARIFY",
+      "context": {
+        "lease_id": "lease-e2-25",
+        "version": 1,
+        "time_remaining_sec": 400.0,
+        "robot_id": "R1",
+        "current_pos": [
+          4.5,
+          8.0
+        ],
+        "current_zone": "east_waiting_approach",
+        "allowed_zones": [
+          "east_waiting_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [],
+        "event_description": "Destination bed ambiguous: room 2B-12 partitioned into 2B-12A and 2B-12B",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-26",
+      "category": "Ambiguity",
+      "description": "Requested standard pump for paediatric ward 2B; clarification needed",
+      "expected_action": "ESCALATE_CLARIFY",
+      "context": {
+        "lease_id": "lease-e2-26",
+        "version": 1,
+        "time_remaining_sec": 500.0,
+        "robot_id": "R2",
+        "current_pos": [
+          0.0,
+          9.5
+        ],
+        "current_zone": "nurse_station_approach",
+        "allowed_zones": [
+          "nurse_station_approach",
+          "east_waiting_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "east_waiting_approach"
+        ],
+        "event_description": "SOP-PAED-01 conflict: standard pump requested for paediatric ward; confirm paediatric model",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-27",
+      "category": "Ambiguity",
+      "description": "Two blanket supply bins found at central supply; unclear grade",
+      "expected_action": "ESCALATE_CLARIFY",
+      "context": {
+        "lease_id": "lease-e2-27",
+        "version": 1,
+        "time_remaining_sec": 480.0,
+        "robot_id": "R6",
+        "current_pos": [
+          0.0,
+          -15.0
+        ],
+        "current_zone": "south_equipment_approach",
+        "allowed_zones": [
+          "south_equipment_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [],
+        "event_description": "Two supply cabinets found: Bin-1 (Sterile blankets) vs Bin-2 (Thermal fleece)",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-28",
+      "category": "Ambiguity",
+      "description": "Nurse station dropoff point not specified",
+      "expected_action": "ESCALATE_CLARIFY",
+      "context": {
+        "lease_id": "lease-e2-28",
+        "version": 1,
+        "time_remaining_sec": 350.0,
+        "robot_id": "R1",
+        "current_pos": [
+          0.0,
+          5.0
+        ],
+        "current_zone": "nurse_station_approach",
+        "allowed_zones": [
+          "nurse_station_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [],
+        "event_description": "Nurse counter has Intake-A and Intake-B; unspecified destination bin",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-29",
+      "category": "Ambiguity",
+      "description": "Patient discharge wheelchair size unspecified (Standard vs Bariatric)",
+      "expected_action": "ESCALATE_CLARIFY",
+      "context": {
+        "lease_id": "lease-e2-29",
+        "version": 1,
+        "time_remaining_sec": 390.0,
+        "robot_id": "R4",
+        "current_pos": [
+          -4.5,
+          8.0
+        ],
+        "current_zone": "west_waiting_approach",
+        "allowed_zones": [
+          "west_waiting_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [],
+        "event_description": "Two wheelchair variants available in storage: standard 18-inch vs bariatric 24-inch",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-30",
+      "category": "Ambiguity",
+      "description": "IV pole delivery: multiple beds in ward room requesting simultaneously",
+      "expected_action": "ESCALATE_CLARIFY",
+      "context": {
+        "lease_id": "lease-e2-30",
+        "version": 1,
+        "time_remaining_sec": 420.0,
+        "robot_id": "R3",
+        "current_pos": [
+          4.5,
+          8.0
+        ],
+        "current_zone": "east_waiting_approach",
+        "allowed_zones": [
+          "east_waiting_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [],
+        "event_description": "Destination given as Ward 2B room 4; beds 4A and 4B both unoccupied; confirm bed",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-31",
+      "category": "Route Closure",
+      "description": "Fire door closed and locked; all alternate corridors forbidden",
+      "expected_action": "ESCALATE_UNEXPECTED",
+      "context": {
+        "lease_id": "lease-e2-31",
+        "version": 1,
+        "time_remaining_sec": 300.0,
+        "robot_id": "R1",
+        "current_pos": [
+          4.5,
+          -8.0
+        ],
+        "current_zone": "east_south_hall",
+        "allowed_zones": [
+          "east_south_hall"
+        ],
+        "forbidden_zones": [
+          "west_south_hall"
+        ],
+        "allowed_waypoints": [],
+        "event_description": "Fire door shutter dropped and locked; corridor closed with zero permitted bypass",
+        "has_fault": false,
+        "wait_count": 3
+      }
+    },
+    {
+      "id": "E2-32",
+      "category": "Route Closure",
+      "description": "Hospital construction barrier blocks entrance; no route in allowed zones",
+      "expected_action": "ESCALATE_UNEXPECTED",
+      "context": {
+        "lease_id": "lease-e2-32",
+        "version": 1,
+        "time_remaining_sec": 260.0,
+        "robot_id": "R4",
+        "current_pos": [
+          -4.5,
+          3.0
+        ],
+        "current_zone": "west_mid_hall",
+        "allowed_zones": [
+          "west_mid_hall"
+        ],
+        "forbidden_zones": [
+          "west_waiting_approach",
+          "east_mid_hall"
+        ],
+        "allowed_waypoints": [],
+        "event_description": "Drywall construction barrier completely seals west hallway; no bypass exists",
+        "has_fault": false,
+        "wait_count": 3
+      }
+    },
+    {
+      "id": "E2-33",
+      "category": "Route Closure",
+      "description": "Hazardous chemical spill; corridor completely cordoned off",
+      "expected_action": "ESCALATE_UNEXPECTED",
+      "context": {
+        "lease_id": "lease-e2-33",
+        "version": 1,
+        "time_remaining_sec": 350.0,
+        "robot_id": "R5",
+        "current_pos": [
+          -4.5,
+          -8.0
+        ],
+        "current_zone": "west_south_hall",
+        "allowed_zones": [
+          "west_south_hall"
+        ],
+        "forbidden_zones": [
+          "south_equipment_approach"
+        ],
+        "allowed_waypoints": [],
+        "event_description": "Formalin spill cordoned with red tape; equipment access strictly prohibited",
+        "has_fault": false,
+        "wait_count": 3
+      }
+    },
+    {
+      "id": "E2-34",
+      "category": "Route Closure",
+      "description": "Code Blue emergency lockdown active across entire wing",
+      "expected_action": "ESCALATE_UNEXPECTED",
+      "context": {
+        "lease_id": "lease-e2-34",
+        "version": 1,
+        "time_remaining_sec": 450.0,
+        "robot_id": "R3",
+        "current_pos": [
+          4.5,
+          8.0
+        ],
+        "current_zone": "east_waiting_approach",
+        "allowed_zones": [
+          "east_waiting_approach"
+        ],
+        "forbidden_zones": [
+          "corridor-2B",
+          "central-supply"
+        ],
+        "allowed_waypoints": [],
+        "event_description": "Code Blue emergency team blocking hallway with crash carts and resuscitator",
+        "has_fault": false,
+        "wait_count": 3
+      }
+    },
+    {
+      "id": "E2-35",
+      "category": "Route Closure",
+      "description": "Security gate locked for quarantine enforcement",
+      "expected_action": "ESCALATE_UNEXPECTED",
+      "context": {
+        "lease_id": "lease-e2-35",
+        "version": 1,
+        "time_remaining_sec": 310.0,
+        "robot_id": "R4",
+        "current_pos": [
+          -4.5,
+          14.0
+        ],
+        "current_zone": "west_north_gate",
+        "allowed_zones": [
+          "west_north_gate"
+        ],
+        "forbidden_zones": [
+          "west_waiting_approach"
+        ],
+        "allowed_waypoints": [],
+        "event_description": "Security gate badge reader offline; electronic lock will not disengage",
+        "has_fault": false,
+        "wait_count": 2
+      }
+    },
+    {
+      "id": "E2-36",
+      "category": "Route Closure",
+      "description": "All cluster robots faulted or inoperable",
+      "expected_action": "ESCALATE_UNEXPECTED",
+      "context": {
+        "lease_id": "lease-e2-36",
+        "version": 1,
+        "time_remaining_sec": 300.0,
+        "robot_id": "R1",
+        "current_pos": [
+          0.0,
+          12.0
+        ],
+        "current_zone": "north_hall",
+        "allowed_zones": [
+          "north_hall",
+          "nurse_station_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "nurse_station_approach"
+        ],
+        "assigned_robots": [
+          "R1",
+          "R2"
+        ],
+        "failed_robots": [
+          "R1",
+          "R2"
+        ],
+        "event_description": "Primary robot R1 drive failure; standby robot R2 also flagged hardware fault",
+        "has_fault": true,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-37",
+      "category": "Lease Expiry",
+      "description": "Lease expiry in 15 seconds; Invariant 4 safe recess park triggered",
+      "expected_action": "SAFE_PARK",
+      "context": {
+        "lease_id": "lease-e2-37",
+        "version": 1,
+        "time_remaining_sec": 15.0,
+        "robot_id": "R1",
+        "current_pos": [
+          4.5,
+          3.0
+        ],
+        "current_zone": "east_mid_hall",
+        "allowed_zones": [
+          "east_mid_hall",
+          "east_waiting_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "east_waiting_approach"
+        ],
+        "event_description": "Authority lease expiring in 15 seconds; halt mission and secure parking",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-38",
+      "category": "Lease Expiry",
+      "description": "Lease authority expired (0 seconds remaining) in active corridor",
+      "expected_action": "SAFE_PARK",
+      "context": {
+        "lease_id": "lease-e2-38",
+        "version": 1,
+        "time_remaining_sec": 0.0,
+        "robot_id": "R4",
+        "current_pos": [
+          -4.5,
+          3.0
+        ],
+        "current_zone": "west_mid_hall",
+        "allowed_zones": [
+          "west_mid_hall"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [],
+        "event_description": "Lease duration expired; robot must not obstruct corridor",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-39",
+      "category": "Lease Expiry",
+      "description": "Urgent lease timeout watchdog elapsed; park immediately",
+      "expected_action": "SAFE_PARK",
+      "context": {
+        "lease_id": "lease-e2-39",
+        "version": 1,
+        "time_remaining_sec": 8.0,
+        "robot_id": "R2",
+        "current_pos": [
+          0.0,
+          9.5
+        ],
+        "current_zone": "nurse_station_approach",
+        "allowed_zones": [
+          "nurse_station_approach",
+          "east_waiting_approach"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [
+          "east_waiting_approach"
+        ],
+        "event_description": "Timeout threshold exceeded; park robot in designated waiting bay",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    },
+    {
+      "id": "E2-40",
+      "category": "Lease Expiry",
+      "description": "Authority revoked by cloud clock; 5 seconds remaining",
+      "expected_action": "SAFE_PARK",
+      "context": {
+        "lease_id": "lease-e2-40",
+        "version": 1,
+        "time_remaining_sec": 5.0,
+        "robot_id": "R6",
+        "current_pos": [
+          -4.5,
+          -8.0
+        ],
+        "current_zone": "west_south_hall",
+        "allowed_zones": [
+          "west_south_hall"
+        ],
+        "forbidden_zones": [],
+        "allowed_waypoints": [],
+        "event_description": "Lease authority window closing; move robot out of main transit path",
+        "has_fault": false,
+        "wait_count": 0
+      }
+    }
+  ]
+}

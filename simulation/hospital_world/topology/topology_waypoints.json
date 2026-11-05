@@ -53,6 +53,14 @@
     "south_room_approach": [
       0.0,
       -28.0
+    ],
+    "east_south_hall_corner": [
+      4.5,
+      -15.0
+    ],
+    "west_south_hall_corner": [
+      -4.5,
+      -15.0
     ]
   }
 }

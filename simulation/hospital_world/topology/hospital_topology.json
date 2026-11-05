@@ -85,6 +85,18 @@
       "area": "south central room approach",
       "wing": "shared",
       "speed_cap": 0.3
+    },
+    "east_south_hall_corner": {
+      "kind": "corridor",
+      "area": "east",
+      "wing": "east",
+      "speed_cap": 0.35
+    },
+    "west_south_hall_corner": {
+      "kind": "corridor",
+      "area": "west",
+      "wing": "west",
+      "speed_cap": 0.35
     }
   },
   "edges": [
@@ -150,13 +162,23 @@
     ],
     [
       "west_south_hall",
+      "west_south_hall_corner",
+      7.0
+    ],
+    [
+      "west_south_hall_corner",
       "south_equipment_approach",
-      8.32
+      4.5
     ],
     [
       "east_south_hall",
+      "east_south_hall_corner",
+      7.0
+    ],
+    [
+      "east_south_hall_corner",
       "south_equipment_approach",
-      8.32
+      4.5
     ],
     [
       "south_equipment_approach",
@@ -169,13 +191,15 @@
       "east_north_gate",
       "east_waiting_approach",
       "east_mid_hall",
-      "east_south_hall"
+      "east_south_hall",
+      "east_south_hall_corner"
     ],
     "west": [
       "west_north_gate",
       "west_waiting_approach",
       "west_mid_hall",
-      "west_south_hall"
+      "west_south_hall",
+      "west_south_hall_corner"
     ],
     "shared": [
       "lift_lobby",

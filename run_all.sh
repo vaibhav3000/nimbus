@@ -29,6 +29,10 @@ export NIMBUS_PACK="${NIMBUS_PACK:-hospital_sim6}"   # P1's six-racecar hospital
 export DATA_DIR="${DATA_DIR:-$ROOT/data}"
 export PORT="${PORT:-8000}"
 export IGN_PARTITION="${IGN_PARTITION:-custom_hospital_world}"; export GZ_PARTITION="$IGN_PARTITION"
+export NIMBUS_SENSOR_TIMEOUT="${NIMBUS_SENSOR_TIMEOUT:-5.0}"
+export NIMBUS_CAMERA_TIMEOUT="${NIMBUS_CAMERA_TIMEOUT:-10.0}"
+export NIMBUS_GOAL_TIMEOUT="${NIMBUS_GOAL_TIMEOUT:-600.0}"
+export NIMBUS_MINIMUM_FRONT_DISTANCE="${NIMBUS_MINIMUM_FRONT_DISTANCE:-0.20}"
 CLOUD="http://127.0.0.1:$PORT"
 start() { local name="$1"; shift; "$@" > "$LOGS/$name.log" 2>&1 & echo $! >> "$PIDS"; echo "   started $name (pid $!, log logs/$name.log)"; }
 waitfor() { for _ in $(seq 1 "${3:-60}"); do curl -fs "$1" >/dev/null 2>&1 && return 0; sleep 1; done; echo "!! $2 did not come up (see logs/)"; return 1; }
