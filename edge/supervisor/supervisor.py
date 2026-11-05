@@ -216,20 +216,48 @@ class EdgeSupervisor:
             for existing in getattr(self, "robots", {}).values():
                 if isinstance(existing, SimRobot) and getattr(existing, "sim_name", None) == target_sim_name:
                     return existing
-            return SimRobot(
+            return self._log_robot_commands(SimRobot(
                 robot_id=robot_id,
                 initial_pos=initial_pos,
                 current_zone=current_zone,
                 waypoints=self.waypoints,
                 use_gazebo={"gazebo": True, "kinematic": False}.get(getattr(self, "sim_mode", "auto")),
                 validation_source=self.gazebo_validation,
-            )
-        return MockRobot(
+            ))
+        return self._log_robot_commands(MockRobot(
             robot_id=robot_id,
             initial_pos=initial_pos,
             current_zone=current_zone,
             waypoints=self.waypoints,
-        )
+        ))
+
+    def _log_robot_commands(self, robot: Any) -> Any:
+        """Print every instruction the edge sends to a robot and the robot's answer (always on,
+        even with --quiet), so the edge logs show the edge -> robot traffic."""
+        if getattr(robot, "_nimbus_cmd_log", False):
+            return robot
+        original = robot.execute_command
+        cluster = self.cluster_id
+
+        def logged(cmd: Dict[str, Any]) -> Dict[str, Any]:
+            rid = getattr(robot, "robot_id", cmd.get("robot_id", "?"))
+            action = cmd.get("action")
+            p = cmd.get("params") or {}
+            detail = ", ".join(f"{k}={v}" for k, v in p.items() if k in ("to", "target", "max_speed", "speed", "seconds", "duration_sec", "reason", "purpose"))
+            ts = time.strftime("%H:%M:%S")
+            print(f"[{cluster}] {ts} EDGE -> {rid}: {action} {detail}  (cmd {cmd.get('cmd_id', '')[-28:]})", flush=True)
+            t0 = time.time()
+            res = original(cmd)
+            try:
+                print(f"[{cluster}] {time.strftime('%H:%M:%S')} {rid} -> EDGE: {action} {res.get('status')} "
+                      f"zone={res.get('zone')} ({time.time() - t0:.1f}s) {str(res.get('message', ''))[:110]}", flush=True)
+            except Exception:
+                pass
+            return res
+
+        robot.execute_command = logged
+        robot._nimbus_cmd_log = True
+        return robot
 
     def close(self):
         """Cleans up supervisor resources and simulated robot runtimes."""
