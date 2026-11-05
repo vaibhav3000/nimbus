@@ -88,7 +88,10 @@ class EdgeSLMEngine:
             "RULES:\n"
             f"- Never exceed allowed zones: {allowed_zones}\n"
             f"- Never enter forbidden zones: {forbidden_zones}\n"
-            "- target_waypoint must be one of Allowed Next Waypoints (for SWAP_ROBOT: one of Idle Robots), otherwise null.\n"
+            "- Allowed Next Waypoints are lease-safe candidates, not verified complete detours. Selecting one asks edge to attempt "
+            "navigation; if it cannot complete, edge escalates. Never claim a candidate bypasses the obstacle.\n"
+            "- For LOCAL_DETOUR, target_waypoint must be one of Allowed Next Waypoints. For SWAP_ROBOT, it must be one of Idle Robots. "
+            "For SAFE_PARK, use null: edge chooses the nearest verified safe recess. Otherwise use null.\n"
             "- \"reason\" is at most 20 words and may only use facts shown below. Never state a lease time, "
             "zone or robot that is not in the text.\n\n"
             "EXAMPLES:\n"
@@ -134,14 +137,14 @@ class EdgeSLMEngine:
             latency_ms = (time.time() - start_time) * 1000.0
             return {
                 "action": "SAFE_PARK",
-                "target_waypoint": "safe-parking-bay-1",
+                "target_waypoint": None,
                 "reason": "Lease expiry imminent (<30s remaining)."
             }, "RULE", latency_ms
 
         # 1b. Deterministic rule: the robot itself is stuck / off the map. Waiting never fixes this, and a small
         #     model must not be allowed to wait three times on it (seen live: "departed the traversable costmap").
         ev_low = str(context.get("event_description", "")).lower()
-        if any(w in ev_low for w in ("departed the traversable costmap", "localization", "odometry is stale")):
+        if any(w in ev_low for w in ("departed the traversable costmap", "localization", "odometry is stale", "range contact lost", "range sensor", "sensor stale", "sensor unavailable")):
             current = context.get("robot_id", "")
             failed = set(context.get("failed_robots", [])) | {current}
             idle = context.get("idle_robots") or [r for r in context.get("assigned_robots", []) if r not in failed]
@@ -257,7 +260,7 @@ class EdgeSLMEngine:
             target = allowed_wps[0] if allowed_wps else None
             return {
                 "action": "SAFE_PARK",
-                "target_waypoint": target,
+                "target_waypoint": None,
                 "reason": f"Lease authority expiring in {time_remaining:.0f}s (<= 30s ceiling); safely parking in recess (Invariant 4)."
             }
 
@@ -318,7 +321,7 @@ class EdgeSLMEngine:
                 }
 
         # Case 6: Transient obstacle -> LOCAL_WAIT
-        if any(w in event for w in ["transient", "laundry", "trolley", "cleaning", "visitor", "cart", "wheelchair", "passing", "moment", "temporary", "brief", "wait", "scrubber", "orderly", "clinician", "notes"]) and wait_count < 2:
+        if any(w in event for w in ["transient", "laundry", "trolley", "cleaning", "visitor", "cart", "wheelchair", "passing", "moment", "temporary", "brief", "wait", "scrubber", "orderly", "clinician", "notes"]) and wait_count < 3:
             return {
                 "action": "LOCAL_WAIT",
                 "target_waypoint": None,
@@ -366,7 +369,7 @@ class EdgeSLMEngine:
         if time_remaining <= 30.0:
             decision = {
                 "action": "SAFE_PARK",
-                "target_waypoint": "safe-parking-bay-1",
+                "target_waypoint": None,
                 "reason": "Rule fallback: Lease expiry imminent (<30s)."
             }
         # Rule 2: Robot fault -> swap robot if possible
@@ -420,8 +423,8 @@ class EdgeSLMEngine:
                     "target_waypoint": None,
                     "reason": "Rule fallback: Path blocked with zero permitted detours."
                 }
-        # Rule 5: Transient obstacle & wait count < 2 -> wait 10s
-        elif any(w in event for w in ["transient", "laundry", "trolley", "cleaning", "visitor", "cart", "wheelchair", "passing", "moment", "temporary", "brief", "wait", "scrubber", "orderly", "clinician", "notes"]) and wait_count < 2:
+        # Rule 5: Transient obstacle & wait count < 3 -> wait 10s
+        elif any(w in event for w in ["transient", "laundry", "trolley", "cleaning", "visitor", "cart", "wheelchair", "passing", "moment", "temporary", "brief", "wait", "scrubber", "orderly", "clinician", "notes"]) and wait_count < 3:
             decision = {
                 "action": "LOCAL_WAIT",
                 "target_waypoint": None,

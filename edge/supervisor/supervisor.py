@@ -242,6 +242,88 @@ class EdgeSupervisor:
         ))
 
     @staticmethod
+    def _robot_health_failure(robot: Any) -> Optional[Tuple[str, str]]:
+        """Read local SDK health without asking edge or cloud."""
+        runtime = getattr(robot, "runtime", None)
+        if runtime is None:  # Plain MockRobot has no live SDK sensor stream.
+            return None
+        try:
+            health = runtime.state().health
+            if not health.odometry.fresh:
+                return "LOCALIZATION_UNAVAILABLE", "odometry/localization contact lost or stale during execution"
+            if not health.range.fresh:
+                return "SENSOR_UNAVAILABLE", "front range sensor contact lost or stale during execution"
+        except Exception:
+            return "SENSOR_UNAVAILABLE", "robot sensor health could not be read during execution"
+        return None
+
+    def _execute_with_health_watchdog(self, robot: Any, command: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute while independently monitoring local odometry and range.
+
+        The SDK navigation loop is already fail-closed. This separate watcher
+        covers the whole primitive and makes a lost-contact stop an auditable
+        tactical event even if a lower layer returns late.
+        """
+        import threading
+        result: Dict[str, Any] = {}
+        completed = threading.Event()
+
+        def run() -> None:
+            try:
+                result.update(robot.execute_command(command))
+            except Exception as exc:
+                result.update({"status": "FAILED", "message": str(exc)})
+            finally:
+                completed.set()
+
+        worker = threading.Thread(target=run, name=f"robot-health-watch-{command.get('cmd_id', 'command')}", daemon=True)
+        worker.start()
+        health_failure = None
+        while not completed.wait(0.10):
+            health_failure = self._robot_health_failure(robot)
+            if health_failure:
+                try:
+                    robot.execute_command({
+                        "cmd_id": f"cmd-stop-health-{command.get('robot_id', getattr(robot, 'robot_id', 'robot'))}-{int(time.time()*1000)}",
+                        "action": "stop",
+                        "params": {"reason": health_failure[1]},
+                    })
+                except Exception:
+                    pass
+                break
+        if health_failure:
+            completed.wait(2.0)
+            return {"status": health_failure[0], "message": health_failure[1],
+                    "blocked_zone": getattr(robot, "current_zone", None), "health_watchdog": True}
+        post_failure = self._robot_health_failure(robot)
+        if post_failure and result.get("status") == "COMPLETED":
+            return {"status": post_failure[0], "message": post_failure[1],
+                    "blocked_zone": getattr(robot, "current_zone", None), "health_watchdog": True}
+        return result
+
+    def _tactical_safe_park(self, lease: Dict[str, Any], robot: Any, robot_id: str, reason: str) -> Dict[str, Any]:
+        """Park locally after a tactical expiry decision, without cloud input."""
+        spot = self.parking_engine.find_nearest_safe_parking_spot(
+            current_pose=robot.pose,
+            allowed_zones=lease.get("allowed_zones"),
+            forbidden_zones=lease.get("forbidden_zones"),
+        )
+        robot.execute_command({
+            "cmd_id": f"cmd-stop-safe-park-{robot_id}-{int(time.time()*1000)}", "action": "stop",
+            "params": {"reason": reason},
+        })
+        command = {
+            "cmd_id": f"cmd-safe-park-{robot_id}-{int(time.time()*1000)}",
+            "lease_id": lease["lease_id"], "robot_id": robot_id, "action": "go_to",
+            "params": {"to": spot["zone_name"], "target": spot["coords"], "target_frame": "gazebo/world", "reason": reason},
+            "timestamp": time.time(),
+        }
+        self.store.store_robot_command(command)
+        report = self._execute_with_health_watchdog(robot, command)
+        self.store.update_robot_command_status(command["cmd_id"], report.get("status", "FAILED"))
+        return report
+
+    @staticmethod
     def _canonical_zone_list(zones: List[str]) -> List[str]:
         """Resolve logical room IDs and topology aliases without duplicates."""
         resolved: List[str] = []
@@ -1219,6 +1301,7 @@ class EdgeSupervisor:
         # 4. Execute sub-task sequence
         idx = 0
         step_wait_counts: Dict[int, int] = {}
+        step_dispatch_retries: Dict[int, int] = {}
         failed_robots: Set[str] = set()
         while idx < len(task_sequence):
             subtask = task_sequence[idx]
@@ -1404,14 +1487,25 @@ class EdgeSupervisor:
                 target_str = f" to '{target_dest}'" if target_dest else (f" ({params})" if params else "")
                 print(f"      |-- [Step {step_num}/{len(task_sequence)}] Sub-task: {cmd}{target_str} (Robot: {robot_id})")
 
-            exec_report = robot.execute_command(cmd_payload)
+            exec_report = self._execute_with_health_watchdog(robot, cmd_payload)
             if self._preempt:      # a newer lease arrived while this step ran: the watcher stopped the robot
                 return self._supersede(lease, lease_id, version, executed_steps)
             exec_report.setdefault("action",cmd)
             exec_report.setdefault("params",params)
             exec_status = str(exec_report.get("status", "FAILED")).upper()
 
-            detailed_failures={"INVALID_DESTINATION","SENSOR_UNAVAILABLE","LOCALIZATION_UNAVAILABLE","TIMEOUT","CAPTURE_FAILED","CANCELLED","REJECTED","GROUND_TRUTH_MISMATCH"}
+            # Health loss has already stopped the local robot. Present it to
+            # tactical policy as ROBOT_STUCK, which can safely swap or
+            # escalate; do not misclassify it as a recoverable obstacle.
+            if exec_status in {"SENSOR_UNAVAILABLE", "LOCALIZATION_UNAVAILABLE"} and (
+                exec_report.get("health_watchdog") or getattr(robot, "runtime", None) is not None
+            ):
+                exec_report["status"] = "BLOCKED"
+                exec_report["message"] = f"Robot health failure: {exec_report.get('message', exec_status)}"
+                exec_report.setdefault("blocked_zone", robot.current_zone)
+                exec_report["health_failure"] = exec_status
+                exec_status = "BLOCKED"
+            detailed_failures={"INVALID_DESTINATION","TIMEOUT","CAPTURE_FAILED","CANCELLED","REJECTED","GROUND_TRUTH_MISMATCH"}
             if exec_status in detailed_failures or exec_status not in {"COMPLETED","BLOCKED","FAILED"}:
                 try: robot.execute_command({"cmd_id":f"cmd-stop-{robot_id}-{int(time.time()*1000)}","action":"stop","params":{"reason":f"terminal execution failure: {exec_status}"}})
                 except Exception: pass
@@ -1569,6 +1663,32 @@ class EdgeSupervisor:
                         print(f"      |   |   |--- Final Decision : {tac_action}" + (f" -> Target: '{tac_waypoint}'" if tac_waypoint else ""))
                         print(rf"      |   |   \--- SLM Reason     : \"{tac_reason}\"")
 
+                if tac_action == "SAFE_PARK":
+                    park_report = self._tactical_safe_park(
+                        lease, robot, robot_id,
+                        "tactical safe park: lease authority is close to expiry",
+                    )
+                    self.store.update_lease_status(lease_id, version, "SAFE_PARKED")
+                    self.active_lease = None
+                    if park_report.get("status") == "COMPLETED" and park_report.get("arrival_verified", False):
+                        return {"status": "SAFE_PARKED", "reason": tac_reason, "parking": park_report,
+                                "executed_steps": executed_steps}
+                    return {"status": "FAILED", "reason": "tactical safe parking failed", "parking": park_report,
+                            "executed_steps": executed_steps}
+
+                if tac_action == "DISPATCH_STEP":
+                    retries = step_dispatch_retries.get(idx, 0)
+                    if retries >= 1:
+                        reason_msg = "SLM requested a repeated dispatch after a blocked step; refusing an unbounded retry"
+                        self._escalate_unexpected(lease, robot_id, what=reason_msg, where=blocked_zone)
+                        self.active_lease = None
+                        return {"status": "ESCALATED_UNEXPECTED", "reason": reason_msg}
+                    step_dispatch_retries[idx] = retries + 1
+                    # The robot is already stopped by navigation/reflex. Retry
+                    # exactly once; the next failure must choose wait, detour,
+                    # swap, clarification, parking, or escalation.
+                    continue
+
                 if tac_action == "LOCAL_WAIT":
                     step_wait_counts[idx] = step_wait_counts.get(idx, 0) + 1
                     wait_cmd = {
@@ -1630,7 +1750,7 @@ class EdgeSupervisor:
                     self.store.store_robot_command(detour_cmd)
                     if is_verbose:
                         print(f"      |   |   |--- Action Dispatch: LOCAL_DETOUR -> Navigating via permitted bypass '{detour_wp}'")
-                    detour_report = robot.execute_command(detour_cmd)
+                    detour_report = self._execute_with_health_watchdog(robot, detour_cmd)
                     if detour_report.get("status") == "BLOCKED":
                         self.store.update_robot_command_status(detour_cmd["cmd_id"], "BLOCKED")
                         reason_msg = f"Detour via {detour_wp} also blocked: {detour_report.get('message', '')}"
