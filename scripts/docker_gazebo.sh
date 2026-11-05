@@ -27,5 +27,5 @@ if [ "$HEADLESS" != 1 ]; then
   fi
 fi
 echo "Gazebo GUI: $([ "$HEADLESS" = 1 ] && echo off '(headless; use http://127.0.0.1:8000 and :8090)' || echo on)"
-exec docker run "${OPTS[@]}" -e HEADLESS="$HEADLESS" -v "$PWD":/root/nimbus -w /root/nimbus "$IMAGE" \
+exec docker run "${OPTS[@]}" -e HEADLESS="$HEADLESS" -e NIMBUS_SENSOR_TIMEOUT="${NIMBUS_SENSOR_TIMEOUT:-1.0}" -e NIMBUS_GOAL_TIMEOUT="${NIMBUS_GOAL_TIMEOUT:-270}" -v "$PWD":/root/nimbus -w /root/nimbus "$IMAGE" \
   bash -lc './run_all.sh gazebo; echo; echo "Ctrl-C to stop."; tail -f logs/cloud.log logs/edge_east-wing.log logs/edge_west-wing.log logs/gazebo.log'
