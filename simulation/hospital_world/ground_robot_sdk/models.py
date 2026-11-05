@@ -36,7 +36,15 @@ class GroundTruthPose(JsonModel):
     frame_id: str = "world"
     child_frame_id: str = ""
 @dataclass(frozen=True)
-class RangeScan(JsonModel): ranges: tuple[float, ...] = (); front: Optional[float] = None; minimum: Optional[float] = None; timestamp: Optional[float] = None
+class RangeScan(JsonModel):
+    ranges: tuple[float, ...] = ()
+    front: Optional[float] = None
+    minimum: Optional[float] = None
+    timestamp: Optional[float] = None
+    angle_min: Optional[float] = None
+    angle_increment: Optional[float] = None
+    range_min: Optional[float] = None
+    range_max: Optional[float] = None
 @dataclass(frozen=True)
 class CameraFrame(JsonModel): timestamp: Optional[float] = None; width: int = 0; height: int = 0; encoding: str = "jpeg"; available: bool = False; data: Optional[bytes] = field(default=None, repr=False, compare=False)
 @dataclass(frozen=True)
@@ -60,7 +68,7 @@ class CommandStatus(str, Enum):
     CANCELLED="cancelled"; FAILED="failed"; REJECTED="rejected"; BLOCKED="blocked"
     INVALID_DESTINATION="invalid_destination"; SENSOR_UNAVAILABLE="sensor_unavailable"
     LOCALIZATION_UNAVAILABLE="localization_unavailable"; GROUND_TRUTH_MISMATCH="ground_truth_mismatch"
-    TIMEOUT="timeout"; CAPTURE_FAILED="capture_failed"
+    TIMEOUT="timeout"; CAPTURE_FAILED="capture_failed"; NO_PATH="no_path"
 @dataclass
 class CommandResult(JsonModel):
     command_id: str; command_type: str; status: CommandStatus; submitted_at: float; source: str; start_time: Optional[float] = None; completion_time: Optional[float] = None; reason: Optional[str] = None; details: dict[str, Any] = field(default_factory=dict)

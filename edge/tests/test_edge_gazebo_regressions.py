@@ -42,6 +42,8 @@ def test_success_requires_fresh_sensors_and_verified_arrival():
         assert result["status"] == "COMPLETED"
         assert result["arrival_verified"] is True
         assert result["verification"]["verification_source"] == "odometry"
+        assert result["verification"]["planner"] == "astar_costmap"
+        assert result["verification"]["planned_path"]
         assert result["execution_mode"] == "sdk_mock"
         assert result["physical_verification"] is False
     finally: robot.close()
@@ -61,7 +63,7 @@ def test_range_disconnect_during_motion_fails_closed():
     robot=SimRobot("R1",use_gazebo=False,sensor_timeout=.08)
     result={}
     try:
-        worker=threading.Thread(target=lambda:result.setdefault("value",robot.execute_command(_command((3.0,12.0)))))
+        worker=threading.Thread(target=lambda:result.setdefault("value",robot.execute_command(_command((1.5,12.67)))))
         worker.start(); time.sleep(.12); robot.set_mock_sensor_enabled(range_scan=False)
         worker.join(5)
         assert result["value"]["status"] == "SENSOR_UNAVAILABLE"
@@ -74,7 +76,7 @@ def test_odometry_disconnect_during_motion_prevents_completion():
     robot=SimRobot("R1",use_gazebo=False,sensor_timeout=.08)
     result={}
     try:
-        worker=threading.Thread(target=lambda:result.setdefault("value",robot.execute_command(_command((3.0,12.0)))))
+        worker=threading.Thread(target=lambda:result.setdefault("value",robot.execute_command(_command((1.5,12.67)))))
         worker.start(); time.sleep(.12); robot.set_mock_sensor_enabled(odometry=False)
         worker.join(5)
         assert result["value"]["status"] == "LOCALIZATION_UNAVAILABLE"
@@ -90,6 +92,16 @@ def test_unknown_destination_is_rejected_without_motion():
         result=robot.execute_command({"cmd_id":"bad","action":"go_to","params":{"to":"nowhere-in-hospital"}})
         assert result["status"] == "INVALID_DESTINATION"
         assert robot.pose == before
+        assert robot.runtime.adapter.last_command == Twist2D()
+    finally: robot.close()
+
+
+def test_coordinate_outside_corridor_costmap_is_rejected():
+    robot=SimRobot("R1",use_gazebo=False,sensor_timeout=.15)
+    try:
+        result=robot.execute_command(_command((10.,12.)))
+        assert result["status"] == "INVALID_DESTINATION"
+        assert result["arrival_verified"] is False
         assert robot.runtime.adapter.last_command == Twist2D()
     finally: robot.close()
 

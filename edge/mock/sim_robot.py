@@ -59,7 +59,7 @@ if SIM_DIR and str(SIM_DIR) not in sys.path:
 
 # Import simulation components if available
 try:
-    from ground_robot_sdk import MockAdapter, NavigationConfig, RobotRuntime, SafetyConfig
+    from ground_robot_sdk import CostmapConfig, MockAdapter, NavigationConfig, OccupancyGrid, RobotRuntime, SafetyConfig
     from ground_robot_sdk.models import CameraFrame, CommandStatus, GroundTruthPose, Odometry, Pose2D, RangeScan, Twist2D
     from ground_robot_sdk.namespaces import RobotIdentity
     from topology.resolver import load_data, resolve_destination, shortest_route, world_to_sdk_startup
@@ -427,6 +427,8 @@ class SimRobot:
                         obstacle_timeout=self.sensor_timeout,
                         validation_source=self.validation_source,
                         ground_truth_tolerance=self.position_tolerance,
+                        enable_path_planning=True,
+                        enable_dynamic_avoidance=True,
                     ),
                 ).start()
                 self.runtime.sensors._timeout = self.sensor_timeout
@@ -453,6 +455,7 @@ class SimRobot:
                 if not sensors_fresh:
                     health=self.runtime.state().health
                     print(f"      [sim] {self.connection_state}: {self.sim_name} odom_fresh={health.odometry.fresh} range_fresh={health.range.fresh} ground_truth_fresh={health.ground_truth.fresh}; navigation will fail closed.")
+                self._configure_navigation_costmap()
             except Exception as e:
                 print(f"[SimRobot:{self.robot_id}] Gazebo initialization failed: {e}")
                 self.runtime = None
@@ -469,8 +472,13 @@ class SimRobot:
             adapter=adapter,
             robot_name=self.sim_name,
             namespace=self.namespace,
+<<<<<<< HEAD
             safety_config=SafetyConfig(obstacle_guard=True, minimum_front_distance=self.minimum_front_distance),
             navigation_config=NavigationConfig(goal_timeout=60.0, position_tolerance=min(self.position_tolerance,0.25), control_period=0.02,odometry_timeout=self.sensor_timeout,require_obstacle_feedback=True,obstacle_timeout=self.sensor_timeout),
+=======
+            safety_config=SafetyConfig(obstacle_guard=True, minimum_front_distance=0.25),
+            navigation_config=NavigationConfig(goal_timeout=60.0, position_tolerance=min(self.position_tolerance,0.25), control_period=0.02,odometry_timeout=self.sensor_timeout,require_obstacle_feedback=True,obstacle_timeout=self.sensor_timeout,enable_path_planning=True,enable_dynamic_avoidance=True,obstacle_wait_timeout=.25),
+>>>>>>> c7e5d2c (added a* logic)
         ).start()
         runtime.sensors._timeout=self.sensor_timeout
 
@@ -482,6 +490,7 @@ class SimRobot:
         minimal_jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.' \",#\x1c\x1c(7),01444\x1f'9=82<.342\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xc4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xbf\x00\xff\xd9"
         adapter.set_camera_frame(CameraFrame(timestamp=time.time(), width=320, height=240, encoding="jpeg", available=True, data=minimal_jpeg))
         self._bind_feedback_sync(runtime)
+        self._configure_navigation_costmap(runtime)
 
         # Start kinematic background updater
         self._kinematic_running = True
@@ -566,6 +575,18 @@ class SimRobot:
         dx,dy=float(xy[0])-sx,float(xy[1])-sy
         c,s=math.cos(syaw),math.sin(syaw)
         return c*dx+s*dy,-s*dx+c*dy
+
+    def _configure_navigation_costmap(self, runtime: Any = None) -> None:
+        runtime=runtime or self.runtime
+        if not runtime or not self.topology_edges: return
+        node_names={str(edge[0]) for edge in self.topology_edges}|{str(edge[1]) for edge in self.topology_edges}
+        local_waypoints={name:self._world_to_navigation(tuple(self.waypoints[name][:2])) for name in node_names if name in self.waypoints}
+        if len(local_waypoints) < 2: return
+        costmap=OccupancyGrid.from_corridor_graph(
+            local_waypoints,self.topology_edges,
+            CostmapConfig(resolution=.20,corridor_width=2.0,robot_radius=.28,margin=1.0,junction_radius=2.0),
+        )
+        runtime.navigation.configure_costmap(costmap)
 
     def _record_pose(self, pose: List[float], source: str, timestamp: Optional[float]) -> None:
         with self._pose_lock:
@@ -859,7 +880,7 @@ class SimRobot:
                     mapped={
                         CommandStatus.BLOCKED:"BLOCKED",CommandStatus.SENSOR_UNAVAILABLE:"SENSOR_UNAVAILABLE",
                         CommandStatus.LOCALIZATION_UNAVAILABLE:"LOCALIZATION_UNAVAILABLE",CommandStatus.GROUND_TRUTH_MISMATCH:"LOCALIZATION_UNAVAILABLE",
-                        CommandStatus.TIMEOUT:"TIMEOUT",CommandStatus.REJECTED:"FAILED",CommandStatus.CANCELLED:"FAILED",
+                        CommandStatus.TIMEOUT:"TIMEOUT",CommandStatus.NO_PATH:"BLOCKED",CommandStatus.INVALID_DESTINATION:"INVALID_DESTINATION",CommandStatus.REJECTED:"FAILED",CommandStatus.CANCELLED:"FAILED",
                     }.get(st.status,"FAILED")
                     return finish(mapped,f"Navigation {st.status.value}: {st.reason or 'arrival was not verified'} (failed to reach {wp_name})",blocked_zone=wp_name,verification=st.details,verification_source=st.details.get("verification_source"))
                 self.current_zone = wp_name

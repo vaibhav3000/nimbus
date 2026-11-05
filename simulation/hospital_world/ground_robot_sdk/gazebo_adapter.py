@@ -87,16 +87,17 @@ class GazeboAdapter(RobotAdapter):
         for value in msg.ranges:
             value=float(value)
             if math.isinf(value) and value > 0: value=float(msg.range_max)
-            if not math.isfinite(value) or value < msg.range_min or value > msg.range_max: continue
-            values.append(value)
-        if not values: return
+            values.append(value if math.isfinite(value) and msg.range_min <= value <= msg.range_max else float("nan"))
+        valid=[value for value in values if math.isfinite(value)]
+        if not valid: return
         center=len(msg.ranges)//2; central=[]
         for index in range(max(0,center-1),min(len(msg.ranges),center+2)):
             value=float(msg.ranges[index])
             if math.isinf(value) and value > 0: value=float(msg.range_max)
             if math.isfinite(value) and msg.range_min <= value <= msg.range_max: central.append(value)
         if not central: return
-        stamp=msg.header.stamp.sec+msg.header.stamp.nanosec/1e9; self._range_callback(RangeScan(tuple(values),min(central),min(values),stamp))
+        stamp=msg.header.stamp.sec+msg.header.stamp.nanosec/1e9
+        self._range_callback(RangeScan(tuple(values),min(central),min(valid),stamp,float(msg.angle_min),float(msg.angle_increment),float(msg.range_min),float(msg.range_max)))
     def _on_pose(self,msg):
         if not getattr(msg,"transforms",None): return
         candidates=list(msg.transforms)
