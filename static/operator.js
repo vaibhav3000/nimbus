@@ -41,14 +41,29 @@ async function refreshTasks() {
   }
 }
 
+function displayItemName(item) {
+  if (item === "infusion_pump_paediatric") return "pediatric_infusion_pump";
+  return item;
+}
+
 async function refreshStock() {
   const { data } = await api("GET", "/fleet");
   const clusters = data.fleet;
-  const items = [...new Set(clusters.flatMap((c) => Object.keys(c.stock)))].sort();
+  const rawItems = [...new Set(clusters.flatMap((c) => Object.keys(c.stock)))];
+  const itemsMap = new Map();
+  for (const item of rawItems) {
+    const display = displayItemName(item);
+    if (!itemsMap.has(display)) {
+      itemsMap.set(display, item);
+    }
+  }
+  const displayItems = [...itemsMap.keys()].sort();
   $("stock-head").innerHTML = `<tr><th>item</th>${clusters.map((c) =>
     `<th>${esc(c.cluster_id)} <span class="muted">${esc(c.health)}</span></th>`).join("")}</tr>`;
-  $("stock-rows").innerHTML = items.map((item) =>
-    `<tr><td>${esc(item)}</td>${clusters.map((c) => `<td>${esc(c.stock[item] ?? 0)}</td>`).join("")}</tr>`).join("");
+  $("stock-rows").innerHTML = displayItems.map((display) => {
+    const raw = itemsMap.get(display);
+    return `<tr><td>${esc(display)}</td>${clusters.map((c) => `<td>${esc(c.stock[raw] ?? c.stock[display] ?? 0)}</td>`).join("")}</tr>`;
+  }).join("");
 }
 
 async function selectTask(taskId) {
@@ -119,11 +134,122 @@ async function refreshFault() {
   }
 }
 
+async function updateLlmStatus() {
+  const badge = $("llm-status-badge");
+  if (!badge) return;
+
+  try {
+    const { status, data } = await api("GET", "/llm-status");
+    if (status === 200 && data && data.status) {
+      if (data.status === "live") {
+        badge.textContent = "LLM: Bedrock (live)";
+        badge.className = "llm-badge llm-live";
+      } else if (data.status === "fallback") {
+        badge.textContent = "LLM: rule fallback";
+        badge.className = "llm-badge llm-fallback";
+      } else {
+        badge.textContent = "LLM: unknown";
+        badge.className = "llm-badge llm-unknown";
+      }
+      return;
+    }
+  } catch (e) {
+    // fallback to timeline inspection
+  }
+
+  try {
+    const { status: tStatus, data: tData } = await api("GET", "/tasks");
+    if (tStatus !== 200 || !tData.tasks || tData.tasks.length === 0) {
+      badge.textContent = "LLM: unknown";
+      badge.className = "llm-badge llm-unknown";
+      return;
+    }
+    const tasks = tData.tasks;
+    let latestLlm = null;
+    for (let t = tasks.length - 1; t >= 0 && !latestLlm; t--) {
+      const taskId = tasks[t].task_id;
+      const { status: tlStatus, data: tlData } = await api("GET", `/tasks/${taskId}/timeline`);
+      if (tlStatus !== 200 || !tlData.timeline) continue;
+      for (let i = tlData.timeline.length - 1; i >= 0; i--) {
+        const row = tlData.timeline[i];
+        if (row.output && row.output.llm) {
+          latestLlm = row.output.llm;
+          break;
+        }
+      }
+    }
+    if (!latestLlm) {
+      badge.textContent = "LLM: unknown";
+      badge.className = "llm-badge llm-unknown";
+    } else if (latestLlm.tokens_estimated === false && latestLlm.model) {
+      badge.textContent = "LLM: Bedrock (live)";
+      badge.className = "llm-badge llm-live";
+    } else {
+      badge.textContent = "LLM: rule fallback";
+      badge.className = "llm-badge llm-fallback";
+    }
+  } catch (e) {
+    badge.textContent = "LLM: unknown";
+    badge.className = "llm-badge llm-unknown";
+  }
+}
+
+function setupStockControls() {
+  const setBtn = $("set-stock-btn");
+  const resetBtn = $("reset-stock-btn");
+  if (setBtn) {
+    setBtn.onclick = async () => {
+      const cluster = $("stock-cluster-select")?.value || "east-wing";
+      const item = $("stock-item-select")?.value || "pediatric_infusion_pump";
+      const qtyVal = $("stock-qty-input")?.value;
+      const qty = parseInt(qtyVal, 10);
+      if (isNaN(qty) || qty < 0) return;
+      setBtn.disabled = true;
+      try {
+        await api("POST", "/fleet/stock", {
+          cluster_id: cluster,
+          stock: { [item]: qty }
+        });
+        await refreshStock();
+        await refreshTasks();
+      } catch (err) {
+        console.error("Failed to set stock:", err);
+      } finally {
+        setBtn.disabled = false;
+      }
+    };
+  }
+  if (resetBtn) {
+    resetBtn.onclick = async () => {
+      const cluster = $("stock-cluster-select")?.value || "east-wing";
+      const item = $("stock-item-select")?.value || "pediatric_infusion_pump";
+      resetBtn.disabled = true;
+      try {
+        await api("POST", "/inventory/reset", {
+          cluster_id: cluster,
+          item: item
+        });
+        const qtyInput = $("stock-qty-input");
+        if (qtyInput) qtyInput.value = "0";
+        await refreshStock();
+        await refreshTasks();
+      } catch (err) {
+        console.error("Failed to reset stock:", err);
+      } finally {
+        resetBtn.disabled = false;
+      }
+    };
+  }
+}
+
 refreshTasks();
 refreshFleet();
 refreshFault();
+updateLlmStatus();
+setupStockControls();
 setInterval(() => {
   refreshTasks();
   refreshFleet();
   refreshFault();
 }, 4000);
+setInterval(updateLlmStatus, 5000);

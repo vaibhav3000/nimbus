@@ -35,6 +35,68 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 _STATE_LOCK = threading.RLock()
 TERMINAL_STATUSES = ("completed", "cancelled", "rejected")
 
+INVENTORY_FILE = Path("data/inventory.json")
+
+ITEM_ALIASES = {
+    "pediatric_infusion_pump": "infusion_pump_paediatric",
+    "paediatric_infusion_pump": "infusion_pump_paediatric",
+}
+
+
+def canonical_item(name: str) -> str:
+    return ITEM_ALIASES.get(name, name)
+
+
+def load_inventory_file(path: Path = INVENTORY_FILE) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_inventory_file(data: dict, path: Path = INVENTORY_FILE) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, sort_keys=True)
+    tmp.replace(path)
+
+
+def build_inventory_snapshot(fleet) -> dict:
+    out = {}
+    for cid, c in fleet.clusters.items():
+        stock_copy = dict(sorted(c["stock"].items()))
+        if "infusion_pump_paediatric" in stock_copy:
+            stock_copy["pediatric_infusion_pump"] = stock_copy["infusion_pump_paediatric"]
+        out[cid] = stock_copy
+    return out
+
+
+def sync_fleet_to_inventory(fleet, path: Path = INVENTORY_FILE) -> dict:
+    data = build_inventory_snapshot(fleet)
+    save_inventory_file(data, path)
+    return data
+
+
+def sync_inventory_to_fleet(fleet, path: Path = INVENTORY_FILE) -> None:
+    if not path.exists():
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return
+        for cid, items in data.items():
+            if cid in fleet.clusters and isinstance(items, dict):
+                for item, qty in items.items():
+                    if isinstance(qty, int) and not isinstance(qty, bool) and qty >= 0:
+                        canonical = canonical_item(item)
+                        fleet.clusters[cid]["stock"][canonical] = qty
+    except Exception:
+        pass
+
 
 def make_decision_row(orch: Orchestrator, who: str, inputs: dict, output: dict, lease_version, task_id: str) -> dict:
     """One decision-log entry (FR-20 contract shape)."""
@@ -92,6 +154,8 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
             task["lease"] = outcome.lease
             if outcome.reservation:
                 task["reservation"], task["stock_released"] = outcome.reservation, False
+                inv_path = getattr(orch, "inventory_path", INVENTORY_FILE)
+                sync_fleet_to_inventory(orch.fleet, inv_path)
         elif outcome.kind == "queued":
             task["status"], task["reason"] = "queued", outcome.reason
         elif outcome.kind == "rejected":
@@ -302,6 +366,46 @@ class Handler(BaseHTTPRequestHandler):
                                   "rules": [r["id"] for r in pk.rules],
                                   "restrictions": sorted(pk.restrictions),
                                   "tools": {s: self.orch.tools.names(s) for s in pk.doc["steps"]}})
+        elif path == "/inventory":
+            inv_path = getattr(self.orch, "inventory_path", INVENTORY_FILE)
+            with _STATE_LOCK:
+                inv = load_inventory_file(inv_path)
+                if not inv:
+                    inv = sync_fleet_to_inventory(self.orch.fleet, inv_path)
+                self._send_json(200, inv)
+        elif path == "/llm-status":
+            with _STATE_LOCK:
+                is_bedrock_configured = (os.environ.get("NIMBUS_LLM") == "bedrock")
+                fault_down = getattr(getattr(self.orch, "faults", None), "down", False)
+                cb_open = (getattr(getattr(self.orch, "llm", None), "state", None) == "open")
+
+                tasks = self.store.all_tasks()
+                latest_llm = None
+                for t in reversed(tasks):
+                    tl = self.store.timeline(t["task_id"])
+                    for row in reversed(tl):
+                        if isinstance(row.get("output"), dict) and row["output"].get("llm"):
+                            latest_llm = row["output"]["llm"]
+                            break
+                    if latest_llm:
+                        break
+
+                if not is_bedrock_configured or fault_down or cb_open:
+                    status_label = "fallback"
+                elif latest_llm and (latest_llm.get("tokens_estimated") is True or latest_llm.get("fallback_reason") or latest_llm.get("model") == "rule-based-stand-in"):
+                    status_label = "fallback"
+                elif is_bedrock_configured:
+                    status_label = "live"
+                else:
+                    status_label = "fallback"
+
+                self._send_json(200, {
+                    "status": status_label,
+                    "llm": latest_llm,
+                    "configured": "bedrock" if is_bedrock_configured else "fake",
+                    "fault_down": fault_down,
+                    "circuit_open": cb_open
+                })
         elif path == "/outbox":
             active_only = "active=1" in (self.path.split("?", 1)[1] if "?" in self.path else "")
             self._send_json(200, {"outbox": self._live_outbox() if active_only else self.store.outbox()})
@@ -361,8 +465,10 @@ class Handler(BaseHTTPRequestHandler):
             self._post_escalation(body)
         elif path == "/fleet/heartbeat":
             self._post_heartbeat(body)
-        elif path == "/fleet/stock":
+        elif path in ("/fleet/stock", "/inventory/stock"):
             self._post_stock(body)
+        elif path == "/inventory/reset":
+            self._post_inventory_reset(body)
         elif path.startswith("/tasks/") and path.endswith("/replan"):
             self._post_replan(path.split("/")[2], body)
         elif path == "/checkins":
@@ -673,24 +779,53 @@ class Handler(BaseHTTPRequestHandler):
     def _post_stock(self, body: dict):
         """Operator restock (added by P3): set absolute counts for one cluster,
         then retry the queued tasks that were waiting on stock."""
-        cluster_id, counts = body.get("cluster_id"), body.get("stock")
+        cluster_id, raw_counts = body.get("cluster_id"), body.get("stock")
         allow_unknown = os.environ.get("NIMBUS_ALLOW_UNKNOWN", "0").lower() in ("1", "true", "yes")
         if not allow_unknown and cluster_id not in self.orch.fleet.clusters:
             self._send_json(404, {"error": f"unknown cluster {cluster_id!r}"})
             return
-        known_items = {i["id"] for i in self.orch.pack.items}
-        if (not isinstance(counts, dict) or not counts
-                or not all(isinstance(q, int) and not isinstance(q, bool) and q >= 0 for q in counts.values())):
+        if (not isinstance(raw_counts, dict) or not raw_counts
+                or not all(isinstance(q, int) and not isinstance(q, bool) and q >= 0 for q in raw_counts.values())):
             self._send_json(400, {"error": "stock must be a non-empty object of item -> whole number >= 0"})
             return
+        counts = {canonical_item(k): v for k, v in raw_counts.items()}
+        known_items = {i["id"] for i in self.orch.pack.items}
         unknown = sorted(set(counts) - known_items)
         if unknown:
             self._send_json(400, {"error": f"unknown items {unknown}"})
             return
         self.cost.record(dynamodb_ops=len(counts))
         new_counts = self.orch.fleet.set_stock(cluster_id, counts)
+        inv_path = getattr(self.orch, "inventory_path", INVENTORY_FILE)
+        sync_fleet_to_inventory(self.orch.fleet, inv_path)
         self._drain()  # restocked items may unblock queued work; do it before replying so the console is current
-        self._send_json(201, {"accepted": True, "cluster_id": cluster_id, "stock": new_counts})
+        sync_fleet_to_inventory(self.orch.fleet, inv_path)
+        res_stock = dict(new_counts)
+        if "infusion_pump_paediatric" in res_stock:
+            res_stock["pediatric_infusion_pump"] = res_stock["infusion_pump_paediatric"]
+        self._send_json(201, {"accepted": True, "cluster_id": cluster_id, "stock": res_stock})
+
+    def _post_inventory_reset(self, body: dict):
+        """Reset selected item (or all stock) back to zero or default."""
+        cluster_id = body.get("cluster_id", "east-wing")
+        item = body.get("item")
+        if cluster_id not in self.orch.fleet.clusters:
+            self._send_json(404, {"error": f"unknown cluster {cluster_id!r}"})
+            return
+        inv_path = getattr(self.orch, "inventory_path", INVENTORY_FILE)
+        if item:
+            item_id = canonical_item(item)
+            self.orch.fleet.set_stock(cluster_id, {item_id: 0})
+        else:
+            stock = self.orch.fleet.clusters[cluster_id]["stock"]
+            self.orch.fleet.set_stock(cluster_id, {k: 0 for k in stock})
+        sync_fleet_to_inventory(self.orch.fleet, inv_path)
+        self._drain()
+        sync_fleet_to_inventory(self.orch.fleet, inv_path)
+        res_stock = dict(self.orch.fleet.clusters[cluster_id]["stock"])
+        if "infusion_pump_paediatric" in res_stock:
+            res_stock["pediatric_infusion_pump"] = res_stock["infusion_pump_paediatric"]
+        self._send_json(200, {"accepted": True, "cluster_id": cluster_id, "stock": res_stock})
 
     def _post_replan(self, task_id: str, body: dict):
         """Issue lease v(n+1) avoiding blocked zones: the explicit trigger for
@@ -1183,6 +1318,11 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
 
     orch = Orchestrator.from_env(data_dir, publish)
     orch.load_task = store.get_task
+    orch.inventory_path = data_dir / "inventory.json"
+    if orch.inventory_path.exists():
+        sync_inventory_to_fleet(orch.fleet, orch.inventory_path)
+    else:
+        sync_fleet_to_inventory(orch.fleet, orch.inventory_path)
     wire_store(orch.trace, store)   # P3: every message and decision becomes a trace event (see /tasks/{id}/trace)
     orch.recover(store.all_tasks())
 
