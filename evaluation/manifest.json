@@ -1,38 +1,43 @@
 {
- "note": "Every dataset used by the experiments. Only synthetic data is allowed (PRD NFR-5, checked by scripts/audit_data.py).",
- "datasets": [
-  {
-   "path": "evaluation/e2/requests.json",
-   "synthetic": true,
-   "description": "50 staff requests, a quarter vague, template-generated"
-  },
-  {
-   "path": "evaluation/e2/rules.json",
-   "synthetic": true,
-   "description": "10 plain-language rule statements"
-  },
-  {
-   "path": "evaluation/e2/context.json",
-   "synthetic": true,
-   "description": "20 context-dependent requests with habit setup"
-  },
-  {
-   "path": "traces/iisc_basement.csv",
-   "description": "short synthetic network RTT/loss example for local testing (no personal data)",
-   "contains_personal_data": false,
-   "synthetic": true
-  },
-  {
-   "path": "traces/iisc_corridor.csv",
-   "description": "short synthetic network RTT/loss example for local testing (no personal data)",
-   "contains_personal_data": false,
-   "synthetic": true
-  },
-  {
-   "path": "traces/iisc_lift.csv",
-   "description": "short synthetic network RTT/loss example for local testing (no personal data)",
-   "contains_personal_data": false,
-   "synthetic": true
-  }
- ]
+  "note": "Every dataset used by the experiments. Only synthetic data is allowed (PRD NFR-5, checked by scripts/audit_data.py).",
+  "datasets": [
+    {
+      "path": "P2_Results/e2_situations.json",
+      "synthetic": true,
+      "description": "40 hospital tactical autonomy situations across 6 clinical categories"
+    },
+    {
+      "path": "evaluation/e2/requests.json",
+      "synthetic": true,
+      "description": "50 staff requests, a quarter vague, template-generated"
+    },
+    {
+      "path": "evaluation/e2/rules.json",
+      "synthetic": true,
+      "description": "10 plain-language rule statements"
+    },
+    {
+      "path": "evaluation/e2/context.json",
+      "synthetic": true,
+      "description": "20 context-dependent requests with habit setup"
+    },
+    {
+      "path": "traces/iisc_basement.csv",
+      "description": "short synthetic network RTT/loss example for local testing (no personal data)",
+      "contains_personal_data": false,
+      "synthetic": true
+    },
+    {
+      "path": "traces/iisc_corridor.csv",
+      "description": "short synthetic network RTT/loss example for local testing (no personal data)",
+      "contains_personal_data": false,
+      "synthetic": true
+    },
+    {
+      "path": "traces/iisc_lift.csv",
+      "description": "short synthetic network RTT/loss example for local testing (no personal data)",
+      "contains_personal_data": false,
+      "synthetic": true
+    }
+  ]
 }

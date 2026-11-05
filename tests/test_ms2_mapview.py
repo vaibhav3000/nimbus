@@ -25,7 +25,7 @@ def test_map_json_has_p1_coordinates_edges_and_fleet(api, monkeypatch):
         _, m = http_json("GET", base + "/map.json")
         nodes = {n["id"]: n for n in m["nodes"]}
         assert (nodes["east_waiting_approach"]["x"], nodes["east_waiting_approach"]["y"]) == (4.5, 8.0)   # P1's waypoint
-        assert len(m["edges"]) == 15 and {r["id"] for r in m["robots"]} == {"robot_1", "robot_2"}
+        assert len(m["edges"]) == 17 and {r["id"] for r in m["robots"]} == {"robot_1", "robot_2"}
     finally:
         httpd.shutdown()
 

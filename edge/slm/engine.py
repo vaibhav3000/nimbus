@@ -234,7 +234,13 @@ class EdgeSLMEngine:
             }
 
         # Case 2: Robot hardware fault or depleted battery -> SWAP_ROBOT
-        if "fault" in event or "battery" in event or "stall" in event or "fail" in event or "motor" in event or "encoder" in event or "sensor" in event or "camera" in event or context.get("has_fault"):
+        has_hw_fault = (
+            bool(context.get("has_fault"))
+            or any(w in event for w in ["motor", "encoder", "battery", "stall", "hardware fault", "hardware failure", "device failure", "actuator"])
+            or ("fault" in event and "no fault" not in event and "default" not in event)
+            or ("fail" in event and not any(nw in event for nw in ["failed to reach", "navigation", "arrival", "blocked", "path", "corridor", "timeout"]))
+        )
+        if has_hw_fault:
             assigned = context.get("assigned_robots", [])
             current_robot = context.get("robot_id", "")
             failed = set(context.get("failed_robots", []))
@@ -336,7 +342,12 @@ class EdgeSLMEngine:
                 "reason": "Rule fallback: Lease expiry imminent (<30s)."
             }
         # Rule 2: Robot fault -> swap robot if possible
-        elif "fault" in event or "battery" in event or "stall" in event or "fail" in event or "motor" in event or "encoder" in event or "sensor" in event or "camera" in event or context.get("has_fault"):
+        elif (
+            bool(context.get("has_fault"))
+            or any(w in event for w in ["motor", "encoder", "battery", "stall", "hardware fault", "hardware failure", "device failure", "actuator"])
+            or ("fault" in event and "no fault" not in event and "default" not in event)
+            or ("fail" in event and not any(nw in event for nw in ["failed to reach", "navigation", "arrival", "blocked", "path", "corridor", "timeout"]))
+        ):
             assigned = context.get("assigned_robots", [])
             current_robot = context.get("robot_id", "")
             failed = set(context.get("failed_robots", []))

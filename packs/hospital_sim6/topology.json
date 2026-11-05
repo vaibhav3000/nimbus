@@ -66,13 +66,23 @@
     ],
     [
       "west_south_hall",
+      "west_south_hall_corner",
+      7.0
+    ],
+    [
+      "west_south_hall_corner",
       "south_equipment_approach",
-      8.32
+      4.5
     ],
     [
       "east_south_hall",
+      "east_south_hall_corner",
+      7.0
+    ],
+    [
+      "east_south_hall_corner",
       "south_equipment_approach",
-      8.32
+      4.5
     ],
     [
       "south_equipment_approach",
@@ -111,6 +121,16 @@
         -8.0
       ],
       "speed_cap": 0.4,
+      "wing": "east"
+    },
+    "east_south_hall_corner": {
+      "area": "east",
+      "kind": "corridor",
+      "pos": [
+        4.5,
+        -15.0
+      ],
+      "speed_cap": 0.35,
       "wing": "east"
     },
     "east_waiting_approach": {
@@ -229,6 +249,16 @@
         -8.0
       ],
       "speed_cap": 0.4,
+      "wing": "west"
+    },
+    "west_south_hall_corner": {
+      "area": "west",
+      "kind": "corridor",
+      "pos": [
+        -4.5,
+        -15.0
+      ],
+      "speed_cap": 0.35,
       "wing": "west"
     },
     "west_waiting_approach": {
