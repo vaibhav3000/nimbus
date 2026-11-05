@@ -64,37 +64,51 @@ class EdgeSLMEngine:
         """Formats tactical prompt according to SPEC-P2 Sec 4.2."""
         allowed_zones = context.get("allowed_zones", [])
         forbidden_zones = context.get("forbidden_zones", [])
+        cluster = context.get("cluster_id", "edge")
         prompt = (
             "<|im_start|>system\n"
-            "You are the Nimbus Edge Cluster Tactical Supervisor for the hospital East Wing.\n"
-            "Your job is to make bounded tactical decisions for mobile delivery robots.\n"
-            "You can ONLY output valid JSON adhering to the specified schema.\n"
-            "Allowed actions:\n"
-            "1. \"DISPATCH_STEP\" (proceed with next sub-task)\n"
-            "2. \"LOCAL_DETOUR\" (detour via adjacent clear waypoint within allowed zones)\n"
-            "3. \"LOCAL_WAIT\" (wait up to 30 seconds for dynamic obstacle to pass)\n"
-            "4. \"SWAP_ROBOT\" (reassign sub-task to idle robot in same cluster)\n"
-            "5. \"ESCALATE_CLARIFY\" (ask cloud for user clarification)\n"
-            "6. \"ESCALATE_UNEXPECTED\" (report unsolvable event / route closure / lease breach)\n"
-            "7. \"SAFE_PARK\" (lease expiry is imminent (<30s remaining))\n\n"
+            f"You are the tactical supervisor of the {cluster} edge cluster of a hospital delivery-robot fleet.\n"
+            "A robot reported a problem. Choose exactly ONE action and answer ONLY with the JSON object requested.\n\n"
+            "STEP 1. Decide the CAUSE from \"Current Event\":\n"
+            "- PERSON_OR_TRANSIENT: a person, patient, visitor, staff, trolley, cart, wheelchair, or "
+            "\"front obstacle is inside safety distance\". It usually clears within seconds.\n"
+            "- STATIC: wall, furniture, pallet, spill, ladder, maintenance, or still blocked after several waits.\n"
+            "- ROBOT_STUCK: \"departed the traversable costmap\", localization/odometry/sensor stale, stall, fault, battery. "
+            "The robot itself is the problem. Waiting never fixes this.\n"
+            "- CLOSED: door closed, locked, lockdown, cordon, barrier, \"no route\".\n"
+            "- UNCLEAR: you cannot tell what the obstacle is.\n\n"
+            "STEP 2. Choose the action:\n"
+            "- PERSON_OR_TRANSIENT and Wait Count < 3 -> LOCAL_WAIT.\n"
+            "- PERSON_OR_TRANSIENT and Wait Count >= 3, or STATIC -> LOCAL_DETOUR if Allowed Next Waypoints is not empty, "
+            "else ESCALATE_UNEXPECTED.\n"
+            "- ROBOT_STUCK -> SWAP_ROBOT if Idle Robots is not empty, else ESCALATE_UNEXPECTED.\n"
+            "- CLOSED -> ESCALATE_UNEXPECTED.\n"
+            "- UNCLEAR -> ESCALATE_CLARIFY.\n"
+            "- Time Remaining below 30 -> SAFE_PARK.\n\n"
             "RULES:\n"
             f"- Never exceed allowed zones: {allowed_zones}\n"
             f"- Never enter forbidden zones: {forbidden_zones}\n"
-            "- If lease expires in < 30 seconds, choose \"SAFE_PARK\"\n"
-            "- Keep explanation under 20 words.\n"
+            "- target_waypoint must be one of Allowed Next Waypoints (for SWAP_ROBOT: one of Idle Robots), otherwise null.\n"
+            "- \"reason\" is at most 20 words and may only use facts shown below. Never state a lease time, "
+            "zone or robot that is not in the text.\n\n"
+            "EXAMPLES:\n"
+            "Event: Navigation blocked: front obstacle is inside safety distance | Wait Count: 0 -> "
+            "{\"action\":\"LOCAL_WAIT\",\"target_waypoint\":null,\"reason\":\"Person or object ahead; waiting for it to clear.\"}\n"
+            "Event: Navigation blocked: robot departed the traversable costmap | Idle Robots: [R3] -> "
+            "{\"action\":\"SWAP_ROBOT\",\"target_waypoint\":\"R3\",\"reason\":\"Robot left the map; waiting will not help.\"}\n"
+            "Event: corridor closed, lockdown | Wait Count: 0 -> "
+            "{\"action\":\"ESCALATE_UNEXPECTED\",\"target_waypoint\":null,\"reason\":\"Corridor is closed; no local alternative.\"}\n"
             "<|im_end|>\n"
             "<|im_start|>user\n"
             f"Current Lease: {context.get('lease_id')} (Version {context.get('version')})\n"
             f"Time Remaining: {context.get('time_remaining_sec')}s\n"
             f"Assigned Robot: {context.get('robot_id')} at {context.get('current_pos')} (Zone: {context.get('current_zone')})\n"
+            f"Wait Count: {context.get('wait_count', 0)}\n"
+            f"Idle Robots: {context.get('idle_robots', [])}\n"
             f"Current Event: {context.get('event_description')}\n"
             f"Allowed Next Waypoints: {context.get('allowed_waypoints')}\n\n"
             "Respond in JSON format:\n"
-            "{\n"
-            "  \"action\": \"<action_name>\",\n"
-            "  \"target_waypoint\": \"<waypoint_id_or_null>\",\n"
-            "  \"reason\": \"<short_explanation>\"\n"
-            "}\n"
+            "{\"action\": \"<action_name>\", \"target_waypoint\": \"<waypoint_id_or_null>\", \"reason\": \"<short_explanation>\"}\n"
             "<|im_end|>\n"
             "<|im_start|>assistant\n"
         )
@@ -123,6 +137,20 @@ class EdgeSLMEngine:
                 "target_waypoint": "safe-parking-bay-1",
                 "reason": "Lease expiry imminent (<30s remaining)."
             }, "RULE", latency_ms
+
+        # 1b. Deterministic rule: the robot itself is stuck / off the map. Waiting never fixes this, and a small
+        #     model must not be allowed to wait three times on it (seen live: "departed the traversable costmap").
+        ev_low = str(context.get("event_description", "")).lower()
+        if any(w in ev_low for w in ("departed the traversable costmap", "localization", "odometry is stale")):
+            current = context.get("robot_id", "")
+            failed = set(context.get("failed_robots", [])) | {current}
+            idle = context.get("idle_robots") or [r for r in context.get("assigned_robots", []) if r not in failed]
+            latency_ms = (time.time() - start_time) * 1000.0
+            if idle:
+                return {"action": "SWAP_ROBOT", "target_waypoint": idle[0],
+                        "reason": "Robot left the map or lost localization; waiting will not help."}, "RULE", latency_ms
+            return {"action": "ESCALATE_UNEXPECTED", "target_waypoint": None,
+                    "reason": "Robot is stuck and no idle robot is available."}, "RULE", latency_ms
 
         # 2. Try Ollama local inference
         if self.mode == "ollama":
