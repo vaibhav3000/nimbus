@@ -11,7 +11,10 @@
 CLUSTER="${1:-east-wing}"
 CLOUD="${2:-http://127.0.0.1:8000}"
 ROBOT="${3:-robot_1}"
-DB="${EDGE_DB:-edge_${CLUSTER//-/_}.db}"
+for f in /opt/ros/*/setup.bash; do [ -f "$f" ] && { source "$f"; break; }; done
+DB="${EDGE_DB:-}"
+if [ -z "$DB" ]; then for d in "data/edge_${CLUSTER//-/_}.db" "edge_${CLUSTER//-/_}.db"; do [ -f "$d" ] && DB="$d" && break; done; fi
+DB="${DB:-data/edge_${CLUSTER//-/_}.db}"
 TOKEN_HDR=()
 [ -n "${NIMBUS_EDGE_TOKEN:-}" ] && TOKEN_HDR=(-H "Authorization: Bearer ${NIMBUS_EDGE_TOKEN}")
 
@@ -19,10 +22,7 @@ hr() { printf '\n=== %s ===\n' "$1"; }
 
 hr "0. Tools (sqlite3 CLI is optional: python3's sqlite3 is used when it is missing)"
 if ! command -v sqlite3 >/dev/null 2>&1; then
-  echo "sqlite3 CLI not found; trying to install it (needs sudo on Linux; Homebrew on macOS)"
-  if command -v apt-get >/dev/null 2>&1; then sudo apt-get install -y sqlite3 || echo "install failed; using python3 instead"
-  elif command -v brew >/dev/null 2>&1; then brew install sqlite || echo "install failed; using python3 instead"
-  else echo "no package manager found; using python3 instead"; fi
+  echo "sqlite3 CLI not found; using python3 instead"
 fi
 command -v sqlite3 >/dev/null 2>&1 && echo "sqlite3: $(sqlite3 --version | cut -d' ' -f1)" || echo "sqlite3 CLI: not available (python3 fallback)"
 command -v curl >/dev/null 2>&1 || { echo "curl is required (sudo apt-get install -y curl)"; exit 1; }
