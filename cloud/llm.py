@@ -188,17 +188,22 @@ class BedrockLLM:
         self.max_tokens = max_tokens
         self.temperature = temperature
         if client is None:
-            import boto3
-            from botocore.config import Config
+            try:
+                import boto3
+                from botocore.config import Config
 
-            client = boto3.client("bedrock-runtime", region_name=region,
-                                  config=Config(connect_timeout=3, read_timeout=read_timeout_s,
-                                                retries={"max_attempts": 1}))
+                client = boto3.client("bedrock-runtime", region_name=region,
+                                      config=Config(connect_timeout=3, read_timeout=read_timeout_s,
+                                                    retries={"max_attempts": 1}))
+            except ImportError:
+                client = None
         self.client = client
 
     def converse(self, *, system: str, messages: list, tools: list, tool_choice=None,
                  context=None, fleet_view=None) -> LLMResult:
         t0 = time.perf_counter()
+        if self.client is None:
+            raise LLMError("boto3 is not installed")
         try:
             resp = self.client.converse(
                 modelId=self.model_id,
