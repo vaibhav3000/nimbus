@@ -12,7 +12,7 @@ set -uo pipefail
 cd "$(dirname "$0")"
 ROOT="$PWD"
 MODE="${1:-auto}"
-LOGS="$ROOT/logs"; PIDS="$LOGS/pids"; mkdir -p "$LOGS"; : > "$PIDS"
+LOGS="${LOGS_DIR:-$ROOT/logs}"; PIDS="$LOGS/pids"; mkdir -p "$LOGS"; : > "$PIDS"
 
 # --- environment (ROS 2 if present) -------------------------------------------------------------
 for f in /opt/ros/*/setup.bash; do [ -f "$f" ] && { set +u; source "$f"; set -u; break; }; done
@@ -33,7 +33,7 @@ CLOUD="http://127.0.0.1:$PORT"
 start() { local name="$1"; shift; "$@" > "$LOGS/$name.log" 2>&1 & echo $! >> "$PIDS"; echo "   started $name (pid $!, log logs/$name.log)"; }
 waitfor() { for _ in $(seq 1 "${3:-60}"); do curl -fs "$1" >/dev/null 2>&1 && return 0; sleep 1; done; echo "!! $2 did not come up (see logs/)"; return 1; }
 
-./stop_all.sh quiet 2>/dev/null || true
+LOGS_DIR="$LOGS" ./stop_all.sh quiet 2>/dev/null || true
 : > "$PIDS"
 [ "${KEEP_DATA:-0}" = 1 ] || rm -rf "$DATA_DIR" "$ROOT"/edge_*.db
 mkdir -p "$DATA_DIR"
@@ -49,8 +49,8 @@ if [ "$MODE" = gazebo ]; then
   SIM_ARGS=(--robot-backend sim --sim-mode gazebo --gazebo-validation odometry)
 else
   echo "== starting kinematic viewer"
-  start viewer python3 simulation/lite/viewer.py --port 8090 --cloud "$CLOUD"
-  export NIMBUS_SIM_VIEWER_URL="http://127.0.0.1:8090"
+  start viewer python3 simulation/lite/viewer.py --port "${VIEWER_PORT:-8090}" --cloud "$CLOUD"
+  export NIMBUS_SIM_VIEWER_URL="http://127.0.0.1:${VIEWER_PORT:-8090}"
   SIM_ARGS=(--robot-backend sim --sim-mode kinematic)
 fi
 
@@ -70,7 +70,7 @@ echo
 echo "================ Nimbus is up ($MODE) ================"
 echo " Requester app : $CLOUD/            (type: Need an infusion pump at 2B-12, urgent)"
 echo " Operator      : $CLOUD/operator    Map: $CLOUD/map"
-[ "$MODE" = kinematic ] && echo " Robots moving : http://127.0.0.1:8090   (live map of the hospital)"
+[ "$MODE" = kinematic ] && echo " Robots moving : http://127.0.0.1:${VIEWER_PORT:-8090}   (live map of the hospital)"
 [ "$MODE" = gazebo ] && echo " Robots moving : in the Gazebo window (or HEADLESS=1: no window)"
-echo " Scripted demo : python3 scripts/demo_e2e.py"
+echo " Scripted demo : python3 scripts/demo_e2e.py --api $CLOUD"
 echo " Stop          : ./stop_all.sh"

@@ -41,3 +41,5 @@ data/
 results/tmp/
 .hypothesis/
 logs/
+data_standin/
+logs_standin/
