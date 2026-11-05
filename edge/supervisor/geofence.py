@@ -21,7 +21,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [-2.0, 16.5, 2.0, 19.5],
         "zone_type": "gate",
         "wing": "shared",
-        "speed_cap": 0.35,
+        "speed_cap": 1.0,
         "description": "North elevator portal lobby"
     },
     "north_hall": {
@@ -29,7 +29,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [-2.0, 10.5, 2.0, 13.5],
         "zone_type": "corridor",
         "wing": "shared",
-        "speed_cap": 0.45,
+        "speed_cap": 1.0,
         "description": "North central corridor"
     },
     "west_north_gate": {
@@ -37,7 +37,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [-5.5, 13.0, -3.5, 15.0],
         "zone_type": "gate",
         "wing": "west",
-        "speed_cap": 0.30,
+        "speed_cap": 1.0,
         "description": "West north room-band doorway"
     },
     "east_north_gate": {
@@ -45,7 +45,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [3.5, 13.0, 5.5, 15.0],
         "zone_type": "gate",
         "wing": "east",
-        "speed_cap": 0.30,
+        "speed_cap": 1.0,
         "description": "East north room-band doorway"
     },
     "west_waiting_approach": {
@@ -53,7 +53,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [-6.0, 6.5, -3.0, 9.5],
         "zone_type": "zone",
         "wing": "west",
-        "speed_cap": 0.30,
+        "speed_cap": 1.0,
         "description": "West waiting seating approach"
     },
     "east_waiting_approach": {
@@ -61,7 +61,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [3.0, 6.5, 6.0, 9.5],
         "zone_type": "zone",
         "wing": "east",
-        "speed_cap": 0.30,
+        "speed_cap": 1.0,
         "description": "East waiting seating approach"
     },
     "west_mid_hall": {
@@ -69,7 +69,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [-5.5, 1.0, -3.5, 5.0],
         "zone_type": "corridor",
         "wing": "west",
-        "speed_cap": 0.40,
+        "speed_cap": 1.0,
         "description": "West central bypass corridor"
     },
     "east_mid_hall": {
@@ -77,7 +77,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [3.5, 1.0, 5.5, 5.0],
         "zone_type": "corridor",
         "wing": "east",
-        "speed_cap": 0.40,
+        "speed_cap": 1.0,
         "description": "East central bypass corridor"
     },
     "nurse_station_approach": {
@@ -85,7 +85,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [-2.0, 3.5, 2.0, 6.5],
         "zone_type": "zone",
         "wing": "shared",
-        "speed_cap": 0.25,
+        "speed_cap": 1.0,
         "description": "Nurse-station approach"
     },
     "west_south_hall": {
@@ -93,7 +93,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [-5.5, -10.0, -3.5, -6.0],
         "zone_type": "corridor",
         "wing": "west",
-        "speed_cap": 0.40,
+        "speed_cap": 1.0,
         "description": "West south corridor"
     },
     "east_south_hall": {
@@ -101,7 +101,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [3.5, -10.0, 5.5, -6.0],
         "zone_type": "corridor",
         "wing": "east",
-        "speed_cap": 0.40,
+        "speed_cap": 1.0,
         "description": "East south corridor"
     },
     "south_equipment_approach": {
@@ -109,7 +109,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [-2.5, -17.0, 2.5, -13.0],
         "zone_type": "zone",
         "wing": "shared",
-        "speed_cap": 0.25,
+        "speed_cap": 1.0,
         "description": "South equipment-room approach"
     },
     "south_room_approach": {
@@ -117,7 +117,7 @@ DEFAULT_ZONE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "bounds": [-2.5, -30.0, 2.5, -26.0],
         "zone_type": "zone",
         "wing": "shared",
-        "speed_cap": 0.30,
+        "speed_cap": 1.0,
         "description": "South central room approach"
     },
 

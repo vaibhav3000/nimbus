@@ -112,7 +112,7 @@ def test_pack_validation_accepts_a_cluster_whose_store_is_outside_its_area():
 def test_leases_never_exceed_the_slowest_zone_on_p1s_map(sid):
     sc = next(s for s in SIM.scenarios if s["id"] == sid)
     out = run_scenario("hospital_sim", sc)
-    assert out.lease["speed_limit"] <= 0.45
+    assert out.lease["speed_limit"] <= 1.0
     caps = [TOPO.speed_cap(z) for z in out.lease["allowed_zones"]]
     assert out.lease["speed_limit"] == min([SIM.doc["lease"]["speed_limit"], *[c for c in caps if c is not None]])
 

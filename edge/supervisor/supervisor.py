@@ -275,19 +275,19 @@ class EdgeSupervisor:
 
         # Fallback built-in topo-v0 hospital graph
         default_nodes = {
-            "lift_lobby": {"kind": "gate", "speed_cap": 0.35},
-            "north_hall": {"kind": "corridor", "speed_cap": 0.45},
-            "west_north_gate": {"kind": "gate", "speed_cap": 0.30},
-            "east_north_gate": {"kind": "gate", "speed_cap": 0.30},
-            "west_waiting_approach": {"kind": "zone", "speed_cap": 0.30},
-            "east_waiting_approach": {"kind": "zone", "speed_cap": 0.30},
-            "west_mid_hall": {"kind": "corridor", "speed_cap": 0.40},
-            "east_mid_hall": {"kind": "corridor", "speed_cap": 0.40},
-            "nurse_station_approach": {"kind": "zone", "speed_cap": 0.25},
-            "west_south_hall": {"kind": "corridor", "speed_cap": 0.40},
-            "east_south_hall": {"kind": "corridor", "speed_cap": 0.40},
-            "south_equipment_approach": {"kind": "zone", "speed_cap": 0.25},
-            "south_room_approach": {"kind": "zone", "speed_cap": 0.30},
+            "lift_lobby": {"kind": "gate", "speed_cap": 1.0},
+            "north_hall": {"kind": "corridor", "speed_cap": 1.0},
+            "west_north_gate": {"kind": "gate", "speed_cap": 1.0},
+            "east_north_gate": {"kind": "gate", "speed_cap": 1.0},
+            "west_waiting_approach": {"kind": "zone", "speed_cap": 1.0},
+            "east_waiting_approach": {"kind": "zone", "speed_cap": 1.0},
+            "west_mid_hall": {"kind": "corridor", "speed_cap": 1.0},
+            "east_mid_hall": {"kind": "corridor", "speed_cap": 1.0},
+            "nurse_station_approach": {"kind": "zone", "speed_cap": 1.0},
+            "west_south_hall": {"kind": "corridor", "speed_cap": 1.0},
+            "east_south_hall": {"kind": "corridor", "speed_cap": 1.0},
+            "south_equipment_approach": {"kind": "zone", "speed_cap": 1.0},
+            "south_room_approach": {"kind": "zone", "speed_cap": 1.0},
         }
         default_waypoints = {
             "lift_lobby": [0.0, 18.0],
@@ -1042,7 +1042,7 @@ class EdgeSupervisor:
                 if target_dest in self.topology.get("nodes", {}):
                     cap = self.topology["nodes"][target_dest].get("speed_cap")
                     if cap is not None:
-                        params["max_speed"] = min(lease.get("speed_limit", 0.8), cap)
+                        params["max_speed"] = min(lease.get("speed_limit", 1.0), cap)
 
             robot = self.robots.get(robot_id)
             if not robot:

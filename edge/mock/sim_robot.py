@@ -822,9 +822,9 @@ class SimRobot:
                     if wp_xy is None and wp_node in self.waypoints:
                         wp_xy = self.waypoints[wp_node]
                     if wp_xy:
-                        speed_cap = 0.45
+                        speed_cap = 1.0
                         if self.topology_nodes and wp_node in self.topology_nodes:
-                            speed_cap = self.topology_nodes[wp_node].get("speed_cap", 0.45)
+                            speed_cap = self.topology_nodes[wp_node].get("speed_cap", 1.0)
                         waypoints_to_visit.append((wp_node, wp_xy, speed_cap))
 
             if not waypoints_to_visit:
@@ -834,13 +834,13 @@ class SimRobot:
                         target_xy = self.waypoints[target_name]
                 if target_xy is None:
                     return finish("INVALID_DESTINATION",f"Unknown destination: {target_name!r}")
-                waypoints_to_visit.append((target_name or "target", target_xy, float(params.get("speed", params.get("max_speed", 0.45)))))
+                waypoints_to_visit.append((target_name or "target", target_xy, float(params.get("speed", params.get("max_speed", 1.0)))))
 
             # 4. Sequentially execute each corridor waypoint
             for wp_name, wp_xy, wp_speed in waypoints_to_visit:
                 x_sdk, y_sdk = self._world_to_navigation(tuple(wp_xy[:2]))
 
-                req_speed = float(params.get("speed", params.get("max_speed", 0.45)))
+                req_speed = float(params.get("speed", params.get("max_speed", 1.0)))
                 speed = min(req_speed, float(wp_speed))
 
                 task = self.runtime.commands.goto(x_sdk, y_sdk, frame="world", speed=speed)

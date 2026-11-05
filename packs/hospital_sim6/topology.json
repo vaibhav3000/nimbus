@@ -98,7 +98,7 @@
         4.5,
         3.0
       ],
-      "speed_cap": 0.4,
+      "speed_cap": 1.0,
       "wing": "east"
     },
     "east_north_gate": {
@@ -110,7 +110,7 @@
         14.0
       ],
       "reservation_id": "gate:east_north_gate",
-      "speed_cap": 0.3,
+      "speed_cap": 1.0,
       "wing": "east"
     },
     "east_south_hall": {
@@ -120,7 +120,7 @@
         4.5,
         -8.0
       ],
-      "speed_cap": 0.4,
+      "speed_cap": 1.0,
       "wing": "east"
     },
     "east_south_hall_corner": {
@@ -130,7 +130,7 @@
         4.5,
         -15.0
       ],
-      "speed_cap": 0.35,
+      "speed_cap": 1.0,
       "wing": "east"
     },
     "east_waiting_approach": {
@@ -148,7 +148,7 @@
         4.5,
         8.0
       ],
-      "speed_cap": 0.3,
+      "speed_cap": 1.0,
       "wing": "east"
     },
     "lift_lobby": {
@@ -160,7 +160,7 @@
         18.0
       ],
       "reservation_id": "gate:lift_lobby",
-      "speed_cap": 0.35,
+      "speed_cap": 1.0,
       "wing": "shared"
     },
     "north_hall": {
@@ -170,7 +170,7 @@
         0.0,
         12.0
       ],
-      "speed_cap": 0.45,
+      "speed_cap": 1.0,
       "wing": "shared"
     },
     "nurse_station_approach": {
@@ -184,7 +184,7 @@
         0.0,
         5.0
       ],
-      "speed_cap": 0.25,
+      "speed_cap": 1.0,
       "wing": "shared"
     },
     "south_equipment_approach": {
@@ -199,7 +199,7 @@
         0.0,
         -15.0
       ],
-      "speed_cap": 0.25,
+      "speed_cap": 1.0,
       "wing": "shared"
     },
     "south_room_approach": {
@@ -216,7 +216,7 @@
         0.0,
         -28.0
       ],
-      "speed_cap": 0.3,
+      "speed_cap": 1.0,
       "wing": "shared"
     },
     "west_mid_hall": {
@@ -226,7 +226,7 @@
         -4.5,
         3.0
       ],
-      "speed_cap": 0.4,
+      "speed_cap": 1.0,
       "wing": "west"
     },
     "west_north_gate": {
@@ -238,7 +238,7 @@
         14.0
       ],
       "reservation_id": "gate:west_north_gate",
-      "speed_cap": 0.3,
+      "speed_cap": 1.0,
       "wing": "west"
     },
     "west_south_hall": {
@@ -248,7 +248,7 @@
         -4.5,
         -8.0
       ],
-      "speed_cap": 0.4,
+      "speed_cap": 1.0,
       "wing": "west"
     },
     "west_south_hall_corner": {
@@ -258,7 +258,7 @@
         -4.5,
         -15.0
       ],
-      "speed_cap": 0.35,
+      "speed_cap": 1.0,
       "wing": "west"
     },
     "west_waiting_approach": {
@@ -275,7 +275,7 @@
         -4.5,
         8.0
       ],
-      "speed_cap": 0.3,
+      "speed_cap": 1.0,
       "wing": "west"
     }
   },
