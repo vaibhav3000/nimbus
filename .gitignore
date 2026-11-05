@@ -35,3 +35,9 @@ Before_confirmation_files/
 
 # Exclude PRD
 prd.pdf
+# generated at runtime
+edge/artifacts/
+data/
+results/tmp/
+.hypothesis/
+logs/

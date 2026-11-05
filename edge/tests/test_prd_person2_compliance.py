@@ -76,7 +76,7 @@ class MockCloudHandler(http.server.BaseHTTPRequestHandler):
             "auth": auth,
             "body": None,
         })
-        if self.path == "/outbox":
+        if self.path.split("?")[0] == "/outbox":
             outbox = [
                 {
                     "topic": "nimbus/east-wing/lease",
@@ -214,7 +214,7 @@ def test_edge_token_authentication_headers(tmp_path, mock_cloud_server):
         paths_checked.add(path)
 
     assert "/fleet/heartbeat" in paths_checked
-    assert "/outbox" in paths_checked
+    assert any(p.startswith("/outbox") for p in paths_checked)
     assert "/checkins" in paths_checked
     assert "/escalations" in paths_checked
 

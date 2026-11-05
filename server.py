@@ -303,7 +303,8 @@ class Handler(BaseHTTPRequestHandler):
                                   "restrictions": sorted(pk.restrictions),
                                   "tools": {s: self.orch.tools.names(s) for s in pk.doc["steps"]}})
         elif path == "/outbox":
-            self._send_json(200, {"outbox": self.store.outbox()})
+            active_only = "active=1" in (self.path.split("?", 1)[1] if "?" in self.path else "")
+            self._send_json(200, {"outbox": self._live_outbox() if active_only else self.store.outbox()})
         elif path == "/fault":
             self._send_json(200, self._fault_view())
         elif path.startswith("/schemas/"):
@@ -594,6 +595,22 @@ class Handler(BaseHTTPRequestHandler):
             self.cost.record(iot_messages=1 if pub else 0, dynamodb_ops=2)
         self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"],
                               "relayed_to": lease.get("cluster_id")})
+
+    def _live_outbox(self) -> list:
+        """The outbox minus lease messages of tasks that already finished, so an edge that
+        (re)starts does not re-run old work. Stop leases (pause/cancel) are always kept."""
+        done = {t["task_id"] for t in self.store.all_tasks() if t.get("status") in ("completed", "rejected")}
+        out = []
+        for item in self.store.outbox():
+            pl = item.get("payload") if isinstance(item, dict) else None
+            if isinstance(pl, dict) and str(pl.get("lease_id", "")).startswith("lease-"):
+                m = re.fullmatch(r"lease-(.+)-v\d+", pl["lease_id"])
+                seq = pl.get("task_sequence") or []
+                is_stop = len(seq) == 1 and seq[0].get("cmd") == "stop"
+                if m and m.group(1) in done and not is_stop:
+                    continue
+            out.append(item)
+        return out
 
     def _post_heartbeat(self, body: dict):
         """Cluster-level liveness with no lease attached (an idle cluster has
