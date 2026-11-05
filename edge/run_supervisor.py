@@ -98,7 +98,8 @@ def main():
             now_time = time.time()
 
             # 2. Send periodic heartbeat to POST /fleet/heartbeat
-            if now_time - last_heartbeat_time >= args.heartbeat_interval:
+            if getattr(supervisor, "probe_requested", False) or now_time - last_heartbeat_time >= args.heartbeat_interval:
+                supervisor.probe_requested = False
                 ok, hb_data = supervisor.send_heartbeat_to_cloud()
                 if ok:
                     print(f"[{args.cluster}] Heartbeat sent -> cluster health: {hb_data.get('health', 'healthy')}")

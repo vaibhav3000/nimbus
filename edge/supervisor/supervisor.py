@@ -102,6 +102,7 @@ class EdgeSupervisor:
         import os
         self.sim_mode = (sim_mode or os.environ.get("NIMBUS_SIM_MODE") or "auto").lower()
         self._seen_notices = set()
+        self.probe_requested = False
         self.token = token or os.environ.get("NIMBUS_EDGE_TOKEN")
         self.cluster_id = cluster_id
         self.cloud_url = cloud_url.rstrip("/")
@@ -425,6 +426,23 @@ class EdgeSupervisor:
                             print(f"[{self.cluster_id}] Notice received: {npayload.get('type')}")
                         continue
                     if topic and not topic.startswith(f"nimbus/{self.cluster_id}/"):
+                        continue
+                    kind = topic.rsplit("/", 1)[-1] if topic else "lease"
+                    if kind == "renewal" and isinstance(item.get("payload"), dict):
+                        # cloud -> edge: same lease version, later expiry_ts (PRD Sec. 6 renewal)
+                        rp = item["payload"]
+                        al = self.active_lease
+                        if al and al.get("lease_id") == rp.get("lease_id") and rp.get("expiry_ts", "") > str(al.get("expiry_ts", "")):
+                            al["expiry_ts"] = rp["expiry_ts"]
+                        continue
+                    if kind == "probe" and isinstance(item.get("payload"), dict):
+                        # cloud -> edge: "are you alive?" -> answer with a heartbeat on the next loop
+                        pid = item["payload"].get("message_id")
+                        if pid and pid not in self._seen_notices:
+                            self._seen_notices.add(pid)
+                            self.probe_requested = True
+                        continue
+                    if kind not in ("lease",):
                         continue
                     if isinstance(item, dict) and "payload" in item:
                         payload = item["payload"]
