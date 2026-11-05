@@ -6,7 +6,9 @@
 #   ./run_all.sh gazebo          # real Gazebo Fortress (run inside the Docker image, see scripts/docker_gazebo.sh)
 #   HEADLESS=1 ./run_all.sh gazebo   # Gazebo without a GUI window
 #
-# URLs: requester app http://127.0.0.1:8000   operator console /operator   map /map   kinematic viewer http://127.0.0.1:8090
+# By default the requester and lease authority are the deployed cloud. Set
+# NIMBUS_CLOUD_URL to a different deployment, or NIMBUS_LOCAL_CLOUD=1 for the
+# in-repository cloud server.
 # Stop with ./stop_all.sh . Logs go to logs/ .
 set -uo pipefail
 cd "$(dirname "$0")"
@@ -33,7 +35,18 @@ export NIMBUS_SENSOR_TIMEOUT="${NIMBUS_SENSOR_TIMEOUT:-5.0}"
 export NIMBUS_CAMERA_TIMEOUT="${NIMBUS_CAMERA_TIMEOUT:-10.0}"
 export NIMBUS_GOAL_TIMEOUT="${NIMBUS_GOAL_TIMEOUT:-600.0}"
 export NIMBUS_MINIMUM_FRONT_DISTANCE="${NIMBUS_MINIMUM_FRONT_DISTANCE:-0.20}"
-CLOUD="http://127.0.0.1:$PORT"
+DEPLOYED_CLOUD_URL="https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com"
+if [ "${NIMBUS_LOCAL_CLOUD:-0}" = 1 ]; then
+  CLOUD="http://127.0.0.1:$PORT"
+  USE_LOCAL_CLOUD=1
+else
+  CLOUD="${NIMBUS_CLOUD_URL:-$DEPLOYED_CLOUD_URL}"
+  USE_LOCAL_CLOUD=0
+fi
+export NIMBUS_CLOUD_URL="$CLOUD"
+# The deployed two-cluster registry names its assigned vehicles robot_1 and
+# robot_2.  They map to the east/west Gazebo vehicles at the edge boundary.
+[ "$USE_LOCAL_CLOUD" = 1 ] || export NIMBUS_CLOUD_ROBOT_PROFILE="deployed-two-cluster"
 start() { local name="$1"; shift; "$@" > "$LOGS/$name.log" 2>&1 & echo $! >> "$PIDS"; echo "   started $name (pid $!, log logs/$name.log)"; }
 waitfor() { for _ in $(seq 1 "${3:-60}"); do curl -fs "$1" >/dev/null 2>&1 && return 0; sleep 1; done; echo "!! $2 did not come up (see logs/)"; return 1; }
 
@@ -59,9 +72,14 @@ else
 fi
 
 # --- 2. cloud ------------------------------------------------------------------------------------
-echo "== starting cloud"
-start cloud python3 -u server.py
-waitfor "$CLOUD/fleet" cloud 30 || exit 1
+if [ "$USE_LOCAL_CLOUD" = 1 ]; then
+  echo "== starting local cloud"
+  start cloud python3 -u server.py
+  waitfor "$CLOUD/fleet" cloud 30 || exit 1
+else
+  echo "== using deployed cloud: $CLOUD"
+  waitfor "$CLOUD/fleet" deployed-cloud 30 || exit 1
+fi
 
 # --- 3. edge supervisors (one per wing) -----------------------------------------------------------
 echo "== starting edge supervisors"
@@ -77,4 +95,5 @@ echo " Operator      : $CLOUD/operator    Map: $CLOUD/map"
 [ "$MODE" = kinematic ] && echo " Robots moving : http://127.0.0.1:${VIEWER_PORT:-8090}   (live map of the hospital)"
 [ "$MODE" = gazebo ] && echo " Robots moving : in the Gazebo window (or HEADLESS=1: no window)"
 echo " Scripted demo : python3 scripts/demo_e2e.py --api $CLOUD"
+echo " Local cloud   : NIMBUS_LOCAL_CLOUD=1 ./run_all.sh $MODE"
 echo " Stop          : ./stop_all.sh"

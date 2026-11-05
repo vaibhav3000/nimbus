@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import os
 from pathlib import Path
 import sys
 import time
@@ -30,7 +31,11 @@ from edge.supervisor.supervisor import EdgeSupervisor
 def main():
     parser = argparse.ArgumentParser(description="Run an edge supervisor cluster daemon.")
     parser.add_argument("--cluster", default="east-wing", help="Cluster ID (e.g., east-wing, west-wing)")
-    parser.add_argument("--cloud-url", default="http://127.0.0.1:8000", help="Cloud API endpoint URL")
+    parser.add_argument(
+        "--cloud-url",
+        default=os.environ.get("NIMBUS_CLOUD_URL", "https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com"),
+        help="Cloud API endpoint URL (defaults to NIMBUS_CLOUD_URL or the deployed Nimbus cloud)",
+    )
     parser.add_argument("--db", default=None, help="Path to local SQLite DB (defaults to edge_<cluster>.db)")
     parser.add_argument("--interval", type=float, default=2.0, help="Outbox polling interval in seconds")
     parser.add_argument("--heartbeat-interval", type=float, default=15.0, help="Idle heartbeat interval in seconds")
@@ -48,7 +53,6 @@ def main():
     db_path = args.db or f"edge_{args.cluster.replace('-', '_')}.db"
     verbose_mode = not args.quiet
 
-    import os
     token = args.token or os.environ.get("NIMBUS_EDGE_TOKEN")
     supervisor = EdgeSupervisor(
         cluster_id=args.cluster,

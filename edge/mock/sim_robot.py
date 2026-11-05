@@ -250,6 +250,36 @@ CLOUD_TO_SIM_ALIASES = {
 }
 
 
+def _normalise_location_id(identifier: str) -> str:
+    """Return a case-insensitive key for logical hospital location IDs."""
+    return " ".join(str(identifier).strip().replace("_", "-").lower().split())
+
+
+_NORMALISED_CLOUD_TO_SIM_ALIASES = {
+    _normalise_location_id(alias): physical_node
+    for alias, physical_node in CLOUD_TO_SIM_ALIASES.items()
+}
+
+
+def canonical_topology_location(identifier: Any) -> Any:
+    """Resolve a logical room/ward ID to its physical topology node.
+
+    Examples include ``2B-12`` / ``2b-12`` -> ``east_waiting_approach`` and
+    ``2C`` -> ``west_waiting_approach``. Non-string destinations (such as an
+    explicit world coordinate) pass through unchanged.
+    """
+    if not isinstance(identifier, str) or not identifier.strip():
+        return identifier
+    if HAS_SDK:
+        try:
+            return resolve_destination(identifier)["physical_node"]
+        except Exception:
+            pass
+    return _NORMALISED_CLOUD_TO_SIM_ALIASES.get(
+        _normalise_location_id(identifier), identifier
+    )
+
+
 def _detect_gazebo_partition() -> Optional[str]:
     """Detects active Ignition partition from running Gazebo process environment."""
     if os.environ.get("IGN_PARTITION"):
@@ -644,8 +674,8 @@ class SimRobot:
 
     def _find_route(self, start_zone: str, target_zone: str) -> List[str]:
         """Calculates collision-free topology corridor waypoints between two nodes."""
-        lookup_start = CLOUD_TO_SIM_ALIASES.get(start_zone, start_zone)
-        lookup_target = CLOUD_TO_SIM_ALIASES.get(target_zone, target_zone)
+        lookup_start = canonical_topology_location(start_zone)
+        lookup_target = canonical_topology_location(target_zone)
         start_node = lookup_start
         target_node = lookup_target
 
@@ -769,6 +799,13 @@ class SimRobot:
         if action == "go_to":
             target_name = params.get("to") or params.get("target_name")
             target_xy = params.get("target")
+            target_frame = params.get("target_frame", "gazebo/world")
+
+            if target_xy is not None and target_frame not in {"world", "gazebo/world"}:
+                return finish(
+                    "INVALID_DESTINATION",
+                    f"Explicit target coordinates must use gazebo/world, not {target_frame!r}",
+                )
 
             if not self.runtime:
                 return finish("SENSOR_UNAVAILABLE","robot runtime is unavailable")
@@ -782,7 +819,7 @@ class SimRobot:
 
             # 1. Resolve world coordinates from PRD aliases or waypoints
             if target_xy is None and target_name:
-                lookup_name = CLOUD_TO_SIM_ALIASES.get(target_name, target_name)
+                lookup_name = canonical_topology_location(target_name)
                 if HAS_SDK:
                     try:
                         resolved = resolve_destination(lookup_name)

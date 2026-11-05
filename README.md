@@ -8,11 +8,11 @@ PRD: `docs/PRD_v5.pdf`. Who changed what in the integration pass: `CHANGES_BY_PE
 ## Run it (3 commands)
 ```bash
 pip install -r requirements.txt
-./run_all.sh            # cloud + east-wing edge + west-wing edge + simulator   (stop: ./stop_all.sh)
+./run_all.sh            # deployed cloud + east-wing edge + west-wing edge + simulator   (stop: ./stop_all.sh)
 python3 scripts/demo_e2e.py     # sends SC-1 ("Need an infusion pump at 2B-12, urgent") + a West-wing request
 ```
 In the viewer, click a node to close it (obstacle) and watch the edge escalate.
-Then open **http://127.0.0.1:8000** (requester app; also `/operator`, `/map`) and watch robots move at
+Then open the deployed requester URL printed by the launcher (or set `NIMBUS_LOCAL_CLOUD=1` for the local requester) and watch robots move at
 **http://127.0.0.1:8090** (no Gazebo installed) or in the Gazebo window.
 
 `./run_all.sh` auto-selects real Gazebo when `ign` + ROS 2 are present, else the kinematic stand-in
@@ -41,4 +41,4 @@ scripts/ tests/ evaluation/ results/   experiments (E1-E7) and tests
 archive/                               everything not needed to run (restorable)
 ```
 Tests: `python -m pytest -q`. Evaluation modes: `NIMBUS_MODE=C1|C2|C3 ./run_all.sh`.
-Locally the cloud LLM is a deterministic rules stand-in; set `NIMBUS_BACKEND=aws NIMBUS_LLM=bedrock` for Bedrock.
+`./run_all.sh` uses the deployed cloud (including its model configuration). For the deterministic local cloud, use `NIMBUS_LOCAL_CLOUD=1 ./run_all.sh`.
