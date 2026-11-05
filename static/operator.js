@@ -242,11 +242,44 @@ function setupStockControls() {
   }
 }
 
+function setupMemoryControls() {
+  const btn = $("reset-memory-btn");
+  if (!btn) return;
+  btn.onclick = async () => {
+    btn.disabled = true;
+    const prevText = btn.textContent;
+    btn.textContent = "Resetting...";
+    try {
+      const { status, data } = await api("POST", "/reset-memory", {});
+      if (status === 200 || status === 201) {
+        btn.textContent = "Memory reset!";
+        await refreshTasks();
+        await refreshFleet();
+        if (selectedTaskId) await renderDetail();
+        setTimeout(() => {
+          btn.textContent = prevText;
+          btn.disabled = false;
+        }, 1500);
+      } else {
+        alert(`Failed to reset memory: ${data.error || status}`);
+        btn.textContent = prevText;
+        btn.disabled = false;
+      }
+    } catch (err) {
+      console.error("Failed to reset memory:", err);
+      alert("Failed to reset request memory");
+      btn.textContent = prevText;
+      btn.disabled = false;
+    }
+  };
+}
+
 refreshTasks();
 refreshFleet();
 refreshFault();
 updateLlmStatus();
 setupStockControls();
+setupMemoryControls();
 setInterval(() => {
   refreshTasks();
   refreshFleet();

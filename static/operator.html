@@ -1356,7 +1356,8 @@ if (document.readyState === "loading") {
     <h1>Nimbus: Operator Console</h1>
     <p>Operator console: pause and cancel record the intent and publish a stop lease to robots.</p>
   </div>
-  <div>
+  <div style="display: flex; align-items: center; gap: 12px;">
+    <button type="button" class="hud-btn" id="reset-memory-btn" style="padding: 6px 14px;">Reset request memory</button>
     <span id="llm-status-badge" class="llm-badge llm-unknown">LLM: unknown</span>
   </div>
 </header>

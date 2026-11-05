@@ -52,3 +52,15 @@ class Memory:
                 if p == place and n >= CONFIRMATIONS and item != base:
                     out.append(f"Usual for {place}: a request for {base} has been confirmed as {item} {n} times.")
         return out
+
+    def reset(self) -> list[str]:
+        with self._lock:
+            cleared = list(self._habits.keys())
+            self._habits.clear()
+            if self.durable is not None:
+                if hasattr(self.durable, "clear_kind"):
+                    self.durable.clear_kind("habit")
+                else:
+                    for key in cleared:
+                        self.durable.delete("habit", key)
+            return cleared
