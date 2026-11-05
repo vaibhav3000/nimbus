@@ -295,8 +295,14 @@ class SimRobot:
         spawn_pose: Optional[Tuple[float, float, float]] = None,
         validation_source: str = "odometry",
         position_tolerance: float = 0.10,
-        sensor_timeout: float = 1.0,
+        sensor_timeout: Optional[float] = None,
     ):
+        # Slow hosts (Gazebo emulated on Apple Silicon runs far below real time) need looser freshness limits:
+        #   NIMBUS_SENSOR_TIMEOUT  seconds a sensor message may be old (default 1.0)
+        #   NIMBUS_GOAL_TIMEOUT    seconds one corridor leg may take (default 270)
+        if sensor_timeout is None:
+            sensor_timeout = float(os.environ.get("NIMBUS_SENSOR_TIMEOUT", "1.0"))
+        self.goal_timeout = float(os.environ.get("NIMBUS_GOAL_TIMEOUT", "270"))
         self.robot_id = robot_id
         cfg = DEFAULT_ROBOT_DEPLOYMENT.get(robot_id, DEFAULT_ROBOT_DEPLOYMENT["R1"])
         self.sim_name = cfg["sim_name"]
@@ -412,9 +418,9 @@ class SimRobot:
                     namespace=self.namespace,
                     safety_config=SafetyConfig(obstacle_guard=True, minimum_front_distance=0.25),
                     navigation_config=NavigationConfig(
-                        goal_timeout=270.0,
+                        goal_timeout=self.goal_timeout,
                         position_tolerance=self.position_tolerance,
-                        startup_odometry_timeout=30.0,
+                        startup_odometry_timeout=max(30.0, 10 * self.sensor_timeout),
                         odometry_timeout=self.sensor_timeout,
                         require_obstacle_feedback=True,
                         obstacle_timeout=self.sensor_timeout,

@@ -125,8 +125,10 @@ def main():
                     print(f"[{args.cluster}]     Result Ref : {result.get('result_ref')}")
                     if "sha256" in result:
                         print(f"[{args.cluster}]     SHA-256    : {result.get('sha256')}")
-                elif status in ("REJECTED", "FAILED_BOUNDARY", "DROPPED_STALE", "STOPPED"):
+                elif status in ("REJECTED", "FAILED_BOUNDARY", "DROPPED_STALE", "STOPPED", "FAILED", "ESCALATED_UNEXPECTED", "ESCALATED_CLOUD"):
                     print(f"[{args.cluster}]     Reason     : {result.get('reason')}")
+                    if result.get("execution_status"):
+                        print(f"[{args.cluster}]     Robot status: {result.get('execution_status')}")
 
                 processed_leases.add(key)
                 last_heartbeat_time = time.time()
