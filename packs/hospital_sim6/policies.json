@@ -1,0 +1,61 @@
+[
+  {
+    "id": "SOP-PAED-01",
+    "title": "Paediatric ward equipment",
+    "text": "Infusion pumps delivered to a paediatric ward or bed must be the paediatric variant. If the requester has not said which variant, ask before dispatching.",
+    "keywords": [
+      "pump",
+      "infusion",
+      "paediatric",
+      "pediatric",
+      "child"
+    ]
+  },
+  {
+    "id": "SOP-ISO-02",
+    "title": "Isolation wards",
+    "text": "A ward declared isolation holds routine deliveries into it until the policy owner lifts the isolation. Urgent deliveries may still enter. Equipment may be moved out of an isolated ward by robot, without staff entering.",
+    "keywords": [
+      "isolated",
+      "isolation",
+      "infectious",
+      "infection",
+      "quarantine",
+      "hold"
+    ]
+  },
+  {
+    "id": "SOP-GATE-03",
+    "title": "Gates and doorways",
+    "text": "Gates are single-lane: only one lease may hold a gate at a time, and a robot never stops inside a gate or doorway.",
+    "keywords": [
+      "gate",
+      "door",
+      "doorway",
+      "w0",
+      "w1"
+    ]
+  },
+  {
+    "id": "SOP-URG-04",
+    "title": "Urgent and routine work",
+    "text": "Urgent work goes before routine work, and an urgent task never waits behind a routine one. Within a class the earliest deadline goes first.",
+    "keywords": [
+      "urgent",
+      "emergency",
+      "asap",
+      "now",
+      "routine"
+    ]
+  },
+  {
+    "id": "SOP-SPEED-05",
+    "title": "Ward speed limit",
+    "text": "Inside any ward the speed limit is 0.5 m/s; elsewhere 0.8 m/s.",
+    "keywords": [
+      "speed",
+      "ward",
+      "slow"
+    ]
+  }
+]

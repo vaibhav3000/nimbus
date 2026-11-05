@@ -39,6 +39,9 @@
     background: #11141a;
     border-bottom: 1px solid var(--line);
     padding: 18px 36px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
   header h1 {
     font-family: "Space Grotesk", sans-serif;
@@ -52,6 +55,33 @@
     margin: 4px 0 0;
     font-size: 12px;
     color: var(--muted);
+  }
+  .llm-badge {
+    display: inline-flex;
+    align-items: center;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding: 5px 14px;
+    border-radius: 999px;
+    line-height: 1.4;
+    transition: all 200ms ease;
+  }
+  .llm-badge.llm-live {
+    background: rgba(61, 154, 106, 0.15);
+    color: var(--status-completed);
+    border: 1px solid rgba(61, 154, 106, 0.4);
+  }
+  .llm-badge.llm-fallback {
+    background: rgba(196, 165, 116, 0.15);
+    color: var(--status-queued);
+    border: 1px solid rgba(196, 165, 116, 0.4);
+  }
+  .llm-badge.llm-unknown {
+    background: rgba(139, 145, 138, 0.15);
+    color: var(--muted);
+    border: 1px solid rgba(139, 145, 138, 0.4);
   }
 
   main {
@@ -1322,8 +1352,13 @@ if (document.readyState === "loading") {
 </head>
 <body>
 <header>
-  <h1>Nimbus: Operator Console</h1>
-  <p>Operator console: pause and cancel record the intent and publish a stop lease to robots.</p>
+  <div>
+    <h1>Nimbus: Operator Console</h1>
+    <p>Operator console: pause and cancel record the intent and publish a stop lease to robots.</p>
+  </div>
+  <div>
+    <span id="llm-status-badge" class="llm-badge llm-unknown">LLM: unknown</span>
+  </div>
 </header>
 <main>
   <section class="card" id="tasks-panel">
@@ -1377,12 +1412,32 @@ if (document.readyState === "loading") {
     <p class="schematic-caption">Spatial map derived from topology. Real-time telemetry linked to fleet heartbeat.</p>
   </section>
 
-  <section class="card">
+  <section class="card" id="stock-panel">
     <h3>Stock by cluster</h3>
     <table>
       <thead id="stock-head"></thead>
       <tbody id="stock-rows"></tbody>
     </table>
+    <div class="stock-controls" style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+      <label for="stock-cluster-select" style="font-size: 11px; font-family: ui-monospace, monospace; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">Cluster:</label>
+      <select id="stock-cluster-select" style="background: #171b22; color: var(--text); border: 1px solid var(--line); border-radius: 2px; padding: 4px 8px; font-size: 11px; font-family: ui-monospace, monospace;">
+        <option value="east-wing">east-wing</option>
+        <option value="west-wing">west-wing</option>
+      </select>
+      <label for="stock-item-select" style="font-size: 11px; font-family: ui-monospace, monospace; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">Item:</label>
+      <select id="stock-item-select" style="background: #171b22; color: var(--text); border: 1px solid var(--line); border-radius: 2px; padding: 4px 8px; font-size: 11px; font-family: ui-monospace, monospace;">
+        <option value="pediatric_infusion_pump">pediatric_infusion_pump</option>
+        <option value="infusion_pump">infusion_pump</option>
+        <option value="wheelchair">wheelchair</option>
+        <option value="iv_pole">iv_pole</option>
+        <option value="monitor">monitor</option>
+        <option value="blanket">blanket</option>
+      </select>
+      <label for="stock-qty-input" style="font-size: 11px; font-family: ui-monospace, monospace; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;">Qty:</label>
+      <input type="number" id="stock-qty-input" min="0" value="5" style="width: 55px; background: #171b22; color: var(--text); border: 1px solid var(--line); border-radius: 2px; padding: 4px 8px; font-size: 11px; font-family: ui-monospace, monospace;" />
+      <button type="button" class="hud-btn" id="set-stock-btn">Set stock</button>
+      <button type="button" class="hud-btn" id="reset-stock-btn">Reset stock</button>
+    </div>
   </section>
   <section class="card" id="detail">
     <p class="muted">Click a row to load its decision timeline.</p>

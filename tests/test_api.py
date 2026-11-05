@@ -356,8 +356,13 @@ def test_operator_page_served(api):
     assert resp.status == 200 and "text/html" in ctype
     assert "Operator console" in html
     assert "publish a stop lease to robots" in html
+    assert "llm-status-badge" in html
+    assert "set-stock-btn" in html
+    assert "reset-stock-btn" in html
     with urlreq.urlopen(api + "/operator.js") as resp:
         assert "application/javascript" in resp.headers["Content-Type"]
+    with urlreq.urlopen(api + "/llm-status") as resp:
+        assert resp.status == 200
 
 
 def test_operator_pause_then_cancel_records_intents(api):
@@ -458,3 +463,83 @@ def test_unknown_cluster_rejected_by_default(api, monkeypatch):
     monkeypatch.setenv("NIMBUS_ALLOW_UNKNOWN", "1")
     status, body = http_json("POST", api + "/fleet/heartbeat", {"cluster_id": "totally-fake-wing"})
     assert status == 201 and body.get("accepted") is True
+def test_inventory_endpoint_and_stock_controls(api):
+    # GET /inventory
+    status, inv = http_json("GET", api + "/inventory")
+    assert status == 200
+    assert "east-wing" in inv and "west-wing" in inv
+    assert "pediatric_infusion_pump" in inv["east-wing"]
+
+    # Set stock via POST /fleet/stock using pediatric_infusion_pump
+    status, res = http_json("POST", api + "/fleet/stock", {
+        "cluster_id": "east-wing",
+        "stock": {"pediatric_infusion_pump": 7}
+    })
+    assert status == 201
+    assert res["stock"]["pediatric_infusion_pump"] == 7
+
+    # Verify GET /inventory reflects updated stock
+    _, inv2 = http_json("GET", api + "/inventory")
+    assert inv2["east-wing"]["pediatric_infusion_pump"] == 7
+
+    # Reset stock via POST /inventory/reset
+    status, res_reset = http_json("POST", api + "/inventory/reset", {
+        "cluster_id": "east-wing",
+        "item": "pediatric_infusion_pump"
+    })
+    assert status == 200
+    assert res_reset["stock"]["pediatric_infusion_pump"] == 0
+
+    _, inv3 = http_json("GET", api + "/inventory")
+    assert inv3["east-wing"]["pediatric_infusion_pump"] == 0
+
+
+def test_pediatric_pump_queue_unstick_and_auto_decrement(api):
+    # Set pediatric pump stock to 0 in east-wing
+    status, _ = http_json("POST", api + "/fleet/stock", {
+        "cluster_id": "east-wing",
+        "stock": {"pediatric_infusion_pump": 0}
+    })
+    assert status == 201
+
+    # Request pediatric pump at 2B-12 (east-wing ward)
+    status, req = http_json("POST", api + "/requests", {
+        "text": "Need an infusion pump at 2B-12, urgent.",
+        "message_id": "msg-pump-1"
+    })
+    assert status == 201
+    task_id = req["task_id"]
+
+    # Clarify variant
+    status, ans = http_json("POST", api + f"/requests/{task_id}/answer", {
+        "text": "Yes, a paediatric pump please.",
+        "message_id": "msg-pump-ans-1"
+    })
+    assert status == 201
+    # Stock is 0, so task should be queued
+    assert ans["status"] == "queued"
+    assert "no infusion_pump_paediatric in stock" in (ans.get("reason") or "")
+
+    # Now operator sets stock to 5 via "Set stock"
+    status, set_res = http_json("POST", api + "/fleet/stock", {
+        "cluster_id": "east-wing",
+        "stock": {"pediatric_infusion_pump": 5}
+    })
+    assert status == 201
+
+    # Task should now be unblocked/drained into leased!
+    status, task = http_json("GET", api + f"/tasks/{task_id}")
+    assert status == 200
+    assert task["status"] == "leased"
+
+    # Stock must have automatically decremented from 5 to 4!
+    status, inv = http_json("GET", api + "/inventory")
+    assert status == 200
+    assert inv["east-wing"]["pediatric_infusion_pump"] == 4
+    assert inv["east-wing"]["infusion_pump_paediatric"] == 4
+
+
+def test_llm_status_reports_fallback_without_bedrock(api):
+    status, data = http_json("GET", api + "/llm-status")
+    assert status == 200
+    assert data["status"] == "fallback"
