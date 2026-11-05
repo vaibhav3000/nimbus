@@ -28,6 +28,7 @@ ENV NIMBUS_BACKEND=aws \
     NIMBUS_DDB_PREFIX=nimbus-ds252 \
     NIMBUS_MODE=C1 \
     AWS_REGION=ap-south-1 \
+    NIMBUS_PACK=hospital_sim6 \
     PORT=8000 \
     DATA_DIR=/app/data
 

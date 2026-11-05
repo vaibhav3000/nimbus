@@ -57,6 +57,12 @@ class Pack:
     def load(cls, name: str | None = None) -> "Pack":
         name = name or os.environ.get("NIMBUS_PACK") or os.environ.get("PACK") or (PACKS_DIR / "DEFAULT").read_text(encoding="utf-8").strip()
         root = Path(name) if os.sep in name or name.startswith(".") else PACKS_DIR / name
+        if not root.exists():
+            for c in (name.replace(".", "_"), name.replace(".", ""), re.sub(r"[._](\d+)$", r"\1", name.replace(".", "_"))):
+                cand = PACKS_DIR / c
+                if cand.exists():
+                    root = cand
+                    break
         return cls(root)
 
     # -- identity ---------------------------------------------------------------
