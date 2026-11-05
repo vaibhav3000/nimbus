@@ -107,6 +107,12 @@ class RobotController:
             "command_status": None if not active else active.status.value,
         }
 
+    def is_motion_active(self) -> bool:
+        """True while the controller has an active velocity command."""
+        with self._lock:
+            active = self.get_command(self._active_id) if self._active_id else None
+            return bool(active and active.status == CommandStatus.RUNNING)
+
     def _submit(self, kind, requested: Twist2D, duration, source):
         duration = self.default_duration if duration is None else float(duration)
         if duration < 0:

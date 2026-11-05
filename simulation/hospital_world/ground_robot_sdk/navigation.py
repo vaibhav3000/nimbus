@@ -23,7 +23,13 @@ class NavigationConfig:
     position_tolerance: float = 0.10
     cruise_speed: float = 1.0
     control_period: float = 0.05
-    steering_gain: float = 1.2
+    # Damped and rate-limited steering: the vehicle must not zig-zag across
+    # a narrow corridor after a planner turn.
+    steering_gain: float = 0.85
+    steering_derivative_gain: float = 0.12
+    max_steering_rate: float = 1.50
+    curvature_slowdown: float = 2.0
+    min_turn_speed: float = 0.08
     startup_odometry_timeout: float = 5.0
     odometry_timeout: float = 1.0
     goal_timeout: float = float(os.environ.get("NIMBUS_GOAL_TIMEOUT", "600.0"))
@@ -307,6 +313,9 @@ class NavigationController:
 
     def _run_goto(self, command_id: str, cancelled: threading.Event, requested_speed: float) -> None:
         started = time.monotonic()
+        previous_heading_error: float | None = None
+        previous_steering = 0.0
+        previous_control_time: float | None = None
         try:
             while not cancelled.is_set():
                 if not self._is_active(command_id):
@@ -412,24 +421,34 @@ class NavigationController:
                 if abs(heading_error) >= self.config.reverse_required_angle and distance <= max(1.,self.config.path_lookahead*2):
                     self._fail_and_stop(command_id,"safe path recovery would require reversing without rear obstacle sensing",CommandStatus.BLOCKED)
                     return
-                lookahead_distance=max(.05,math.hypot(tracking_x-pose.x,tracking_y-pose.y))
-                pure_pursuit=math.atan2(2*self.limits.wheelbase*math.sin(heading_error),lookahead_distance)
                 avoidance_bias=avoidance.steering_bias if avoidance else 0.
                 if self._planner and avoidance_bias*heading_error < 0:
                     # The global path has already selected a collision-free
                     # side. Do not let noisy five-ray asymmetry counter-steer
                     # across that planned bypass.
                     avoidance_bias=0.
-                steering = max(
-                    -self.limits.max_steering_angle,
-                    min(self.limits.max_steering_angle, pure_pursuit+self.config.heading_correction_gain*heading_error+avoidance_bias),
+                now = time.monotonic()
+                dt = self.config.control_period if previous_control_time is None else max(0.001, now - previous_control_time)
+                heading_rate = 0.0 if previous_heading_error is None else _angle(heading_error - previous_heading_error) / dt
+                requested_steering = (
+                    self.config.steering_gain * heading_error
+                    + self.config.steering_derivative_gain * heading_rate
+                    + avoidance_bias
                 )
+                requested_steering = max(
+                    -self.limits.max_steering_angle,
+                    min(self.limits.max_steering_angle, requested_steering),
+                )
+                steering_step = self.config.max_steering_rate * dt
+                steering = max(previous_steering-steering_step, min(previous_steering+steering_step, requested_steering))
+                previous_heading_error, previous_steering, previous_control_time = heading_error, steering, now
                 # An Ackermann vehicle cannot pivot. Slow it while its heading
                 # is far from the goal so it turns onto the target path instead
                 # of tracing a wide, high-speed circle.
-                alignment = max(self.config.minimum_alignment_scale,math.cos(heading_error))
-                approach_speed=max(self.config.minimum_control_speed,distance*self.config.approach_speed_gain)
-                speed=min(requested_speed,approach_speed)*alignment*(avoidance.speed_scale if avoidance else 1.)
+                alignment = max(self.config.min_turn_speed,math.cos(heading_error))
+                approach_speed=max(self.config.min_turn_speed,distance*self.config.approach_speed_gain)
+                curve_factor = 1.0/(1.0+self.config.curvature_slowdown*abs(steering)/self.limits.max_steering_angle)
+                speed=min(requested_speed,approach_speed)*alignment*curve_factor*(avoidance.speed_scale if avoidance else 1.)
                 low_level = self.motion.drive(
                     speed,
                     steering,

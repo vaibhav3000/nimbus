@@ -185,6 +185,7 @@ class MockRobot:
 
         if action == "go_to":
             target_name = params.get("to") or params.get("target_name")
+            requested_location_id = params.get("location_id") or target_name
             target = params.get("target")
 
             # Resolve coordinate from topology waypoints if not explicitly passed
@@ -201,11 +202,13 @@ class MockRobot:
             blocked_zone = None
             if target_name in self.injected_obstacles:
                 blocked_zone = target_name
+            elif requested_location_id in self.injected_obstacles:
+                blocked_zone = requested_location_id
             elif self.current_zone in self.injected_obstacles:
                 blocked_zone = self.current_zone
             elif (
-                (self.current_zone in ("central-supply", "south_equipment_approach") and target_name in ("2B-12", "2B-01", "ward-2B")) or
-                (self.current_zone in ("2B-12", "2B-01", "ward-2B") and target_name in ("central-supply", "south_equipment_approach"))
+                (self.current_zone in ("central-supply", "south_equipment_approach") and (target_name == "east_waiting_approach" or requested_location_id in ("2B-12", "2B-01", "ward-2B"))) or
+                (self.current_zone in ("2B-12", "2B-01", "ward-2B", "east_waiting_approach") and (target_name == "south_equipment_approach" or requested_location_id in ("central-supply", "south_equipment_approach")))
             ):
                 if "corridor-2B" in self.injected_obstacles:
                     blocked_zone = "corridor-2B"
