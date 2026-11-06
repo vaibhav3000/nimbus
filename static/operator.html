@@ -527,6 +527,257 @@
     opacity: 0.4;
     cursor: default;
   }
+
+  /* Single-page demo progress stream and real-time horizontal progress bar */
+  #demo-panel {
+    grid-column: 1 / -1;
+    background: #11141a;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 16px 20px;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  }
+  .demo-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .demo-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--brass);
+    margin: 0;
+  }
+  .demo-badge {
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: #171b22;
+    padding: 3px 8px;
+    border-radius: 2px;
+    border: 1px solid var(--line);
+  }
+  .demo-request-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  #demo-request-input {
+    flex: 1;
+    background: #171b22;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-family: ui-monospace, monospace;
+    outline: none;
+    transition: border-color 150ms ease;
+  }
+  #demo-request-input:focus {
+    border-color: var(--brass);
+  }
+  #demo-submit-btn {
+    background: var(--brass);
+    color: #0e1116;
+    border: none;
+    border-radius: 3px;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 20px;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+  }
+  #demo-submit-btn:hover:not(:disabled) {
+    background: var(--brass-hover);
+  }
+  .demo-clarify-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 12px;
+    background: #1e1913;
+    border: 1px solid var(--brass);
+    border-radius: 3px;
+    padding: 8px 12px;
+  }
+  #demo-clarify-prompt {
+    font-size: 12px;
+    color: var(--brass);
+    font-family: ui-monospace, monospace;
+    font-weight: bold;
+  }
+  #demo-clarify-input {
+    flex: 1;
+    background: #171b22;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-family: ui-monospace, monospace;
+    outline: none;
+  }
+  #demo-clarify-input:focus {
+    border-color: var(--brass);
+  }
+  .progress-bar-wrapper {
+    margin: 10px 0 14px;
+    background: #0e1116;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 14px 20px;
+  }
+  .progress-bar-steps {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+  }
+  .progress-line-track {
+    position: absolute;
+    top: 15px;
+    left: 40px;
+    right: 40px;
+    height: 3px;
+    background: var(--line);
+    z-index: 1;
+  }
+  .progress-line-progress {
+    position: absolute;
+    top: 15px;
+    left: 40px;
+    height: 3px;
+    background: var(--brass);
+    z-index: 1;
+    width: 0%;
+    transition: width 0.35s ease;
+  }
+  .progress-step {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    min-width: 90px;
+  }
+  .step-node {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #171b22;
+    border: 2px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: ui-monospace, monospace;
+    color: var(--muted);
+    transition: all 0.25s ease;
+  }
+  .step-label {
+    margin-top: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: ui-monospace, monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    transition: color 0.25s ease;
+  }
+  .progress-step.active .step-node {
+    border-color: var(--brass);
+    background: #231e16;
+    color: var(--brass);
+    box-shadow: 0 0 10px rgba(196, 165, 116, 0.4);
+  }
+  .progress-step.active .step-label {
+    color: var(--brass);
+    font-weight: 700;
+  }
+  .progress-step.completed .step-node {
+    border-color: var(--status-completed);
+    background: var(--status-completed);
+    color: #fff;
+  }
+  .progress-step.completed .step-label {
+    color: var(--status-completed);
+  }
+  .progress-step.blocked .step-node {
+    border-color: var(--status-urgent);
+    background: var(--status-urgent);
+    color: #fff;
+  }
+  .progress-step.blocked .step-label {
+    color: var(--status-urgent);
+  }
+  .progress-step.skipped {
+    opacity: 0.45;
+  }
+  .demo-stream-box {
+    margin-top: 6px;
+  }
+  .demo-stream-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 6px;
+    font-family: ui-monospace, monospace;
+  }
+  #demo-progress-stream {
+    background: #0e1116;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 8px 12px;
+    min-height: 48px;
+    max-height: 150px;
+    overflow-y: auto;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .stream-entry {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .stream-time {
+    color: var(--muted);
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .stream-badge {
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+  .stream-badge.received { background: #1d2533; color: var(--status-leased); border: 1px solid var(--status-leased); }
+  .stream-badge.clarifying { background: #2b2519; color: var(--brass); border: 1px solid var(--brass); }
+  .stream-badge.leased { background: #1d2533; color: #58a6ff; border: 1px solid #58a6ff; }
+  .stream-badge.in-progress { background: #1f2a24; color: #7ee787; border: 1px solid #7ee787; }
+  .stream-badge.completed { background: #18281d; color: var(--status-completed); border: 1px solid var(--status-completed); }
+  .stream-badge.blocked { background: #2b191a; color: var(--status-urgent); border: 1px solid var(--status-urgent); }
+  .stream-text {
+    color: var(--text);
+  }
+
 </style>
 <script type="importmap">
 {
@@ -1362,6 +1613,66 @@ if (document.readyState === "loading") {
   </div>
 </header>
 <main>
+  <section class="card" id="demo-panel">
+    <div class="demo-header">
+      <h3 class="demo-title">Single-Page Demo Progress Stream</h3>
+      <span id="demo-task-badge" class="demo-badge">No active demo task</span>
+    </div>
+
+    <!-- Request Box (text input + Submit button) -->
+    <div class="demo-request-row" id="demo-request-box">
+      <input type="text" id="demo-request-input" placeholder="Enter request (e.g., Deliver a wheelchair to ward 3, routine)..." />
+      <button type="button" id="demo-submit-btn">Submit</button>
+    </div>
+
+    <!-- Clarification form (dynamically shown if task requires clarification) -->
+    <div class="demo-clarify-row" id="demo-clarify-box" style="display: none;">
+      <span id="demo-clarify-prompt"></span>
+      <input type="text" id="demo-clarify-input" placeholder="Type clarification answer..." />
+      <button type="button" class="hud-btn" id="demo-clarify-btn">Answer</button>
+    </div>
+
+    <!-- Horizontal Progress Bar with stages: Received -> Clarifying -> Leased -> In progress -> Completed / Blocked -->
+    <div class="progress-bar-wrapper">
+      <div class="progress-bar-steps">
+        <div class="progress-line-track"></div>
+        <div class="progress-line-progress" id="demo-progress-fill"></div>
+
+        <div class="progress-step" id="step-received" data-num="1">
+          <div class="step-node">1</div>
+          <div class="step-label">Received</div>
+        </div>
+
+        <div class="progress-step" id="step-clarifying" data-num="2">
+          <div class="step-node">2</div>
+          <div class="step-label">Clarifying</div>
+        </div>
+
+        <div class="progress-step" id="step-leased" data-num="3">
+          <div class="step-node">3</div>
+          <div class="step-label">Leased</div>
+        </div>
+
+        <div class="progress-step" id="step-in-progress" data-num="4">
+          <div class="step-node">4</div>
+          <div class="step-label">In progress</div>
+        </div>
+
+        <div class="progress-step" id="step-final" data-num="5">
+          <div class="step-node">5</div>
+          <div class="step-label" id="step-final-label">Completed / Blocked</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Short progress list that updates in place -->
+    <div class="demo-stream-box">
+      <div class="demo-stream-title">Progress List</div>
+      <div id="demo-progress-stream">
+        <span class="muted">No request submitted yet. Enter a request above to track live demo stages.</span>
+      </div>
+    </div>
+  </section>
   <section class="card" id="tasks-panel">
     <div class="spatial-grid">
       <div class="spatial-col">
