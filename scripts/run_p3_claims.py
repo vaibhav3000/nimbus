@@ -508,8 +508,8 @@ def e3_excerpts(out: Path, summary: dict):
 
 
 # ----------------------------------------------------------------------------- the existing experiment tools, run into P3_Results
-def _run(cmd, capture=None, timeout=900):
-    r = subprocess.run([sys.executable] + cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=timeout)
+def _run(cmd, capture=None, timeout=900, env=None):
+    r = subprocess.run([sys.executable] + cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=timeout, env=dict(os.environ, **(env or {})))
     if capture:
         Path(capture).write_text(r.stdout + r.stderr + f"\nexit code: {r.returncode}\n")
     return r
@@ -535,9 +535,13 @@ def e2(out: Path, summary: dict):
 
 
 def e3(out: Path, summary: dict):
-    (out / "e3").mkdir(exist_ok=True)
-    _run(["scripts/run_e3.py", "--seeds", "10", "--out", str(out / "e3")], capture=out / "e3" / "e3_run.txt")
-    _run(["scripts/e3_report.py", "--in", str(out / "e3" / "results.json"), "--out", str(out / "e3" / "e3-results.md")])
+    """T8 ("three requests, two robots") is written for a two-robot cluster. `hospital_sim` has two robots per cluster (the design
+    the experiment was written for); the six-robot `hospital_sim6` has three, so there all three requests are leased at once and T8's
+    fixture check (2 leased + 1 queued) cannot hold. Both are run and reported."""
+    for pack, sub in (("hospital_sim", "e3"), ("hospital_sim6", "e3_sim6")):
+        (out / sub).mkdir(exist_ok=True)
+        _run(["scripts/run_e3.py", "--seeds", "10", "--out", str(out / sub)], capture=out / sub / "e3_run.txt", env={"NIMBUS_PACK": pack})
+        _run(["scripts/e3_report.py", "--in", str(out / sub / "results.json"), "--out", str(out / sub / "e3-results.md")])
 
 
 def e7(out: Path, summary: dict):

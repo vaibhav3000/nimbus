@@ -1,39 +1,39 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 360" font-family="sans-serif" font-size="11">
 <rect width="820" height="360" fill="white"/><text x="60" y="22" font-size="14" font-weight="bold">Modelled completion time (s)</text>
 <line x1="60" y1="310" x2="800" y2="310" stroke="#999"/>
-<rect x="71.6" y="191.8" width="21.1" height="118.2" fill="#2563eb"><title>T1 C1: 65.6</title></rect>
-<rect x="94.7" y="140.6" width="21.1" height="169.4" fill="#dc2626"><title>T1 C2: 94</title></rect>
-<rect x="117.8" y="206.2" width="21.1" height="103.8" fill="#6b7280"><title>T1 C3: 57.6</title></rect>
+<rect x="71.6" y="183.4" width="21.1" height="126.6" fill="#2563eb"><title>T1 C1: 54.1</title></rect>
+<rect x="94.7" y="117.0" width="21.1" height="193.0" fill="#dc2626"><title>T1 C2: 82.5</title></rect>
+<rect x="117.8" y="202.1" width="21.1" height="107.9" fill="#6b7280"><title>T1 C3: 46.1</title></rect>
 <text x="106.2" y="326" text-anchor="middle">T1</text>
-<rect x="164.1" y="163.1" width="21.1" height="146.9" fill="#2563eb"><title>T2 C1: 81.5</title></rect>
-<rect x="187.2" y="111.9" width="21.1" height="198.1" fill="#dc2626"><title>T2 C2: 109.9</title></rect>
-<rect x="210.3" y="177.3" width="21.1" height="132.7" fill="#6b7280"><title>T2 C3: 73.6</title></rect>
+<rect x="164.1" y="189.3" width="21.1" height="120.7" fill="#2563eb"><title>T2 C1: 51.6</title></rect>
+<rect x="187.2" y="122.8" width="21.1" height="187.2" fill="#dc2626"><title>T2 C2: 80</title></rect>
+<rect x="210.3" y="202.1" width="21.1" height="107.9" fill="#6b7280"><title>T2 C3: 46.1</title></rect>
 <text x="198.8" y="326" text-anchor="middle">T2</text>
-<rect x="256.6" y="136.8" width="21.1" height="173.2" fill="#2563eb"><title>T3 C1: 96.1</title></rect>
-<rect x="279.7" y="85.6" width="21.1" height="224.4" fill="#dc2626"><title>T3 C2: 124.5</title></rect>
-<rect x="302.8" y="151.2" width="21.1" height="158.8" fill="#6b7280"><title>T3 C3: 88.1</title></rect>
+<rect x="256.6" y="149.3" width="21.1" height="160.7" fill="#2563eb"><title>T3 C1: 68.7</title></rect>
+<rect x="279.7" y="82.8" width="21.1" height="227.2" fill="#dc2626"><title>T3 C2: 97.1</title></rect>
+<rect x="302.8" y="168.0" width="21.1" height="142.0" fill="#6b7280"><title>T3 C3: 60.7</title></rect>
 <text x="291.2" y="326" text-anchor="middle">T3</text>
-<rect x="349.1" y="222.6" width="21.1" height="87.4" fill="#2563eb"><title>T4 C1: 48.5</title></rect>
-<rect x="372.2" y="171.4" width="21.1" height="138.6" fill="#dc2626"><title>T4 C2: 76.9</title></rect>
-<rect x="395.3" y="232.3" width="21.1" height="77.7" fill="#6b7280"><title>T4 C3: 43.1</title></rect>
+<rect x="349.1" y="132.4" width="21.1" height="177.6" fill="#2563eb"><title>T4 C1: 75.9</title></rect>
+<rect x="372.2" y="65.7" width="21.1" height="244.3" fill="#dc2626"><title>T4 C2: 104.4</title></rect>
+<rect x="395.3" y="145.1" width="21.1" height="164.9" fill="#6b7280"><title>T4 C3: 70.5</title></rect>
 <text x="383.8" y="326" text-anchor="middle">T4</text>
-<rect x="441.6" y="205.1" width="21.1" height="104.9" fill="#2563eb"><title>T5 C1: 58.2</title></rect>
-<rect x="464.7" y="153.9" width="21.1" height="156.1" fill="#dc2626"><title>T5 C2: 86.6</title></rect>
-<rect x="487.8" y="219.5" width="21.1" height="90.5" fill="#6b7280"><title>T5 C3: 50.2</title></rect>
+<rect x="441.6" y="173.8" width="21.1" height="136.2" fill="#2563eb"><title>T5 C1: 58.2</title></rect>
+<rect x="464.7" y="107.4" width="21.1" height="202.6" fill="#dc2626"><title>T5 C2: 86.6</title></rect>
+<rect x="487.8" y="192.5" width="21.1" height="117.5" fill="#6b7280"><title>T5 C3: 50.2</title></rect>
 <text x="476.2" y="326" text-anchor="middle">T5</text>
-<rect x="534.1" y="171.2" width="21.1" height="138.8" fill="#2563eb"><title>T6 C1: 77</title></rect>
-<rect x="557.2" y="171.2" width="21.1" height="138.8" fill="#dc2626"><title>T6 C2: 77</title></rect>
-<rect x="580.3" y="180.2" width="21.1" height="129.8" fill="#6b7280"><title>T6 C3: 72</title></rect>
+<rect x="534.1" y="156.8" width="21.1" height="153.2" fill="#2563eb"><title>T6 C1: 65.5</title></rect>
+<rect x="557.2" y="156.8" width="21.1" height="153.2" fill="#dc2626"><title>T6 C2: 65.5</title></rect>
+<rect x="580.3" y="168.4" width="21.1" height="141.6" fill="#6b7280"><title>T6 C3: 60.5</title></rect>
 <text x="568.8" y="326" text-anchor="middle">T6</text>
-<rect x="626.6" y="133.4" width="21.1" height="176.6" fill="#2563eb"><title>T7 C1: 98</title></rect>
-<rect x="649.7" y="40.0" width="21.1" height="270.0" fill="#dc2626"><title>T7 C2: 149.8</title></rect>
-<rect x="672.8" y="144.0" width="21.1" height="166.0" fill="#6b7280"><title>T7 C3: 92.1</title></rect>
+<rect x="626.6" y="161.2" width="21.1" height="148.8" fill="#2563eb"><title>T7 C1: 63.6</title></rect>
+<rect x="649.7" y="40.0" width="21.1" height="270.0" fill="#dc2626"><title>T7 C2: 115.4</title></rect>
+<rect x="672.8" y="175.2" width="21.1" height="134.8" fill="#6b7280"><title>T7 C3: 57.6</title></rect>
 <text x="661.2" y="326" text-anchor="middle">T7</text>
-<rect x="719.1" y="283.0" width="21.1" height="27.0" fill="#2563eb"><title>T8 C1: 15</title></rect>
-<rect x="742.2" y="283.0" width="21.1" height="27.0" fill="#dc2626"><title>T8 C2: 15</title></rect>
+<rect x="719.1" y="286.6" width="21.1" height="23.4" fill="#2563eb"><title>T8 C1: 10</title></rect>
+<rect x="742.2" y="286.6" width="21.1" height="23.4" fill="#dc2626"><title>T8 C2: 10</title></rect>
 <rect x="765.3" y="310.0" width="21.1" height="0.0" fill="#6b7280"><title>T8 C3: 0</title></rect>
 <text x="753.8" y="326" text-anchor="middle">T8</text>
-<text x="54" y="44" text-anchor="end">150</text><text x="54" y="310" text-anchor="end">0</text>
+<text x="54" y="44" text-anchor="end">115</text><text x="54" y="310" text-anchor="end">0</text>
 <text x="60" y="352" fill="#555">median over seeds; modelled, not measured</text>
 <rect x="650" y="12" width="10" height="10" fill="#2563eb"/><text x="664" y="21">C1</text>
 <rect x="700" y="12" width="10" height="10" fill="#dc2626"/><text x="714" y="21">C2</text>

@@ -5,8 +5,8 @@
 <rect x="94.7" y="40.0" width="21.1" height="270.0" fill="#dc2626"><title>T1 C2: 8</title></rect>
 <rect x="117.8" y="310.0" width="21.1" height="0.0" fill="#6b7280"><title>T1 C3: 0</title></rect>
 <text x="106.2" y="326" text-anchor="middle">T1</text>
-<rect x="164.1" y="242.5" width="21.1" height="67.5" fill="#2563eb"><title>T2 C1: 2</title></rect>
-<rect x="187.2" y="40.0" width="21.1" height="270.0" fill="#dc2626"><title>T2 C2: 8</title></rect>
+<rect x="164.1" y="276.2" width="21.1" height="33.8" fill="#2563eb"><title>T2 C1: 1</title></rect>
+<rect x="187.2" y="73.8" width="21.1" height="236.2" fill="#dc2626"><title>T2 C2: 7</title></rect>
 <rect x="210.3" y="310.0" width="21.1" height="0.0" fill="#6b7280"><title>T2 C3: 0</title></rect>
 <text x="198.8" y="326" text-anchor="middle">T2</text>
 <rect x="256.6" y="242.5" width="21.1" height="67.5" fill="#2563eb"><title>T3 C1: 2</title></rect>
@@ -29,8 +29,8 @@
 <rect x="649.7" y="40.0" width="21.1" height="270.0" fill="#dc2626"><title>T7 C2: 8</title></rect>
 <rect x="672.8" y="310.0" width="21.1" height="0.0" fill="#6b7280"><title>T7 C3: 0</title></rect>
 <text x="661.2" y="326" text-anchor="middle">T7</text>
-<rect x="719.1" y="107.5" width="21.1" height="202.5" fill="#2563eb"><title>T8 C1: 6</title></rect>
-<rect x="742.2" y="107.5" width="21.1" height="202.5" fill="#dc2626"><title>T8 C2: 6</title></rect>
+<rect x="719.1" y="175.0" width="21.1" height="135.0" fill="#2563eb"><title>T8 C1: 4</title></rect>
+<rect x="742.2" y="175.0" width="21.1" height="135.0" fill="#dc2626"><title>T8 C2: 4</title></rect>
 <rect x="765.3" y="310.0" width="21.1" height="0.0" fill="#6b7280"><title>T8 C3: 0</title></rect>
 <text x="753.8" y="326" text-anchor="middle">T8</text>
 <text x="54" y="44" text-anchor="end">8</text><text x="54" y="310" text-anchor="end">0</text>

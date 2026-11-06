@@ -1,31 +1,31 @@
-pack hospital_sim6, model stand-in, 10 seeds
+pack hospital_sim, model stand-in, 10 seeds
 task cfg     ok    dl  calls    wan B      cost $   done s  note
-T1   C1    100%  100%      2     1830    1.00e-04       66  
-T1   C2    100%  100%      8     5430    3.10e-04       94  
-T1   C3    100%  100%      0     1830    2.00e-07       58  
-T2   C1    100%  100%      2     2130    9.76e-05       82  
-T2   C2    100%  100%      8     5730    3.11e-04      110  
-T2   C3    100%  100%      0     2130    2.00e-07       74  
-T3   C1    100%  100%      2     2372    1.06e-04       96  
-T3   C2    100%  100%      8     5972    3.20e-04      124  
-T3   C3    100%  100%      0     2372    4.00e-07       88  
-T4   C1    100%  100%      1     2140    5.74e-05       48  detour exists inside the lease
-T4   C2    100%  100%      7     5740    2.76e-04       77  
-T4   C3    100%  100%      0     2140    2.00e-07       43  
-T5   C1    100%  100%      2     5886    9.88e-05       58  
-T5   C2    100%  100%      8     9486    3.08e-04       87  
-T5   C3    100%  100%      0     5886    6.00e-07       50  
-T6   C1    100%  100%      2     2939    1.19e-04       77  1 in-flight held, 2 extraction task(s), routine queued, urgent leased
-T6   C2    100%  100%      2     2939    1.19e-04       77  
-T6   C3    100%  100%      0     2939    6.00e-07       72  
-T7   C1    100%  100%      1     2777    4.86e-05       98  edge-filtered counts
-T7   C2    100%  100%      8   606980    3.02e-04      150  
-T7   C3    100%  100%      0   602780    2.00e-07       92  
-T8   C1      0%    0%      6     5928    2.96e-04       15  3 leased now, 0 queued, 0 released after a robot freed
-T8   C2      0%    0%      6     5928    2.96e-04       15  
-T8   C3      0%    0%      0     5928    6.00e-07        0  
+T1   C1    100%  100%      2     1532    9.64e-05       54  
+T1   C2    100%  100%      8     5132    3.00e-04       82  
+T1   C3    100%  100%      0     1532    2.00e-07       46  
+T2   C1    100%  100%      1     1530    5.26e-05       52  
+T2   C2    100%  100%      7     5130    2.56e-04       80  
+T2   C3    100%  100%      0     1530    2.00e-07       46  
+T3   C1    100%  100%      2     2238    1.06e-04       69  
+T3   C2    100%  100%      8     5838    3.15e-04       97  
+T3   C3    100%  100%      0     2238    4.00e-07       61  
+T4   C1    100%  100%      1     2673    5.70e-05       76  detour exists inside the lease
+T4   C2    100%  100%      7     6273    2.81e-04      104  
+T4   C3    100%  100%      0     2673    2.00e-07       70  
+T5   C1    100%  100%      2     6989    9.91e-05       58  
+T5   C2    100%  100%      8    10589    3.06e-04       87  
+T5   C3    100%  100%      0     6989    6.00e-07       50  
+T6   C1    100%  100%      2     2988    1.18e-04       66  1 in-flight held, 2 extraction task(s), routine queued, urgent leased
+T6   C2    100%  100%      2     2988    1.18e-04       66  
+T6   C3    100%  100%      0     2988    6.00e-07       60  
+T7   C1    100%  100%      1     2518    4.82e-05       64  edge-filtered counts
+T7   C2    100%  100%      8   606716    2.95e-04      115  
+T7   C3    100%  100%      0   602516    2.00e-07       58  
+T8   C1    100%  100%      4     4596    2.01e-04       10  2 leased now, 1 queued, 1 released after a robot freed
+T8   C2    100%  100%      4     4596    2.01e-04       10  
+T8   C3    100%  100%      0     4596    8.00e-07        0  
 
-NFR-4: C1 180 model calls vs C2 550 (ratio 0.327, target <= 0.5): MET
+NFR-4: C1 150 model calls vs C2 520 (ratio 0.288, target <= 0.5): MET
 wrote P3_Results/e3/results.json, results.csv and SVG plots
 
 exit code: 0

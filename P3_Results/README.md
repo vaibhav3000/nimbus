@@ -34,10 +34,10 @@ so its 100 % is expected and only proves the scoring pipeline works.
 | **FR-22** (cloud half) | a cancel reaches the robots within seconds | cloud publishes the stop lease in p95 0.02 s (12 / 12). Edge pick-up was measured live earlier: stop within ~1 s (lease watcher) | `fr_checks.csv` | **PARTIAL**: edge + network half in P2's results |
 | **NFR-1** (cloud half) | a request becomes a lease within 30 s (p95) | 34 leased of 50 requests (the rest correctly asked a question): p95 **0.017 s** wall time | `nfr1_request_to_lease.csv` | **NEEDS BEDROCK**: excludes model latency and WAN |
 | **NFR-3** (cloud half) | p95 decision time at 10 robots ≤ 1.5× the 3-robot baseline | **1.04×** (also 1.05× at 6, 1.07× at 20); 1029 requests over 24 simulated hours; 0 deadlines missed; replay identical at every scale | `e7/` | **MEASURED** (cloud compute; edge half is P2's) |
-| **NFR-4** | C1's model calls per task ≤ 50 % of C2's | **180 vs 550 calls: 0.327** | `e3/e3-results.md`, `e3/results.csv` (240 runs) | **MEASURED for call counts**; the cost-per-task figure uses a price table, not a CloudWatch/Cost Explorer export (**NEEDS AWS**) |
+| **NFR-4** | C1's model calls per task ≤ 50 % of C2's | `hospital_sim` map: **150 vs 520 calls = 0.288** (matches PRD v6's 28.8 %); six-robot `hospital_sim6` map: 180 vs 550 = 0.327 | `e3/`, `e3_sim6/` (240 runs each) | **MEASURED for call counts**; the cost-per-task figure uses a price table, not a CloudWatch/Cost Explorer export (**NEEDS AWS**) |
 | **NFR-5** | least-privilege IAM, no secrets in code; synthetic data only | IAM/secrets audit **PASS** (2 justified wildcard exceptions listed); data-manifest audit **PASS** | `nfr5_audit_iam.txt`, `nfr5_audit_data.txt` | **MEASURED** (static audit, as the PRD specifies) |
 | **NFR-6** | seeded re-run gives byte-identical decision logs | seeds 7, 11, 23: two runs with different hash seeds, logs **IDENTICAL** (24, 13, 14 rows) | `e6_seed_diff.txt` | **MEASURED** |
-| **E3** (T1–T8, C1/C2/C3) | all tasks complete under all configs | 240 runs: 100 % success and deadlines met in every cell; C1 lowest WAN bytes on T7 | `e3/` | **MEASURED**; completion time and latency are *modelled* constants, as the report states |
+| **E3** (T1–T8, C1/C2/C3) | all tasks complete under all configs | `hospital_sim`: 240 runs, **100 %** success and deadlines met in every cell; C1 lowest WAN bytes on T7. `hospital_sim6`: every cell 100 % **except T8 (0 / 30)**, because T8 ("three requests, two robots": expects 2 leased + 1 queued) is written for a 2-robot cluster and sim6 has 3 robots per cluster, so all three are leased at once. That is a stale fixture, not a scheduling bug, but T8 needs a 3-request/3-robot variant for sim6 | `e3/`, `e3_sim6/` | **MEASURED**; completion time and latency are *modelled* constants, as the report states |
 
 Unit/integration tests run for this folder (not the full suite): `tests/test_contracts.py test_e5_e6.py test_e3_harness.py test_e7_scale.py
 test_ms2_sc3.py test_ms2_scenarios.py test_ms2_handover.py test_ms2_standdown.py` → **73 passed**.
@@ -60,8 +60,7 @@ FR-18 on real Bedrock: `curl -X POST https://<api>/llm/outage -d '{"seconds":600
    (`"component": "cloud.rule_checker"`, `LEASE_VALIDATION_PASSED`, `invalid_leases_issued_cumulative`, …) that **no code in this repository emits**
    (searched), with a different lease format than the real one. I did **not** copy it. `P3_Results/e3/log_excerpts.md` replaces it with
    real decision-log rows from fresh runs. I recommend the PRD cite the new file and the old one be removed or marked illustrative. I did not change `results/`.
-2. **NFR-4 is now 0.327, not 28.8 %.** PRD v6 quotes "28.8 %" (an earlier E3 run: 150 vs 520). The same experiment on today's `main` gives 180 vs 550.
-   Both meet the ≤ 50 % target; the PRD text should quote the current figure or say which run it came from.
+2. **NFR-4 depends on the map.** PRD v6's 28.8 % is the `hospital_sim` result (re-measured today: 150 vs 520). On `hospital_sim6`, which is now the default pack, it is 0.327. Both meet ≤ 50 %, but the PRD should say which map. Related: E3's T8 only holds on the 2-robot map (see the E3 row).
 3. **FR-22 "urgent preemption in 1.12 s in T8"** (PRD v6 §3): E3's timings are modelled constants, so I could not find a measured source for 1.12 s.
    What is measured: the cloud publishes a stop lease in ~0.02 s and the edge acted within ~1 s of a cancel in the live stand-in run.
 4. **A real-model weakness the stand-in cannot show:** with Bedrock (Nova Lite) a message like "hello who are you" produced a made-up delivery
@@ -75,7 +74,8 @@ FR-18 on real Bedrock: `curl -X POST https://<api>/llm/outage -d '{"seconds":600
 | File | Covers |
 |---|---|
 | `e2_cloud.csv` | FR-13, FR-17 (rules), FR-19, C1 and C3 (stand-in) |
-| `e3/` | E3 results (csv, json, plots, `e3-results.md`), real log excerpts, run log |
+| `e3/` | E3 on `hospital_sim` (the map E3 was written for): csv, json, plots, `e3-results.md`, run log, real log excerpts |
+| `e3_sim6/` | the same E3 on the six-robot `hospital_sim6` map (T8 fixture mismatch, see above) |
 | `e5_bedrock_down.csv` | FR-18 |
 | `e6_injection.txt` | FR-8 |
 | `e6_sharing.csv` | FR-11, FR-17 (map) |

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 360" font-family="sans-serif" font-size="11">
+<rect width="520" height="360" fill="white"/><text x="70" y="22" font-size="14" font-weight="bold">Completion time vs cost per task (mean over tasks)</text>
+<line x1="70" y1="310" x2="500" y2="310" stroke="#999"/><line x1="70" y1="40" x2="70" y2="310" stroke="#999"/>
+<text x="295" y="352" text-anchor="middle">cost per task, USD (max 0.00028)</text>
+<text x="14" y="175" transform="rotate(-90 14 175)" text-anchor="middle">modelled completion, s (max 91.7)</text>
+<circle cx="250.8" cy="106.0" r="8" fill="#2563eb"><title>C1: $0.00012, 67.5s, success 88%</title></circle><text x="262.8" y="110.0">C1 (88% ok)</text>
+<circle cx="480.0" cy="40.0" r="8" fill="#dc2626"><title>C2: $0.00028, 91.7s, success 88%</title></circle><text x="492.0" y="44.0">C2 (88% ok)</text>
+<circle cx="90.5" cy="127.6" r="8" fill="#6b7280"><title>C3: $3.8e-07, 59.6s, success 88%</title></circle><text x="102.5" y="131.6">C3 (88% ok)</text>
+</svg>

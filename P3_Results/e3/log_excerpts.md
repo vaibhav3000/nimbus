@@ -8,13 +8,13 @@
   "who": "cloud",
   "decision": "ask_clarify",
   "lease_version": null,
-  "timestamp": "2026-11-06T04:57:01Z"
+  "timestamp": "2026-11-06T05:07:53Z"
  },
  {
   "who": "cloud",
   "decision": "propose_lease",
   "lease_version": null,
-  "timestamp": "2026-11-06T04:57:01Z",
+  "timestamp": "2026-11-06T05:07:53Z",
   "cluster": "east-wing",
   "robots": [
    "R1"
@@ -36,18 +36,18 @@
   "who": "rule",
   "decision": "approve",
   "lease_version": 1,
-  "timestamp": "2026-11-06T04:57:01Z"
+  "timestamp": "2026-11-06T05:07:53Z"
  },
  {
   "who": "cloud",
   "decision": "issue_lease",
   "lease_version": 1,
-  "timestamp": "2026-11-06T04:57:01Z"
+  "timestamp": "2026-11-06T05:07:53Z"
  }
 ]
 ```
 
-## 4. Re-plan: blocked zone E3 -> lease v2 (cloud processing 8.7 ms, HTTP 201; stand-in model, no WAN)
+## 4. Re-plan: blocked zone E3 -> lease v2 (cloud processing 9.3 ms, HTTP 201; stand-in model, no WAN)
 
 ```json
 [
@@ -55,25 +55,25 @@
   "who": "cloud",
   "decision": "propose_lease",
   "lease_version": null,
-  "timestamp": "2026-11-06T04:57:01Z"
+  "timestamp": "2026-11-06T05:07:53Z"
  },
  {
   "who": "cloud",
   "decision": "replan",
   "lease_version": null,
-  "timestamp": "2026-11-06T04:57:01Z"
+  "timestamp": "2026-11-06T05:07:53Z"
  },
  {
   "who": "rule",
   "decision": "approve",
   "lease_version": 2,
-  "timestamp": "2026-11-06T04:57:01Z"
+  "timestamp": "2026-11-06T05:07:53Z"
  },
  {
   "who": "cloud",
   "decision": "issue_lease",
   "lease_version": 2,
-  "timestamp": "2026-11-06T04:57:01Z"
+  "timestamp": "2026-11-06T05:07:53Z"
  }
 ]
 ```

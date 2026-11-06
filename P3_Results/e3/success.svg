@@ -29,9 +29,9 @@
 <rect x="649.7" y="40.0" width="21.1" height="270.0" fill="#dc2626"><title>T7 C2: 1</title></rect>
 <rect x="672.8" y="40.0" width="21.1" height="270.0" fill="#6b7280"><title>T7 C3: 1</title></rect>
 <text x="661.2" y="326" text-anchor="middle">T7</text>
-<rect x="719.1" y="310.0" width="21.1" height="0.0" fill="#2563eb"><title>T8 C1: 0</title></rect>
-<rect x="742.2" y="310.0" width="21.1" height="0.0" fill="#dc2626"><title>T8 C2: 0</title></rect>
-<rect x="765.3" y="310.0" width="21.1" height="0.0" fill="#6b7280"><title>T8 C3: 0</title></rect>
+<rect x="719.1" y="40.0" width="21.1" height="270.0" fill="#2563eb"><title>T8 C1: 1</title></rect>
+<rect x="742.2" y="40.0" width="21.1" height="270.0" fill="#dc2626"><title>T8 C2: 1</title></rect>
+<rect x="765.3" y="40.0" width="21.1" height="270.0" fill="#6b7280"><title>T8 C3: 1</title></rect>
 <text x="753.8" y="326" text-anchor="middle">T8</text>
 <text x="54" y="44" text-anchor="end">1</text><text x="54" y="310" text-anchor="end">0</text>
 <text x="60" y="352" fill="#555">fraction of seeds</text>
