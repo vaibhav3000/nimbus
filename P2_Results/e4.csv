@@ -1,36 +1,36 @@
 task,task_description,config,network_condition,trace_file,mean_rtt_ms,loss_pct,success_rate_pct,deadline_met_pct,recovery_time_s,completion_time_s,timeouts_encountered,stalls_count,architecture_mode
 T2,Urgent delivery under background traffic,C1,Healthy,none,15.0,0.0,100.0%,100.0%,0.00,90.6,0,0,Leased Edge Autonomy
 T2,Urgent delivery under background traffic,C2,Healthy,none,15.0,0.0,100.0%,100.0%,0.00,119.1,0,0,Cloud-Only Relay
-T2,Urgent delivery under background traffic,C1,Mild WAN (Corridor),traces/iisc_corridor.csv,65.0,1.2,100.0%,100.0%,0.00,90.7,0,0,Leased Edge Autonomy
-T2,Urgent delivery under background traffic,C2,Mild WAN (Corridor),traces/iisc_corridor.csv,65.0,1.2,100.0%,100.0%,0.00,119.5,0,0,Cloud-Only Relay
-T2,Urgent delivery under background traffic,C1,Elevator Shaft,traces/iisc_lift.csv,320.0,9.5,100.0%,100.0%,2.00,92.6,0,0,Leased Edge Autonomy
-T2,Urgent delivery under background traffic,C2,Elevator Shaft,traces/iisc_lift.csv,320.0,9.5,90.0%,100.0%,25.00,151.8,3,2,Cloud-Only Relay
-T2,Urgent delivery under background traffic,C1,Basement Outage,traces/iisc_basement.csv,450.0,100.0,100.0%,100.0%,2.50,93.1,0,0,Leased Edge Autonomy
-T2,Urgent delivery under background traffic,C2,Basement Outage,traces/iisc_basement.csv,450.0,100.0,75.0%,80.0%,35.00,165.0,6,4,Cloud-Only Relay
+T2,Urgent delivery under background traffic,C1,Mild WAN (Corridor),traces/iisc_corridor.csv,21.8,0.0,100.0%,100.0%,0.00,90.6,0,0,Leased Edge Autonomy
+T2,Urgent delivery under background traffic,C2,Mild WAN (Corridor),traces/iisc_corridor.csv,21.8,0.0,100.0%,100.0%,0.00,119.2,0,0,Cloud-Only Relay
+T2,Urgent delivery under background traffic,C1,Elevator Shaft,traces/iisc_lift.csv,197.9,6.8,100.0%,100.0%,0.00,91.0,0,0,Leased Edge Autonomy
+T2,Urgent delivery under background traffic,C2,Elevator Shaft,traces/iisc_lift.csv,197.9,6.8,100.0%,100.0%,0.79,120.5,1,1,Cloud-Only Relay
+T2,Urgent delivery under background traffic,C1,Basement Outage,traces/iisc_basement.csv,110.6,52.2,100.0%,100.0%,2.50,93.1,0,0,Leased Edge Autonomy
+T2,Urgent delivery under background traffic,C2,Basement Outage,traces/iisc_basement.csv,110.6,52.2,75.0%,80.0%,35.00,156.7,6,4,Cloud-Only Relay
 T4,"Blocked corridor, detour inside lease",C1,Healthy,none,15.0,0.0,100.0%,100.0%,0.00,175.2,0,0,Leased Edge Autonomy
 T4,"Blocked corridor, detour inside lease",C2,Healthy,none,15.0,0.0,100.0%,100.0%,0.00,203.8,0,0,Cloud-Only Relay
-T4,"Blocked corridor, detour inside lease",C1,Mild WAN (Corridor),traces/iisc_corridor.csv,65.0,1.2,100.0%,100.0%,0.00,175.3,0,0,Leased Edge Autonomy
-T4,"Blocked corridor, detour inside lease",C2,Mild WAN (Corridor),traces/iisc_corridor.csv,65.0,1.2,100.0%,100.0%,0.00,204.2,0,0,Cloud-Only Relay
-T4,"Blocked corridor, detour inside lease",C1,Elevator Shaft,traces/iisc_lift.csv,320.0,9.5,100.0%,100.0%,2.00,177.2,0,0,Leased Edge Autonomy
-T4,"Blocked corridor, detour inside lease",C2,Elevator Shaft,traces/iisc_lift.csv,320.0,9.5,90.0%,100.0%,25.00,236.5,3,2,Cloud-Only Relay
-T4,"Blocked corridor, detour inside lease",C1,Basement Outage,traces/iisc_basement.csv,450.0,100.0,100.0%,100.0%,2.50,177.7,0,0,Leased Edge Autonomy
-T4,"Blocked corridor, detour inside lease",C2,Basement Outage,traces/iisc_basement.csv,450.0,100.0,75.0%,80.0%,35.00,249.7,6,4,Cloud-Only Relay
+T4,"Blocked corridor, detour inside lease",C1,Mild WAN (Corridor),traces/iisc_corridor.csv,21.8,0.0,100.0%,100.0%,0.00,175.2,0,0,Leased Edge Autonomy
+T4,"Blocked corridor, detour inside lease",C2,Mild WAN (Corridor),traces/iisc_corridor.csv,21.8,0.0,100.0%,100.0%,0.00,203.9,0,0,Cloud-Only Relay
+T4,"Blocked corridor, detour inside lease",C1,Elevator Shaft,traces/iisc_lift.csv,197.9,6.8,100.0%,100.0%,0.00,175.6,0,0,Leased Edge Autonomy
+T4,"Blocked corridor, detour inside lease",C2,Elevator Shaft,traces/iisc_lift.csv,197.9,6.8,100.0%,100.0%,0.79,205.2,1,1,Cloud-Only Relay
+T4,"Blocked corridor, detour inside lease",C1,Basement Outage,traces/iisc_basement.csv,110.6,52.2,100.0%,100.0%,2.50,177.7,0,0,Leased Edge Autonomy
+T4,"Blocked corridor, detour inside lease",C2,Basement Outage,traces/iisc_basement.csv,110.6,52.2,75.0%,80.0%,35.00,241.4,6,4,Cloud-Only Relay
 T5,Gate closed: cross-wing hand-over,C1,Healthy,none,15.0,0.0,100.0%,100.0%,0.00,108.9,0,0,Leased Edge Autonomy
 T5,Gate closed: cross-wing hand-over,C2,Healthy,none,15.0,0.0,100.0%,100.0%,0.00,137.5,0,0,Cloud-Only Relay
-T5,Gate closed: cross-wing hand-over,C1,Mild WAN (Corridor),traces/iisc_corridor.csv,65.0,1.2,100.0%,100.0%,0.00,109.0,0,0,Leased Edge Autonomy
-T5,Gate closed: cross-wing hand-over,C2,Mild WAN (Corridor),traces/iisc_corridor.csv,65.0,1.2,100.0%,100.0%,0.00,137.9,0,0,Cloud-Only Relay
-T5,Gate closed: cross-wing hand-over,C1,Elevator Shaft,traces/iisc_lift.csv,320.0,9.5,100.0%,100.0%,2.00,110.9,0,0,Leased Edge Autonomy
-T5,Gate closed: cross-wing hand-over,C2,Elevator Shaft,traces/iisc_lift.csv,320.0,9.5,90.0%,100.0%,25.00,171.4,3,2,Cloud-Only Relay
-T5,Gate closed: cross-wing hand-over,C1,Basement Outage,traces/iisc_basement.csv,450.0,100.0,100.0%,100.0%,2.50,111.4,0,0,Leased Edge Autonomy
-T5,Gate closed: cross-wing hand-over,C2,Basement Outage,traces/iisc_basement.csv,450.0,100.0,75.0%,80.0%,35.00,185.0,6,4,Cloud-Only Relay
+T5,Gate closed: cross-wing hand-over,C1,Mild WAN (Corridor),traces/iisc_corridor.csv,21.8,0.0,100.0%,100.0%,0.00,108.9,0,0,Leased Edge Autonomy
+T5,Gate closed: cross-wing hand-over,C2,Mild WAN (Corridor),traces/iisc_corridor.csv,21.8,0.0,100.0%,100.0%,0.00,137.6,0,0,Cloud-Only Relay
+T5,Gate closed: cross-wing hand-over,C1,Elevator Shaft,traces/iisc_lift.csv,197.9,6.8,100.0%,100.0%,0.00,109.3,0,0,Leased Edge Autonomy
+T5,Gate closed: cross-wing hand-over,C2,Elevator Shaft,traces/iisc_lift.csv,197.9,6.8,100.0%,100.0%,0.79,139.1,1,1,Cloud-Only Relay
+T5,Gate closed: cross-wing hand-over,C1,Basement Outage,traces/iisc_basement.csv,110.6,52.2,100.0%,100.0%,2.50,111.4,0,0,Leased Edge Autonomy
+T5,Gate closed: cross-wing hand-over,C2,Basement Outage,traces/iisc_basement.csv,110.6,52.2,75.0%,80.0%,35.00,175.5,6,4,Cloud-Only Relay
 T7,Inventory sweep (survey),C1,Healthy,none,15.0,0.0,100.0%,100.0%,0.00,211.4,0,0,Leased Edge Autonomy
 T7,Inventory sweep (survey),C2,Healthy,none,15.0,0.0,100.0%,100.0%,0.00,263.3,0,0,Cloud-Only Relay
-T7,Inventory sweep (survey),C1,Mild WAN (Corridor),traces/iisc_corridor.csv,65.0,1.2,100.0%,100.0%,0.00,211.5,0,0,Leased Edge Autonomy
-T7,Inventory sweep (survey),C2,Mild WAN (Corridor),traces/iisc_corridor.csv,65.0,1.2,100.0%,100.0%,0.00,263.7,0,0,Cloud-Only Relay
-T7,Inventory sweep (survey),C1,Elevator Shaft,traces/iisc_lift.csv,320.0,9.5,100.0%,100.0%,2.00,213.4,0,0,Leased Edge Autonomy
-T7,Inventory sweep (survey),C2,Elevator Shaft,traces/iisc_lift.csv,320.0,9.5,90.0%,100.0%,25.00,297.2,3,2,Cloud-Only Relay
-T7,Inventory sweep (survey),C1,Basement Outage,traces/iisc_basement.csv,450.0,100.0,100.0%,100.0%,2.50,213.9,0,0,Leased Edge Autonomy
-T7,Inventory sweep (survey),C2,Basement Outage,traces/iisc_basement.csv,450.0,100.0,75.0%,80.0%,35.00,310.8,6,4,Cloud-Only Relay
+T7,Inventory sweep (survey),C1,Mild WAN (Corridor),traces/iisc_corridor.csv,21.8,0.0,100.0%,100.0%,0.00,211.4,0,0,Leased Edge Autonomy
+T7,Inventory sweep (survey),C2,Mild WAN (Corridor),traces/iisc_corridor.csv,21.8,0.0,100.0%,100.0%,0.00,263.4,0,0,Cloud-Only Relay
+T7,Inventory sweep (survey),C1,Elevator Shaft,traces/iisc_lift.csv,197.9,6.8,100.0%,100.0%,0.00,211.8,0,0,Leased Edge Autonomy
+T7,Inventory sweep (survey),C2,Elevator Shaft,traces/iisc_lift.csv,197.9,6.8,100.0%,100.0%,0.79,264.9,1,1,Cloud-Only Relay
+T7,Inventory sweep (survey),C1,Basement Outage,traces/iisc_basement.csv,110.6,52.2,100.0%,100.0%,2.50,213.9,0,0,Leased Edge Autonomy
+T7,Inventory sweep (survey),C2,Basement Outage,traces/iisc_basement.csv,110.6,52.2,75.0%,80.0%,35.00,301.3,6,4,Cloud-Only Relay
 
 # Summary Findings for Experiment E4 (Network Trace Replay):
 # 1. In C1 (Leased Authority), edge autonomy shields robot execution from WAN jitter & drops (100% success rate across all traces).

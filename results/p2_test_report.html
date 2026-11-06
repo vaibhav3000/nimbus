@@ -1,0 +1,2802 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>p2_test_report.html</title>
+    <style>body {
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  /* do not increase min-width as some may use split screens */
+  min-width: 800px;
+  color: #999;
+}
+
+h1 {
+  font-size: 24px;
+  color: black;
+}
+
+h2 {
+  font-size: 16px;
+  color: black;
+}
+
+p {
+  color: black;
+}
+
+a {
+  color: #999;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+/******************************
+ * SUMMARY INFORMATION
+ ******************************/
+#environment td {
+  padding: 5px;
+  border: 1px solid #E6E6E6;
+}
+#environment tr:nth-child(odd) {
+  background-color: #f6f6f6;
+}
+
+/******************************
+ * TEST RESULT COLORS
+ ******************************/
+span.passed,
+.passed .col-result {
+  color: green;
+}
+
+span.skipped,
+span.xfailed,
+span.rerun,
+.skipped .col-result,
+.xfailed .col-result,
+.rerun .col-result {
+  color: orange;
+}
+
+span.error,
+span.failed,
+span.xpassed,
+.error .col-result,
+.failed .col-result,
+.xpassed .col-result {
+  color: red;
+}
+
+/******************************
+ * RESULTS TABLE
+ *
+ * 1. Table Layout
+ * 2. Extra
+ * 3. Sorting items
+ *
+ ******************************/
+/*------------------
+ * 1. Table Layout
+ *------------------*/
+#results-table {
+  border: 1px solid #e6e6e6;
+  color: #999;
+  font-size: 12px;
+  width: 100%;
+}
+#results-table th,
+#results-table td {
+  padding: 5px;
+  border: 1px solid #E6E6E6;
+  text-align: left;
+}
+#results-table th {
+  font-weight: bold;
+}
+
+/*------------------
+ * 2. Extra
+ *------------------*/
+.log {
+  background-color: #e6e6e6;
+  border: 1px solid #e6e6e6;
+  color: black;
+  display: block;
+  font-family: "Courier New", Courier, monospace;
+  height: 230px;
+  overflow-y: scroll;
+  padding: 5px;
+  white-space: pre-wrap;
+}
+.log:only-child {
+  height: inherit;
+}
+
+div.image {
+  border: 1px solid #e6e6e6;
+  float: right;
+  height: 240px;
+  margin-left: 5px;
+  overflow: hidden;
+  width: 320px;
+}
+div.image img {
+  width: 320px;
+}
+
+div.video {
+  border: 1px solid #e6e6e6;
+  float: right;
+  height: 240px;
+  margin-left: 5px;
+  overflow: hidden;
+  width: 320px;
+}
+div.video video {
+  overflow: hidden;
+  width: 320px;
+  height: 240px;
+}
+
+.collapsed {
+  display: none;
+}
+
+.expander::after {
+  content: " (show details)";
+  color: #BBB;
+  font-style: italic;
+  cursor: pointer;
+}
+
+.collapser::after {
+  content: " (hide details)";
+  color: #BBB;
+  font-style: italic;
+  cursor: pointer;
+}
+
+/*------------------
+ * 3. Sorting items
+ *------------------*/
+.sortable {
+  cursor: pointer;
+}
+
+.sort-icon {
+  font-size: 0px;
+  float: left;
+  margin-right: 5px;
+  margin-top: 5px;
+  /*triangle*/
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+}
+.inactive .sort-icon {
+  /*finish triangle*/
+  border-top: 8px solid #E6E6E6;
+}
+.asc.active .sort-icon {
+  /*finish triangle*/
+  border-bottom: 8px solid #999;
+}
+.desc.active .sort-icon {
+  /*finish triangle*/
+  border-top: 8px solid #999;
+}
+</style></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) { // eslint-disable-line no-redeclare
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function findAll(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sortColumn(elem) {
+    toggleSortStates(elem);
+    const colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    let key;
+    if (elem.classList.contains('result')) {
+        key = keyResult;
+    } else if (elem.classList.contains('links')) {
+        key = keyLink;
+    } else {
+        key = keyAlpha;
+    }
+    sortTable(elem, key(colIndex));
+}
+
+function showAllExtras() { // eslint-disable-line no-unused-vars
+    findAll('.col-result').forEach(showExtras);
+}
+
+function hideAllExtras() { // eslint-disable-line no-unused-vars
+    findAll('.col-result').forEach(hideExtras);
+}
+
+function showExtras(colresultElem) {
+    const extras = colresultElem.parentNode.nextElementSibling;
+    const expandcollapse = colresultElem.firstElementChild;
+    extras.classList.remove('collapsed');
+    expandcollapse.classList.remove('expander');
+    expandcollapse.classList.add('collapser');
+}
+
+function hideExtras(colresultElem) {
+    const extras = colresultElem.parentNode.nextElementSibling;
+    const expandcollapse = colresultElem.firstElementChild;
+    extras.classList.add('collapsed');
+    expandcollapse.classList.remove('collapser');
+    expandcollapse.classList.add('expander');
+}
+
+function showFilters() {
+    let visibleString = getQueryParameter('visible') || 'all';
+    visibleString = visibleString.toLowerCase();
+    const checkedItems = visibleString.split(',');
+
+    const filterItems = document.getElementsByClassName('filter');
+    for (let i = 0; i < filterItems.length; i++) {
+        filterItems[i].hidden = false;
+
+        if (visibleString != 'all') {
+            filterItems[i].checked = checkedItems.includes(filterItems[i].getAttribute('data-test-result'));
+            filterTable(filterItems[i]);
+        }
+    }
+}
+
+function addCollapse() {
+    // Add links for show/hide all
+    const resulttable = find('table#results-table');
+    const showhideall = document.createElement('p');
+    showhideall.innerHTML = '<a href="javascript:showAllExtras()">Show all details</a> / ' +
+                            '<a href="javascript:hideAllExtras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    findAll('.col-result').forEach(function(elem) {
+        const collapsed = getQueryParameter('collapsed') || 'Passed';
+        const extras = elem.parentNode.nextElementSibling;
+        const expandcollapse = document.createElement('span');
+        if (extras.classList.contains('collapsed')) {
+            expandcollapse.classList.add('expander');
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add('collapsed');
+            expandcollapse.classList.add('expander');
+        } else {
+            expandcollapse.classList.add('collapser');
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener('click', function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains('collapsed')) {
+                showExtras(event.currentTarget);
+            } else {
+                hideExtras(event.currentTarget);
+            }
+        });
+    });
+}
+
+function getQueryParameter(name) {
+    const match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () { // eslint-disable-line no-unused-vars
+    resetSortHeaders();
+
+    addCollapse();
+
+    showFilters();
+
+    sortColumn(find('.initial-sort'));
+
+    findAll('.sortable').forEach(function(elem) {
+        elem.addEventListener('click',
+            function() {
+                sortColumn(elem);
+            }, false);
+    });
+}
+
+function sortTable(clicked, keyFunc) {
+    const rows = findAll('.results-table-row');
+    const reversed = !clicked.classList.contains('asc');
+    const sortedRows = sort(rows, keyFunc, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    const thead = document.getElementById('results-table-head');
+    document.getElementById('results-table').remove();
+    const parent = document.createElement('table');
+    parent.id = 'results-table';
+    parent.appendChild(thead);
+    sortedRows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName('BODY')[0].appendChild(parent);
+}
+
+function sort(items, keyFunc, reversed) {
+    const sortArray = items.map(function(item, i) {
+        return [keyFunc(item), i];
+    });
+
+    sortArray.sort(function(a, b) {
+        const keyA = a[0];
+        const keyB = b[0];
+
+        if (keyA == keyB) return 0;
+
+        if (reversed) {
+            return keyA < keyB ? 1 : -1;
+        } else {
+            return keyA > keyB ? 1 : -1;
+        }
+    });
+
+    return sortArray.map(function(item) {
+        const index = item[1];
+        return items[index];
+    });
+}
+
+function keyAlpha(colIndex) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[colIndex].firstChild.data.toLowerCase();
+    };
+}
+
+function keyLink(colIndex) {
+    return function(elem) {
+        const dataCell = elem.childNodes[1].childNodes[colIndex].firstChild;
+        return dataCell == null ? '' : dataCell.innerText.toLowerCase();
+    };
+}
+
+function keyResult(colIndex) {
+    return function(elem) {
+        const strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+            'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[colIndex].firstChild.data);
+    };
+}
+
+function resetSortHeaders() {
+    findAll('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    findAll('.sortable').forEach(function(elem) {
+        const icon = document.createElement('div');
+        icon.className = 'sort-icon';
+        icon.textContent = 'vvv';
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove('desc', 'active');
+        elem.classList.add('asc', 'inactive');
+    });
+}
+
+function toggleSortStates(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        resetSortHeaders();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function isAllRowsHidden(value) {
+    return value.hidden == false;
+}
+
+function filterTable(elem) { // eslint-disable-line no-unused-vars
+    const outcomeAtt = 'data-test-result';
+    const outcome = elem.getAttribute(outcomeAtt);
+    const classOutcome = outcome + ' results-table-row';
+    const outcomeRows = document.getElementsByClassName(classOutcome);
+
+    for(let i = 0; i < outcomeRows.length; i++){
+        outcomeRows[i].hidden = !elem.checked;
+    }
+
+    const rows = findAll('.results-table-row').filter(isAllRowsHidden);
+    const allRowsHidden = rows.length == 0 ? true : false;
+    const notFoundMessage = document.getElementById('not-found-message');
+    notFoundMessage.hidden = !allRowsHidden;
+}
+</script>
+    <h1>p2_test_report.html</h1>
+    <p>Report generated on 06-Nov-2026 at 05:07:56 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v3.2.0</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "1.7.0", "pytest": "6.2.5"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.35</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"ament-copyright": "0.12.12", "ament-flake8": "0.12.12", "ament-lint": "0.12.12", "ament-pep257": "0.12.12", "ament-xmllint": "0.12.12", "arraydiff": "0.5.0", "astropy-header": "0.2.0", "colcon-core": "0.19.0", "cov": "3.0.0", "doctestplus": "0.11.2", "filter-subpackage": "0.1.1", "html": "3.2.0", "hypothesis": "6.36.0", "launch-testing": "1.0.9", "launch-testing-ros": "0.19.9", "metadata": "2.0.4", "mock": "3.6.1", "openfiles": "0.5.0", "remotedata": "0.3.3"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.10.12</td></tr></table>
+    <h2>Summary</h2>
+    <p>72 tests ran in 88.43 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="passed">72 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="failed">0 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable" col="duration">Duration</th>
+          <th class="sortable links" col="links">Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_boundary_and_parking.py::test_geofence_validator_allowed_and_forbidden_zones</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_boundary_and_parking.py::test_geofence_validator_metric_coordinates</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_boundary_and_parking.py::test_supervisor_blocks_destination_outside_allowed_zones</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-unallowed-001 (v1) | Priority: urgent
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-unallowed-001 (v1)
+      |-- Priority           : URGENT
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:28Z
+      \-- Sub-task Sequence  : 1 steps planned:
+         [1] go_to -&gt; to &#x27;pediatric-icu&#x27;
+
+  [3] Sub-task Execution Stream:
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+      |-- [Step 1/1] Boundary check FAILED: Boundary violation: Destination &#x27;pediatric-icu&#x27; is not permitted in allowed_zones [&#x27;corridor-2B&#x27;, &#x27;south_equipment_approach&#x27;]
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_boundary_and_parking.py::test_supervisor_blocks_forbidden_intermediate_waypoints</td>
+          <td class="col-duration">0.09</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-waypoint-001 (v1) | Priority: urgent
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-waypoint-001 (v1)
+      |-- Priority           : URGENT
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:28Z
+      \-- Sub-task Sequence  : 1 steps planned:
+         [1] go_to -&gt; to &#x27;2B-12&#x27;
+
+  [3] Sub-task Execution Stream:
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+      |-- [Step 1/1] Boundary check FAILED: Boundary violation: Intermediate waypoint #2 invalid: Destination &#x27;ward-2C-isolation&#x27; is explicitly inside forbidden_zones
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_boundary_and_parking.py::test_safe_parking_prohibits_doorways_elevators_and_corridors</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_boundary_and_parking.py::test_nearest_safe_parking_spot_selection</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_boundary_and_parking.py::test_nearest_safe_parking_spot_excludes_forbidden_zones</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_boundary_and_parking.py::test_in_flight_expiry_interrupt</td>
+          <td class="col-duration">0.12</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>[east-wing] 05:06:28 EDGE -&gt; R1: stop reason=Expiry interrupt: Watchdog timer: valid_until exceeded  (cmd cmd-stop-R1-1793941588430)
+[east-wing] 05:06:28 R1 -&gt; EDGE: stop COMPLETED zone=corridor-2B (0.0s) Stop executed: Expiry interrupt: Watchdog timer: valid_until exceeded
+[east-wing] 05:06:28 EDGE -&gt; R1: go_to to=safe-parking-bay-2, target=[11.0, -1.8], reason=lease_expiry_safe_park  (cmd cmd-park-R1-1793941588430)
+[east-wing] 05:06:28 R1 -&gt; EDGE: go_to COMPLETED zone=safe-parking-bay-2 (0.0s) Arrived at safe-parking-bay-2 ([11.0, -1.8])
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_boundary_and_parking.py::test_multi_robot_safe_parking_on_expiry</td>
+          <td class="col-duration">0.13</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_c2_baseline.py::test_c2_baseline_relays_obstacle_to_cloud</td>
+          <td class="col-duration">0.14</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-c2-obs (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-c2-obs (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:28Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+         [3] photo
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:06:28 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-c2-obs-step-1)
+[east-wing] 05:06:28 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:28 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-c2-obs-step-2)
+[east-wing] 05:06:28 R1 -&gt; EDGE: go_to BLOCKED zone=south_equipment_approach (0.0s) Navigation blocked in corridor-2B: Delivery trolley parked in hallway
+      |   |--- Execution Mode : [C2 CLOUD-ONLY RELAY TRIGGERED]
+      |   |   |--- Trigger Event  : Navigation blocked in corridor-2B: Delivery trolley parked in hallway in &#x27;corridor-2B&#x27;
+      |   |   \--- Policy Action  : Bypassing local SLM; relaying event to Cloud
+[east-wing] 05:06:28 EDGE -&gt; R1: stop reason=C2 relay pause for event in corridor-2B  (cmd lease-c2-obs-2-1793941588734)
+[east-wing] 05:06:28 R1 -&gt; EDGE: stop COMPLETED zone=south_equipment_approach (0.0s) Stop executed: C2 relay pause for event in corridor-2B
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_c2_baseline.py::test_c2_baseline_relays_hardware_fault_to_cloud</td>
+          <td class="col-duration">0.11</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-c2-fault (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-c2-fault (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:28Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+         [3] photo
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:06:28 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-c2-fault-step-1)
+[east-wing] 05:06:28 R1 -&gt; EDGE: go_to FAILED zone=north_hall (0.0s) Motor drive stall in steering assembly
+      |   |--- Execution Mode : [C2 CLOUD-ONLY RELAY TRIGGERED]
+      |   |   |--- Trigger Event  : Motor drive stall in steering assembly in &#x27;north_hall&#x27;
+      |   |   \--- Policy Action  : Bypassing local SLM; relaying event to Cloud
+[east-wing] 05:06:28 EDGE -&gt; R1: stop reason=C2 relay pause for event in north_hall  (cmd ase-c2-fault-1-1793941588849)
+[east-wing] 05:06:28 R1 -&gt; EDGE: stop FAILED zone=north_hall (0.0s) Motor drive stall in steering assembly
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_c2_baseline.py::test_c1_vs_c2_comparative_behavior</td>
+          <td class="col-duration">0.34</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-c1-cmp (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-c1-cmp (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:28Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+         [3] photo
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:06:28 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-c1-cmp-step-1)
+[east-wing] 05:06:28 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:28 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-c1-cmp-step-2)
+[east-wing] 05:06:28 R1 -&gt; EDGE: go_to BLOCKED zone=south_equipment_approach (0.0s) Navigation blocked in corridor-2B: Mobile trolley
+      |   |--- Execution Mode : [SLM TAKEOVER TRIGGERED]
+      |   |   |--- Trigger Event  : Navigation blocked in corridor-2B: Mobile trolley in &#x27;corridor-2B&#x27;
+      |   |   \--- Reasoner Engine: Edge SLM (qwen2.5:1.5b, mode: mock)
+      |   |   |--- SLM Latency    : 15.2 ms (0.02 s) [PASS: &lt;= 10.0s SLA]
+      |   |   |--- Decided By     : Edge SLM (qwen2.5:1.5b)
+      |   |   |--- Final Decision : LOCAL_WAIT
+      |   |   \--- SLM Reason     : \&quot;Transient corridor obstacle detected; waiting for passage clearance.\&quot;
+      |   |   |--- Action Dispatch: LOCAL_WAIT -&gt; Pausing robot R1 for 5.0s
+[east-wing] 05:06:29 EDGE -&gt; R1: wait duration_sec=5.0  (cmd lease-c1-cmp-2-1793941588998)
+[east-wing] 05:06:29 R1 -&gt; EDGE: wait COMPLETED zone=south_equipment_approach (0.0s) Waited 5.0s
+      |   |   \--- Action Status  : COMPLETED (Wait finished; dynamic obstacle cleared)
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:29 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-c1-cmp-step-2)
+[east-wing] 05:06:29 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 3/3] Sub-task: photo (Robot: R1)
+[east-wing] 05:06:29 EDGE -&gt; R1: photo   (cmd cmd-lease-c1-cmp-step-3)
+[east-wing] 05:06:29 R1 -&gt; EDGE: photo COMPLETED zone=east_waiting_approach (0.0s) Simulated photo event at [4.5, 8.0, 0.0] (east_waiting_approach) with res 1280x720
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-c1-cmp (Task ID: lease-c1-cmp)
+  Final Status     : COMPLETED
+  Executed Steps   : 3 sub-tasks
+  Mission Duration : 0.14 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-c1-cmp/delivery-proof.jpg
+  SHA-256 Digest   : 34ba1c50b23dddeaef00df6d012dc64b4ce85f3bc2717764c32af3654e5aa0f5
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 3 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+======================================================================
+  [EAST-WING] INGESTED LEASE: lease-c2-cmp (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-c2-cmp (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:29Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+         [3] photo
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:06:29 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-c2-cmp-step-1)
+[east-wing] 05:06:29 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:29 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-c2-cmp-step-2)
+[east-wing] 05:06:29 R1 -&gt; EDGE: go_to BLOCKED zone=south_equipment_approach (0.0s) Navigation blocked in corridor-2B: Mobile trolley
+      |   |--- Execution Mode : [C2 CLOUD-ONLY RELAY TRIGGERED]
+      |   |   |--- Trigger Event  : Navigation blocked in corridor-2B: Mobile trolley in &#x27;corridor-2B&#x27;
+      |   |   \--- Policy Action  : Bypassing local SLM; relaying event to Cloud
+[east-wing] 05:06:29 EDGE -&gt; R1: stop reason=C2 relay pause for event in corridor-2B  (cmd lease-c2-cmp-2-1793941589193)
+[east-wing] 05:06:29 R1 -&gt; EDGE: stop COMPLETED zone=south_equipment_approach (0.0s) Stop executed: C2 relay pause for event in corridor-2B
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_c2_baseline.py::test_c3_rules_baseline_mode</td>
+          <td class="col-duration">0.21</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-c3-run (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-c3-run (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:29Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+         [3] photo
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:06:29 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-c3-run-step-1)
+[east-wing] 05:06:29 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:29 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-c3-run-step-2)
+[east-wing] 05:06:29 R1 -&gt; EDGE: go_to BLOCKED zone=south_equipment_approach (0.0s) Navigation blocked in corridor-2B: Trolley
+      |   |--- Execution Mode : [SLM TAKEOVER TRIGGERED]
+      |   |   |--- Trigger Event  : Navigation blocked in corridor-2B: Trolley in &#x27;corridor-2B&#x27;
+      |   |   \--- Reasoner Engine: Edge SLM (qwen2.5:1.5b, mode: rules_only)
+      |   |   |--- Rule Latency   : 0.1 ms (0.00 s) [PASS: Deterministic Rule]
+      |   |   |--- Decided By     : Deterministic Rule Engine
+      |   |   |--- Rule Action    : LOCAL_WAIT
+      |   |   \--- Rule Reason    : \&quot;Rule fallback: Dynamic obstacle; waiting 10s for clearance.\&quot;
+      |   |   |--- Action Dispatch: LOCAL_WAIT -&gt; Pausing robot R1 for 5.0s
+[east-wing] 05:06:29 EDGE -&gt; R1: wait duration_sec=5.0  (cmd lease-c3-run-2-1793941589344)
+[east-wing] 05:06:29 R1 -&gt; EDGE: wait COMPLETED zone=south_equipment_approach (0.0s) Waited 5.0s
+      |   |   \--- Action Status  : COMPLETED (Wait finished; dynamic obstacle cleared)
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:29 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-c3-run-step-2)
+[east-wing] 05:06:29 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 3/3] Sub-task: photo (Robot: R1)
+[east-wing] 05:06:29 EDGE -&gt; R1: photo   (cmd cmd-lease-c3-run-step-3)
+[east-wing] 05:06:29 R1 -&gt; EDGE: photo COMPLETED zone=east_waiting_approach (0.0s) Simulated photo event at [4.5, 8.0, 0.0] (east_waiting_approach) with res 1280x720
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-c3-run (Task ID: lease-c3-run)
+  Final Status     : COMPLETED
+  Executed Steps   : 3 sub-tasks
+  Mission Duration : 0.14 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-c3-run/delivery-proof.jpg
+  SHA-256 Digest   : a586d56ed4c46908f9daf1e234e0d2a3c332e03a4018865223f68ee07e200d88
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 3 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_gazebo_regressions.py::test_continuous_pose_synchronization_uses_measured_feedback</td>
+          <td class="col-duration">2.33</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_gazebo_regressions.py::test_success_requires_fresh_sensors_and_verified_arrival</td>
+          <td class="col-duration">1.63</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_gazebo_regressions.py::test_obstacle_stops_navigation_and_returns_blocked</td>
+          <td class="col-duration">0.08</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_gazebo_regressions.py::test_range_disconnect_during_motion_fails_closed</td>
+          <td class="col-duration">0.26</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_gazebo_regressions.py::test_odometry_disconnect_during_motion_prevents_completion</td>
+          <td class="col-duration">0.27</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_gazebo_regressions.py::test_unknown_destination_is_rejected_without_motion</td>
+          <td class="col-duration">0.07</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_gazebo_regressions.py::test_coordinate_outside_corridor_costmap_is_rejected</td>
+          <td class="col-duration">0.06</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_gazebo_regressions.py::test_ground_truth_mismatch_withholds_completion</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_gazebo_regressions.py::test_supervisor_preserves_detailed_failure_and_never_emits_completion</td>
+          <td class="col-duration">0.17</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_gazebo_regressions.py::test_explicit_mock_mode_never_claims_physical_verification</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_tier.py::test_lease_schema_validation</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_tier.py::test_task_t1_execution_end_to_end</td>
+          <td class="col-duration">0.29</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-task-t1-001 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;east_waiting_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;west_mid_hall&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-task-t1-001 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;east_waiting_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;west_mid_hall&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:18:34Z
+      \-- Sub-task Sequence  : 5 steps planned:
+         [1] go_to -&gt; to &#x27;east_waiting_approach&#x27;
+         [2] wait -&gt; {&#x27;seconds&#x27;: 5}
+         [3] go_to -&gt; to &#x27;nurse_station_approach&#x27;
+         [4] photo
+         [5] beep
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/5] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:34 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-task-t1-001-step-1)
+[east-wing] 05:06:34 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 2/5] Sub-task: wait ({&#x27;seconds&#x27;: 5}) (Robot: R1)
+[east-wing] 05:06:34 EDGE -&gt; R1: wait seconds=5  (cmd cmd-lease-task-t1-001-step-2)
+[east-wing] 05:06:34 R1 -&gt; EDGE: wait COMPLETED zone=east_waiting_approach (0.0s) Waited 5s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 3/5] Sub-task: go_to to &#x27;nurse_station_approach&#x27; (Robot: R1)
+[east-wing] 05:06:34 EDGE -&gt; R1: go_to to=nurse_station_approach, target=[0.0, 5.0], max_speed=0.8  (cmd cmd-lease-task-t1-001-step-3)
+[east-wing] 05:06:34 R1 -&gt; EDGE: go_to COMPLETED zone=nurse_station_approach (0.0s) Arrived at nurse_station_approach ([0.0, 5.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 5.0] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 4/5] Sub-task: photo (Robot: R1)
+[east-wing] 05:06:34 EDGE -&gt; R1: photo   (cmd cmd-lease-task-t1-001-step-4)
+[east-wing] 05:06:34 R1 -&gt; EDGE: photo COMPLETED zone=nurse_station_approach (0.0s) Simulated photo event at [0.0, 5.0, 0.0] (nurse_station_approach) with res 1280x720
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 5.0] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 5/5] Sub-task: beep (Robot: R1)
+[east-wing] 05:06:34 EDGE -&gt; R1: beep   (cmd cmd-lease-task-t1-001-step-5)
+[east-wing] 05:06:34 R1 -&gt; EDGE: beep COMPLETED zone=nurse_station_approach (0.0s) Beeped at 440Hz
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 5.0] | Zone: nurse_station_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-task-t1-001 (Task ID: lease-task-t1-001)
+  Final Status     : COMPLETED
+  Executed Steps   : 5 sub-tasks
+  Mission Duration : 0.22 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-task-t1-001/delivery-proof.jpg
+  SHA-256 Digest   : eb5a4199696f0a2e1e129c237945c3a828d97c984dd5f5d9da0208af32d9f691
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 5 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_tier.py::test_monotonic_versioning_and_deduplication</td>
+          <td class="col-duration">0.34</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-dedup-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;east_waiting_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;west_mid_hall&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-dedup-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;east_waiting_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;west_mid_hall&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:18:34Z
+      \-- Sub-task Sequence  : 5 steps planned:
+         [1] go_to -&gt; to &#x27;east_waiting_approach&#x27;
+         [2] wait -&gt; {&#x27;seconds&#x27;: 5}
+         [3] go_to -&gt; to &#x27;nurse_station_approach&#x27;
+         [4] photo
+         [5] beep
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/5] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:34 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-dedup-01-step-1)
+[east-wing] 05:06:34 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 2/5] Sub-task: wait ({&#x27;seconds&#x27;: 5}) (Robot: R1)
+[east-wing] 05:06:34 EDGE -&gt; R1: wait seconds=5  (cmd cmd-lease-dedup-01-step-2)
+[east-wing] 05:06:34 R1 -&gt; EDGE: wait COMPLETED zone=east_waiting_approach (0.0s) Waited 5s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 3/5] Sub-task: go_to to &#x27;nurse_station_approach&#x27; (Robot: R1)
+[east-wing] 05:06:34 EDGE -&gt; R1: go_to to=nurse_station_approach, target=[0.0, 5.0], max_speed=0.8  (cmd cmd-lease-dedup-01-step-3)
+[east-wing] 05:06:34 R1 -&gt; EDGE: go_to COMPLETED zone=nurse_station_approach (0.0s) Arrived at nurse_station_approach ([0.0, 5.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 5.0] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 4/5] Sub-task: photo (Robot: R1)
+[east-wing] 05:06:34 EDGE -&gt; R1: photo   (cmd cmd-lease-dedup-01-step-4)
+[east-wing] 05:06:34 R1 -&gt; EDGE: photo COMPLETED zone=nurse_station_approach (0.0s) Simulated photo event at [0.0, 5.0, 0.0] (nurse_station_approach) with res 1280x720
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 5.0] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 5/5] Sub-task: beep (Robot: R1)
+[east-wing] 05:06:34 EDGE -&gt; R1: beep   (cmd cmd-lease-dedup-01-step-5)
+[east-wing] 05:06:34 R1 -&gt; EDGE: beep COMPLETED zone=nurse_station_approach (0.0s) Beeped at 440Hz
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 5.0] | Zone: nurse_station_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-dedup-01 (Task ID: lease-dedup-01)
+  Final Status     : COMPLETED
+  Executed Steps   : 5 sub-tasks
+  Mission Duration : 0.21 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-dedup-01/delivery-proof.jpg
+  SHA-256 Digest   : a3350876921b312d1c764f5e3d526c44bf36c1c3e3fc1ce816509319ee0610ab
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 5 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+======================================================================
+  [EAST-WING] INGESTED LEASE: lease-dedup-01 (v1) | Priority: routine
+======================================================================
+  [-] Dropped stale/duplicate lease: Stale/duplicate version 1 &lt;= 1. Dropped.
+======================================================================
+  [EAST-WING] INGESTED LEASE: lease-dedup-01 (v2) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v2 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;east_waiting_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;west_mid_hall&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-dedup-01 (v2)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: nurse_station_approach, Pose: [0.0, 5.0])
+      |-- Allowed Zones      : [&#x27;east_waiting_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;west_mid_hall&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:18:34Z
+      \-- Sub-task Sequence  : 5 steps planned:
+         [1] go_to -&gt; to &#x27;east_waiting_approach&#x27;
+         [2] wait -&gt; {&#x27;seconds&#x27;: 5}
+         [3] go_to -&gt; to &#x27;nurse_station_approach&#x27;
+         [4] photo
+         [5] beep
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/5] Sub-task already COMPLETED in store (Standby Takeover / Deduplication) -&gt; Skipping physical re-execution
+      |-- [Step 2/5] Sub-task already COMPLETED in store (Standby Takeover / Deduplication) -&gt; Skipping physical re-execution
+      |-- [Step 3/5] Sub-task already COMPLETED in store (Standby Takeover / Deduplication) -&gt; Skipping physical re-execution
+      |-- [Step 4/5] Sub-task already COMPLETED in store (Standby Takeover / Deduplication) -&gt; Skipping physical re-execution
+      |-- [Step 5/5] Sub-task already COMPLETED in store (Standby Takeover / Deduplication) -&gt; Skipping physical re-execution
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-dedup-01 (Task ID: lease-dedup-01)
+  Final Status     : COMPLETED
+  Executed Steps   : 5 sub-tasks
+  Mission Duration : 0.01 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-dedup-01/delivery-proof.jpg
+  SHA-256 Digest   : d9e3aa31cdebf2ffc1e56875d4900b6a83e370a7c29b7f6f7a6f07ad1a4f52f0
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 5 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_tier.py::test_forbidden_zone_boundary_enforcement</td>
+          <td class="col-duration">0.16</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-forbidden-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;east_waiting_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;west_mid_hall&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-forbidden-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;east_waiting_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;west_mid_hall&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:18:35Z
+      \-- Sub-task Sequence  : 5 steps planned:
+         [1] go_to -&gt; to &#x27;east_waiting_approach&#x27;
+         [2] wait -&gt; {&#x27;seconds&#x27;: 5}
+         [3] go_to -&gt; to &#x27;west_mid_hall&#x27;
+         [4] photo
+         [5] beep
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/5] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:35 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd md-lease-forbidden-01-step-1)
+[east-wing] 05:06:35 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 2/5] Sub-task: wait ({&#x27;seconds&#x27;: 5}) (Robot: R1)
+[east-wing] 05:06:35 EDGE -&gt; R1: wait seconds=5  (cmd md-lease-forbidden-01-step-2)
+[east-wing] 05:06:35 R1 -&gt; EDGE: wait COMPLETED zone=east_waiting_approach (0.0s) Waited 5s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+      |-- [Step 3/5] Boundary check FAILED: Forbidden zone: west_mid_hall
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_tier.py::test_expiry_watchdog_safe_parking</td>
+          <td class="col-duration">0.06</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-expired-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;east_waiting_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;west_mid_hall&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-expired-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;east_waiting_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;west_mid_hall&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:04:35Z
+      \-- Sub-task Sequence  : 5 steps planned:
+         [1] go_to -&gt; to &#x27;east_waiting_approach&#x27;
+         [2] wait -&gt; {&#x27;seconds&#x27;: 5}
+         [3] go_to -&gt; to &#x27;nurse_station_approach&#x27;
+         [4] photo
+         [5] beep
+
+  [3] Sub-task Execution Stream:
+[east-wing] 05:06:35 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], reason=lease_expiry_safe_park  (cmd cmd-park-1793941595181)
+[east-wing] 05:06:35 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+
+  [!] EXPIRED_PARKED: Lease expired mid-mission; parked safely in east_waiting_approach
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_tier.py::test_topology_integration_and_waypoint_tracking</td>
+          <td class="col-duration">0.05</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_edge_tier.py::test_heartbeat_and_checkin_resilience</td>
+          <td class="col-duration">0.05</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>[east-wing] Sending heartbeat (3 robots)
+[east-wing] Heartbeat network error: &lt;urlopen error [Errno 111] Connection refused&gt;
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_escalation_pipeline.py::test_clarify_escalation_schema_compliance</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_escalation_pipeline.py::test_unexpected_event_escalation_schema_compliance</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_escalation_pipeline.py::test_output_ready_escalation_schema_compliance</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_escalation_pipeline.py::test_ambiguous_destination_triggers_clarify</td>
+          <td class="col-duration">1.11</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-ambig-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;mri-suite&#x27;, &#x27;operating-theatre-1&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-ambig-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;mri-suite&#x27;, &#x27;operating-theatre-1&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:35Z
+      \-- Sub-task Sequence  : 2 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;ward-2B-room-4&#x27;
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/2] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:06:35 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-ambig-01-step-1)
+[east-wing] 05:06:35 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/2] Ambiguity detected -&gt; CLARIFY
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+[east-wing] 05:06:35 EDGE -&gt; CLOUD: CLARIFY &#x27;Patient has two beds: Bed 4A or Bed 4B?&#x27; readings=[&#x27;Bed 4A&#x27;, &#x27;Bed 4B&#x27;]; robots held, waiting for the answer
+[east-wing] 05:06:35 EDGE -&gt; R1: stop reason=waiting for clarification  (cmd top-clarify-R1-1793941595407)
+[east-wing] 05:06:35 R1 -&gt; EDGE: stop COMPLETED zone=south_equipment_approach (0.0s) Stop executed: waiting for clarification
+[east-wing] 05:06:36 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], reason=lease_expiry_safe_park  (cmd cmd-park-1793941596409)
+[east-wing] 05:06:36 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_escalation_pipeline.py::test_unsolvable_corridor_blockage_triggers_unexpected_event</td>
+          <td class="col-duration">0.25</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-no-detour-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;corridor-2B-north&#x27;, &#x27;corridor-2B-south&#x27;, &#x27;mri-suite&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-no-detour-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;corridor-2B-north&#x27;, &#x27;corridor-2B-south&#x27;, &#x27;mri-suite&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:36Z
+      \-- Sub-task Sequence  : 2 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/2] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:06:36 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd md-lease-no-detour-01-step-1)
+[east-wing] 05:06:36 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/2] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:36 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd md-lease-no-detour-01-step-2)
+[east-wing] 05:06:36 R1 -&gt; EDGE: go_to BLOCKED zone=south_equipment_approach (0.0s) Navigation blocked in corridor-2B: Scaffolding collapse
+      |   |--- Execution Mode : [SLM TAKEOVER TRIGGERED]
+      |   |   |--- Trigger Event  : Navigation blocked in corridor-2B: Scaffolding collapse in &#x27;corridor-2B&#x27;
+      |   |   \--- Reasoner Engine: Edge SLM (qwen2.5:1.5b, mode: mock)
+      |   |   |--- SLM Latency    : 15.0 ms (0.02 s) [PASS: &lt;= 10.0s SLA]
+      |   |   |--- Decided By     : Edge SLM (qwen2.5:1.5b)
+      |   |   |--- Final Decision : ESCALATE_UNEXPECTED
+      |   |   \--- SLM Reason     : \&quot;Corridor is completely blocked and no alternate detour exists within lease authority.\&quot;
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+      |   |   |--- Action Dispatch: ESCALATE_UNEXPECTED -&gt; Emitted UNEXPECTED_EVENT to Cloud
+      |   |   \--- Escalation Reason: \&quot;Corridor is completely blocked and no alternate detour exists within lease authority.\&quot;
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_escalation_pipeline.py::test_camera_artifact_packaging_and_output_ready</td>
+          <td class="col-duration">0.22</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-photo-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;mri-suite&#x27;, &#x27;operating-theatre-1&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-photo-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;mri-suite&#x27;, &#x27;operating-theatre-1&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:36Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+         [3] photo -&gt; {&#x27;photo_resolution&#x27;: &#x27;1280x720&#x27;}
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:06:36 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-photo-01-step-1)
+[east-wing] 05:06:36 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:36 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-photo-01-step-2)
+[east-wing] 05:06:36 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 3/3] Sub-task: photo ({&#x27;photo_resolution&#x27;: &#x27;1280x720&#x27;}) (Robot: R1)
+[east-wing] 05:06:36 EDGE -&gt; R1: photo   (cmd cmd-lease-photo-01-step-3)
+[east-wing] 05:06:36 R1 -&gt; EDGE: photo COMPLETED zone=east_waiting_approach (0.0s) Simulated photo event at [4.5, 8.0, 0.0] (east_waiting_approach) with res 1280x720
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-photo-01 (Task ID: lease-photo-01)
+  Final Status     : COMPLETED
+  Executed Steps   : 3 sub-tasks
+  Mission Duration : 0.13 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-photo-01/delivery-proof.jpg
+  SHA-256 Digest   : 2958a1c289a3c7f21bba3309d11349ae98c8bbc302989b087239586131baf2f6
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 3 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_escalation_pipeline.py::test_cloud_replanning_and_monotonic_version_execution</td>
+          <td class="col-duration">0.23</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-replan-001 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;corridor-2B-north&#x27;, &#x27;mri-suite&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-replan-001 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;corridor-2B-north&#x27;, &#x27;mri-suite&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:36Z
+      \-- Sub-task Sequence  : 2 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/2] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:06:36 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-replan-001-step-1)
+[east-wing] 05:06:36 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/2] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:37 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-replan-001-step-2)
+[east-wing] 05:06:37 R1 -&gt; EDGE: go_to BLOCKED zone=south_equipment_approach (0.0s) Navigation blocked in corridor-2B: Blocked by repair works
+      |   |--- Execution Mode : [SLM TAKEOVER TRIGGERED]
+      |   |   |--- Trigger Event  : Navigation blocked in corridor-2B: Blocked by repair works in &#x27;corridor-2B&#x27;
+      |   |   \--- Reasoner Engine: Edge SLM (qwen2.5:1.5b, mode: mock)
+      |   |   |--- SLM Latency    : 15.0 ms (0.02 s) [PASS: &lt;= 10.0s SLA]
+      |   |   |--- Decided By     : Edge SLM (qwen2.5:1.5b)
+      |   |   |--- Final Decision : ESCALATE_UNEXPECTED
+      |   |   \--- SLM Reason     : \&quot;Corridor is completely blocked and no alternate detour exists within lease authority.\&quot;
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+      |   |   |--- Action Dispatch: ESCALATE_UNEXPECTED -&gt; Emitted UNEXPECTED_EVENT to Cloud
+      |   |   \--- Escalation Reason: \&quot;Corridor is completely blocked and no alternate detour exists within lease authority.\&quot;
+======================================================================
+  [EAST-WING] INGESTED LEASE: lease-replan-001 (v2) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v2 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;mri-suite&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-replan-001 (v2)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: south_equipment_approach, Pose: [0.0, -15.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;mri-suite&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:58Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;corridor-2B-north&#x27;
+         [3] go_to -&gt; to &#x27;2B-12&#x27;
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task already COMPLETED in store (Standby Takeover / Deduplication) -&gt; Skipping physical re-execution
+      |-- [Step 2/3] Sub-task: go_to to &#x27;corridor-2B-north&#x27; (Robot: R1)
+[east-wing] 05:06:58 EDGE -&gt; R1: go_to to=corridor-2B-north  (cmd cmd-lease-replan-001-step-2)
+[east-wing] 05:06:58 R1 -&gt; EDGE: go_to COMPLETED zone=corridor-2B-north (0.0s) Arrived at corridor-2B-north ([10.0, 2.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [10.0, 2.0] | Zone: corridor-2B-north | Battery: 95.0%
+      |-- [Step 3/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:58 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-replan-001-step-3)
+[east-wing] 05:06:58 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-replan-001 (Task ID: lease-replan-001)
+  Final Status     : COMPLETED
+  Executed Steps   : 3 sub-tasks
+  Mission Duration : 0.07 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-replan-001/execution-receipt.json
+  SHA-256 Digest   : b8c041528fca91b3623894b8733a91dae23d3369a87fce1a96b867de338bab74
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 3 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_failover_takeover.py::test_standby_takeover_resumes_without_duplicate_steps</td>
+          <td class="col-duration">0.20</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>[east-wing] 05:06:58 EDGE -&gt; R1: go_to to=central-supply  (cmd cmd-lease-fo-01-step-1)
+[east-wing] 05:06:58 R1 -&gt; EDGE: go_to COMPLETED zone=central-supply (0.0s) Arrived at central-supply ([0.0, 0.0])
+[east-wing] 05:06:58 EDGE -&gt; R1: wait duration_sec=0.5  (cmd cmd-lease-fo-01-step-2)
+[east-wing] 05:06:58 R1 -&gt; EDGE: wait COMPLETED zone=central-supply (0.0s) Waited 0.5s
+  [FR-7 Failover] Standby supervisor taking over active lease: lease-fo-01
+======================================================================
+  [EAST-WING] INGESTED LEASE: lease-fo-01 (v1) | Priority: urgent
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-fo-01 (v1)
+      |-- Priority           : URGENT
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:21:58Z
+      \-- Sub-task Sequence  : 4 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] wait -&gt; {&#x27;duration_sec&#x27;: 1.0}
+         [3] go_to -&gt; to &#x27;2B-12&#x27;
+         [4] photo
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/4] Sub-task already COMPLETED in store (Standby Takeover / Deduplication) -&gt; Skipping physical re-execution
+      |-- [Step 2/4] Sub-task already COMPLETED in store (Standby Takeover / Deduplication) -&gt; Skipping physical re-execution
+      |-- [Step 3/4] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:06:58 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-fo-01-step-3)
+[east-wing] 05:06:58 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 4/4] Sub-task: photo (Robot: R1)
+[east-wing] 05:06:58 EDGE -&gt; R1: photo   (cmd cmd-lease-fo-01-step-4)
+[east-wing] 05:06:58 R1 -&gt; EDGE: photo COMPLETED zone=east_waiting_approach (0.0s) Simulated photo event at [4.5, 8.0, 0.0] (east_waiting_approach) with res 1280x720
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-fo-01 (Task ID: lease-fo-01)
+  Final Status     : COMPLETED
+  Executed Steps   : 4 sub-tasks
+  Mission Duration : 0.08 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-fo-01/delivery-proof.jpg
+  SHA-256 Digest   : 180262d4efc8476c667a3c27d3fdad808740b3dd00ddb9e19259416524cc5120
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 4 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_failover_takeover.py::test_standby_outbox_persistence_across_crash</td>
+          <td class="col-duration">0.11</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_lease_watch_and_clarify.py::test_newer_lease_version_in_outbox_stops_the_running_lease</td>
+          <td class="col-duration">2.46</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-task-w-v1 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-task-w-v1 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R2 (Start Zone: nurse_station_approach, Pose: [0.0, 9.5])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      |-- Expiry Deadline    : 2026-11-06T05:21:37Z
+      \-- Sub-task Sequence  : 40 steps planned:
+         [1] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [2] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [3] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [4] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [5] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [6] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [7] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [8] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [9] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [10] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [11] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [12] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [13] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [14] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [15] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [16] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [17] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [18] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [19] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [20] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [21] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [22] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [23] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [24] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [25] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [26] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [27] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [28] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [29] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [30] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [31] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [32] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [33] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [34] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [35] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [36] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [37] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [38] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [39] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [40] wait -&gt; {&#x27;seconds&#x27;: 1}
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:37 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-1)
+[east-wing] 05:06:37 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 2/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:38 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-2)
+[east-wing] 05:06:38 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 3/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:38 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-3)
+[east-wing] 05:06:38 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 4/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:39 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-4)
+[east-wing] 05:06:39 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 5/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:39 !! LEASE SUPERSEDED: cloud issued lease v2 for task-w (replaces v1) -&gt; stopping robots
+[east-wing] 05:06:39 EDGE -&gt; R2: stop reason=lease superseded  (cmd -superseded-R2-1793941599525)
+[east-wing] 05:06:39 R2 -&gt; EDGE: stop COMPLETED zone=nurse_station_approach (0.0s) Stop executed: lease superseded
+[east-wing] 05:06:39 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-5)
+[east-wing] 05:06:39 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_lease_watch_and_clarify.py::test_stale_version_409_on_checkin_stops_the_running_lease</td>
+          <td class="col-duration">5.37</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-task-w-v1 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-task-w-v1 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R2 (Start Zone: nurse_station_approach, Pose: [0.0, 9.5])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      |-- Expiry Deadline    : 2026-11-06T05:21:40Z
+      \-- Sub-task Sequence  : 40 steps planned:
+         [1] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [2] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [3] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [4] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [5] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [6] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [7] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [8] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [9] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [10] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [11] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [12] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [13] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [14] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [15] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [16] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [17] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [18] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [19] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [20] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [21] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [22] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [23] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [24] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [25] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [26] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [27] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [28] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [29] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [30] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [31] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [32] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [33] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [34] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [35] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [36] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [37] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [38] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [39] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [40] wait -&gt; {&#x27;seconds&#x27;: 1}
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:40 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-1)
+[east-wing] 05:06:40 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 2/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:40 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-2)
+[east-wing] 05:06:40 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 3/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:41 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-3)
+[east-wing] 05:06:41 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 4/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:41 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-4)
+[east-wing] 05:06:41 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 5/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:42 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-5)
+[east-wing] 05:06:42 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 6/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:42 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-6)
+[east-wing] 05:06:42 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 7/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:43 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-7)
+[east-wing] 05:06:43 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 8/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:43 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-8)
+[east-wing] 05:06:43 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 9/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:44 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-9)
+[east-wing] 05:06:44 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 10/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:44 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-10)
+[east-wing] 05:06:44 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 11/40] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:45 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-11)
+[east-wing] 05:06:45 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Telemetry] Check-in sent to Cloud POST /checkins (Status: stale_version)
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_lease_watch_and_clarify.py::test_renewal_message_extends_the_expiry</td>
+          <td class="col-duration">4.45</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-task-w-v1 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-task-w-v1 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R2 (Start Zone: nurse_station_approach, Pose: [0.0, 9.5])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      |-- Expiry Deadline    : 2026-11-06T05:21:45Z
+      \-- Sub-task Sequence  : 9 steps planned:
+         [1] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [2] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [3] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [4] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [5] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [6] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [7] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [8] wait -&gt; {&#x27;seconds&#x27;: 1}
+         [9] wait -&gt; {&#x27;seconds&#x27;: 1}
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/9] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:45 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-1)
+[east-wing] 05:06:45 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 2/9] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:46 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-2)
+[east-wing] 05:06:46 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 3/9] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:46 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-3)
+[east-wing] 05:06:46 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 4/9] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:07:08 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-4)
+[east-wing] 05:07:08 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Telemetry] Check-in sent to Cloud POST /checkins (Status: accepted)
+      |-- [Step 5/9] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:47 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-5)
+[east-wing] 05:06:47 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 6/9] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:48 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-6)
+[east-wing] 05:06:48 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 7/9] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:48 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-7)
+[east-wing] 05:06:48 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 8/9] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:49 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-8)
+[east-wing] 05:06:49 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+      |-- [Step 9/9] Sub-task: wait ({&#x27;seconds&#x27;: 1}) (Robot: R2)
+[east-wing] 05:06:49 EDGE -&gt; R2: wait seconds=1  (cmd cmd-lease-task-w-v1-step-9)
+[east-wing] 05:06:49 R2 -&gt; EDGE: wait COMPLETED zone=nurse_station_approach (0.0s) Waited 1s
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, 9.5] | Zone: nurse_station_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-task-w-v1 (Task ID: task-w)
+  Final Status     : COMPLETED
+  Executed Steps   : 9 sub-tasks
+  Mission Duration : 4.23 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/task-w/execution-receipt.json
+  SHA-256 Digest   : 44993287340c3deee5d69254fd9fbbd4df41a926c84ddcfe0c21d09a000d9136
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 9 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_lease_watch_and_clarify.py::test_unknown_destination_sends_clarify_and_resumes_with_the_answer</td>
+          <td class="col-duration">2.71</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-task-w-v1 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-task-w-v1 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R2 (Start Zone: nurse_station_approach, Pose: [0.0, 9.5])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      |-- Expiry Deadline    : 2026-11-06T05:21:49Z
+      \-- Sub-task Sequence  : 1 steps planned:
+         [1] go_to -&gt; to &#x27;ward-9Z&#x27;
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/1] Ambiguity detected -&gt; CLARIFY
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+[east-wing] 05:06:49 EDGE -&gt; CLOUD: CLARIFY &#x27;Destination &#x27;ward-9Z&#x27; is not on the hospital map. Which place was meant?&#x27; readings=[&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;]; robots held, waiting for the answer
+[east-wing] 05:06:49 EDGE -&gt; R2: stop reason=waiting for clarification  (cmd top-clarify-R2-1793941609903)
+[east-wing] 05:06:49 R2 -&gt; EDGE: stop COMPLETED zone=nurse_station_approach (0.0s) Stop executed: waiting for clarification
+[east-wing] 05:06:51 CLOUD -&gt; EDGE: ANSWER &#x27;east_waiting_approach&#x27; (chosen reading: east_waiting_approach); resuming
+      |-- [Step 1/1] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R2)
+[east-wing] 05:07:13 EDGE -&gt; R2: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=1.0  (cmd cmd-lease-task-w-v1-step-1)
+[east-wing] 05:07:13 R2 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-task-w-v1 (Task ID: task-w)
+  Final Status     : COMPLETED
+  Executed Steps   : 1 sub-tasks
+  Mission Duration : 23.98 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/task-w/execution-receipt.json
+  SHA-256 Digest   : 734e35a297443be8e9b8e7590df853acd5e9db384a4d1a7d1b7d6b95d204cd54
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 1 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_lease_watch_and_clarify.py::test_clarify_with_unusable_answer_escalates_unexpected_event</td>
+          <td class="col-duration">2.21</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-task-w-v1 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-task-w-v1 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R2 (Start Zone: nurse_station_approach, Pose: [0.0, 9.5])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      |-- Expiry Deadline    : 2026-11-06T05:21:52Z
+      \-- Sub-task Sequence  : 1 steps planned:
+         [1] go_to -&gt; to &#x27;ward-9Z&#x27;
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/1] Ambiguity detected -&gt; CLARIFY
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+[east-wing] 05:06:52 EDGE -&gt; CLOUD: CLARIFY &#x27;Destination &#x27;ward-9Z&#x27; is not on the hospital map. Which place was meant?&#x27; readings=[&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;]; robots held, waiting for the answer
+[east-wing] 05:06:52 EDGE -&gt; R2: stop reason=waiting for clarification  (cmd top-clarify-R2-1793941612611)
+[east-wing] 05:06:52 R2 -&gt; EDGE: stop COMPLETED zone=nurse_station_approach (0.0s) Stop executed: waiting for clarification
+[east-wing] 05:06:54 CLOUD -&gt; EDGE: ANSWER &#x27;somewhere nice&#x27; (chosen reading: None); resuming
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_lease_watch_and_clarify.py::test_a_new_lease_while_waiting_for_an_answer_supersedes</td>
+          <td class="col-duration">2.18</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-task-w-v1 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-task-w-v1 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R2 (Start Zone: nurse_station_approach, Pose: [0.0, 9.5])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      |-- Expiry Deadline    : 2026-11-06T05:21:54Z
+      \-- Sub-task Sequence  : 1 steps planned:
+         [1] go_to -&gt; to &#x27;ward-9Z&#x27;
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/1] Ambiguity detected -&gt; CLARIFY
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+[east-wing] 05:06:54 EDGE -&gt; CLOUD: CLARIFY &#x27;Destination &#x27;ward-9Z&#x27; is not on the hospital map. Which place was meant?&#x27; readings=[&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;]; robots held, waiting for the answer
+[east-wing] 05:06:54 EDGE -&gt; R2: stop reason=waiting for clarification  (cmd top-clarify-R2-1793941614822)
+[east-wing] 05:06:54 R2 -&gt; EDGE: stop COMPLETED zone=nurse_station_approach (0.0s) Stop executed: waiting for clarification
+[east-wing] 05:06:56 !! LEASE SUPERSEDED: cloud issued lease v2 for task-w (replaces v1) -&gt; stopping robots
+[east-wing] 05:06:56 EDGE -&gt; R2: stop reason=lease superseded  (cmd -superseded-R2-1793941616780)
+[east-wing] 05:06:56 R2 -&gt; EDGE: stop COMPLETED zone=nurse_station_approach (0.0s) Stop executed: lease superseded
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_lease_watch_and_clarify.py::test_an_old_answer_already_in_the_outbox_is_not_used</td>
+          <td class="col-duration">3.55</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-task-w-v1 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-task-w-v1 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R2 (Start Zone: nurse_station_approach, Pose: [0.0, 9.5])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;, &#x27;nurse_station_approach&#x27;]
+      |-- Forbidden Zones    : []
+      |-- Expiry Deadline    : 2026-11-06T05:21:56Z
+      \-- Sub-task Sequence  : 1 steps planned:
+         [1] go_to -&gt; to &#x27;ward-9Z&#x27;
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/1] Ambiguity detected -&gt; CLARIFY
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+[east-wing] 05:06:57 EDGE -&gt; CLOUD: CLARIFY &#x27;Destination &#x27;ward-9Z&#x27; is not on the hospital map. Which place was meant?&#x27; readings=[&#x27;south_equipment_approach&#x27;, &#x27;east_mid_hall&#x27;, &#x27;east_waiting_approach&#x27;]; robots held, waiting for the answer
+[east-wing] 05:06:57 EDGE -&gt; R2: stop reason=waiting for clarification  (cmd top-clarify-R2-1793941617017)
+[east-wing] 05:06:57 R2 -&gt; EDGE: stop COMPLETED zone=nurse_station_approach (0.0s) Stop executed: waiting for clarification
+[east-wing] 05:07:00 EDGE -&gt; R2: go_to to=nurse_station_approach, target=[0.0, 5.0], reason=lease_expiry_safe_park  (cmd cmd-park-1793941620070)
+[east-wing] 05:07:00 R2 -&gt; EDGE: go_to COMPLETED zone=nurse_station_approach (0.0s) Arrived at nurse_station_approach ([0.0, 5.0])
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_outbox_resilience.py::test_store_and_forward_persists_before_network_send</td>
+          <td class="col-duration">0.12</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_outbox_resilience.py::test_simulated_10min_outage_zero_data_loss</td>
+          <td class="col-duration">0.61</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-outage-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;mri-suite&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-outage-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;mri-suite&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:22:00Z
+      \-- Sub-task Sequence  : 2 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/2] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:07:00 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-outage-01-step-1)
+[east-wing] 05:07:00 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/2] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:07:00 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-outage-01-step-2)
+[east-wing] 05:07:00 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-outage-01 (Task ID: lease-outage-01)
+  Final Status     : COMPLETED
+  Executed Steps   : 2 sub-tasks
+  Mission Duration : 0.11 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-outage-01/execution-receipt.json
+  SHA-256 Digest   : fa12684a2882195006f1163594b13116f077f40d3cd7483727ff150b2d617b8b
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 2 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_outbox_resilience.py::test_exponential_backoff_on_connection_failures</td>
+          <td class="col-duration">0.13</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_outbox_resilience.py::test_reconnection_summary_generation_and_fleet_reconciliation</td>
+          <td class="col-duration">0.60</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-recon-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;mri-suite&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-recon-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;mri-suite&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:22:01Z
+      \-- Sub-task Sequence  : 2 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/2] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:07:01 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-recon-01-step-1)
+[east-wing] 05:07:01 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/2] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:07:01 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-recon-01-step-2)
+[east-wing] 05:07:01 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-recon-01 (Task ID: lease-recon-01)
+  Final Status     : COMPLETED
+  Executed Steps   : 2 sub-tasks
+  Mission Duration : 0.09 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-recon-01/execution-receipt.json
+  SHA-256 Digest   : 540f0883176caeaa9754a7347faecc5c8a343e22b136241e38696b929f397c5c
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 2 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_outbox_resilience.py::test_automatic_outbox_replay_and_drain_upon_reconnect</td>
+          <td class="col-duration">0.75</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_prd_person2_compliance.py::test_stop_lease_recognition_and_robot_parking</td>
+          <td class="col-duration">0.17</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-task-000007-v3 (v3) | Priority: urgent
+======================================================================
+  [STOP LEASE] Cloud issued stop command for lease-task-000007-v3 (Task task-000007) - halting robots and parking
+[east-wing] 05:07:02 EDGE -&gt; R1: stop reason=Stop lease received: task ended/paused by cloud  (cmd cmd-stop-R1-1793941622879)
+[east-wing] 05:07:02 R1 -&gt; EDGE: stop COMPLETED zone=north_hall (0.0s) Stop executed: Stop lease received: task ended/paused by cloud
+[east-wing] 05:07:02 EDGE -&gt; R1: go_to to=east_waiting_approach  (cmd cmd-park-R1-1793941622879)
+[east-wing] 05:07:02 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_prd_person2_compliance.py::test_edge_token_authentication_headers</td>
+          <td class="col-duration">0.62</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>[east-wing] Sending heartbeat (3 robots)
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_prd_person2_compliance.py::test_unexpected_event_structured_segments_and_robot_zone</td>
+          <td class="col-duration">0.63</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_prd_person2_compliance.py::test_reconnection_reconciliation_action_stop</td>
+          <td class="col-duration">0.74</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>[east-wing] Sending heartbeat (3 robots)
+[east-wing] Reconcile received &#x27;stop&#x27; for lease lease-task-000088-v1 - halting robot
+[east-wing] 05:07:04 EDGE -&gt; R1: stop reason=Expiry interrupt: Cloud reconciled lease termination (stop)  (cmd cmd-stop-R1-1793941624337)
+[east-wing] 05:07:04 R1 -&gt; EDGE: stop COMPLETED zone=north_hall (0.0s) Stop executed: Expiry interrupt: Cloud reconciled lease termination (stop)
+[east-wing] 05:07:04 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], reason=lease_expiry_safe_park  (cmd cmd-park-R1-1793941624338)
+[east-wing] 05:07:04 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_prd_person2_compliance.py::test_survey_task_report_generation</td>
+          <td class="col-duration">0.35</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-task-survey-001-v1 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-task-survey-001-v1 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T06:12:05Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] photo
+         [3] report
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:07:05 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd se-task-survey-001-v1-step-1)
+[east-wing] 05:07:05 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/3] Sub-task: photo (Robot: R1)
+[east-wing] 05:07:05 EDGE -&gt; R1: photo   (cmd se-task-survey-001-v1-step-2)
+[east-wing] 05:07:05 R1 -&gt; EDGE: photo COMPLETED zone=south_equipment_approach (0.0s) Simulated photo event at [0.0, -15.0, 0.0] (south_equipment_approach) with res 1280x720
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 3/3] Sub-task: report (Robot: R1)
+[east-wing] 05:07:05 EDGE -&gt; R1: report   (cmd se-task-survey-001-v1-step-3)
+[east-wing] 05:07:05 R1 -&gt; EDGE: report COMPLETED zone=south_equipment_approach (0.0s) Pose: [0.0, -15.0, 0.0], Zone: south_equipment_approach, Battery: 95.0%
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-task-survey-001-v1 (Task ID: task-survey-001)
+  Final Status     : COMPLETED
+  Executed Steps   : 3 sub-tasks
+  Mission Duration : 0.18 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/task-survey-001/survey.json
+  SHA-256 Digest   : 763b15d30f0d9262392c672149cbf1d94a0360c44b26ffecd58e5c6586f52e6f
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 3 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_prd_person2_compliance.py::test_outbox_selective_sharing_filter</td>
+          <td class="col-duration">0.60</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_sim_robot_adapter.py::TestSimRobotAdapter::test_01_initial_state</td>
+          <td class="col-duration">0.07</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_sim_robot_adapter.py::TestSimRobotAdapter::test_02_goto_navigation</td>
+          <td class="col-duration">49.30</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_sim_robot_adapter.py::TestSimRobotAdapter::test_03_photo_capture</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_sim_robot_adapter.py::TestSimRobotAdapter::test_04_beep_and_wait</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_sim_robot_adapter.py::TestSimRobotAdapter::test_05_report</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_sim_robot_adapter.py::TestSimRobotAdapter::test_06_logical_location_ids_resolve_to_physical_topology</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_sim_robot_adapter.py::TestSimRobotAdapter::test_07_supervisor_spawn_poses_match_simulator_deployment</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_sim_robot_adapter.py::TestSimRobotAdapter::test_08_east_and_west_spawn_headings_transform_world_goals</td>
+          <td class="col-duration">0.12</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_sim_robot_adapter.py::TestSimRobotAdapter::test_09_explicit_non_world_target_is_rejected</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_tactical_autonomy.py::test_local_wait_on_transient_obstacle</td>
+          <td class="col-duration">0.21</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-transient-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-transient-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:22:55Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+         [3] photo
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:07:55 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd md-lease-transient-01-step-1)
+[east-wing] 05:07:55 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:07:55 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd md-lease-transient-01-step-2)
+[east-wing] 05:07:55 R1 -&gt; EDGE: go_to BLOCKED zone=south_equipment_approach (0.0s) Navigation blocked in corridor-2B: Mobile laundry trolley moving through corridor
+      |   |--- Execution Mode : [SLM TAKEOVER TRIGGERED]
+      |   |   |--- Trigger Event  : Navigation blocked in corridor-2B: Mobile laundry trolley moving through corridor in &#x27;corridor-2B&#x27;
+      |   |   \--- Reasoner Engine: Edge SLM (qwen2.5:1.5b, mode: mock)
+      |   |   |--- SLM Latency    : 15.0 ms (0.02 s) [PASS: &lt;= 10.0s SLA]
+      |   |   |--- Decided By     : Edge SLM (qwen2.5:1.5b)
+      |   |   |--- Final Decision : LOCAL_WAIT
+      |   |   \--- SLM Reason     : \&quot;Transient corridor obstacle detected; waiting for passage clearance.\&quot;
+      |   |   |--- Action Dispatch: LOCAL_WAIT -&gt; Pausing robot R1 for 5.0s
+[east-wing] 05:07:55 EDGE -&gt; R1: wait duration_sec=5.0  (cmd transient-01-2-1793941675611)
+[east-wing] 05:07:55 R1 -&gt; EDGE: wait COMPLETED zone=south_equipment_approach (0.0s) Waited 5.0s
+      |   |   \--- Action Status  : COMPLETED (Wait finished; dynamic obstacle cleared)
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:07:55 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd md-lease-transient-01-step-2)
+[east-wing] 05:07:55 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 3/3] Sub-task: photo (Robot: R1)
+[east-wing] 05:07:55 EDGE -&gt; R1: photo   (cmd md-lease-transient-01-step-3)
+[east-wing] 05:07:55 R1 -&gt; EDGE: photo COMPLETED zone=east_waiting_approach (0.0s) Simulated photo event at [4.5, 8.0, 0.0] (east_waiting_approach) with res 1280x720
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-transient-01 (Task ID: lease-transient-01)
+  Final Status     : COMPLETED
+  Executed Steps   : 3 sub-tasks
+  Mission Duration : 0.15 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-transient-01/delivery-proof.jpg
+  SHA-256 Digest   : 466417b2248bfd54d312b7ad013fe3ce1c8215df900886db77faf05dac895126
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 3 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_tactical_autonomy.py::test_local_detour_around_persistent_obstacle</td>
+          <td class="col-duration">0.23</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-detour-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-detour-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:22:55Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+         [3] photo
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:07:55 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-detour-01-step-1)
+[east-wing] 05:07:55 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:07:55 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-detour-01-step-2)
+[east-wing] 05:07:55 R1 -&gt; EDGE: go_to BLOCKED zone=south_equipment_approach (0.0s) Navigation blocked in corridor-2B: Scaffolding maintenance blockage in corridor-2B
+      |   |--- Execution Mode : [SLM TAKEOVER TRIGGERED]
+      |   |   |--- Trigger Event  : Navigation blocked in corridor-2B: Scaffolding maintenance blockage in corridor-2B in &#x27;corridor-2B&#x27;
+      |   |   \--- Reasoner Engine: Edge SLM (qwen2.5:1.5b, mode: mock)
+      |   |   |--- SLM Latency    : 15.1 ms (0.02 s) [PASS: &lt;= 10.0s SLA]
+      |   |   |--- Decided By     : Edge SLM (qwen2.5:1.5b)
+      |   |   |--- Final Decision : LOCAL_DETOUR -&gt; Target: &#x27;corridor-2B-north&#x27;
+      |   |   \--- SLM Reason     : \&quot;Corridor path blocked; taking local detour via permitted bypass corridor-2B-north.\&quot;
+      |   |   |--- Action Dispatch: LOCAL_DETOUR -&gt; Navigating via permitted bypass &#x27;corridor-2B-north&#x27;
+[east-wing] 05:07:55 EDGE -&gt; R1: go_to to=corridor-2B-north  (cmd se-detour-01-2-1793941675837)
+[east-wing] 05:07:55 R1 -&gt; EDGE: go_to COMPLETED zone=corridor-2B-north (0.0s) Arrived at corridor-2B-north ([10.0, 2.0])
+      |   |   \--- Action Status  : COMPLETED (Detour executed; robot at [10.0, 2.0], zone: corridor-2B-north)
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:07:55 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-detour-01-step-2)
+[east-wing] 05:07:55 R1 -&gt; EDGE: go_to COMPLETED zone=east_waiting_approach (0.0s) Arrived at east_waiting_approach ([4.5, 8.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 3/3] Sub-task: photo (Robot: R1)
+[east-wing] 05:07:55 EDGE -&gt; R1: photo   (cmd cmd-lease-detour-01-step-3)
+[east-wing] 05:07:55 R1 -&gt; EDGE: photo COMPLETED zone=east_waiting_approach (0.0s) Simulated photo event at [4.5, 8.0, 0.0] (east_waiting_approach) with res 1280x720
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-detour-01 (Task ID: lease-detour-01)
+  Final Status     : COMPLETED
+  Executed Steps   : 4 sub-tasks
+  Mission Duration : 0.16 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-detour-01/delivery-proof.jpg
+  SHA-256 Digest   : 75eebd26304e2f8a97ea67191e063b1ecccec20b15ab6a0861699da2b9f49517
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 4 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_tactical_autonomy.py::test_escalate_unexpected_when_detour_is_unavailable</td>
+          <td class="col-duration">0.13</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-nobypass-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-nobypass-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:22:55Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+         [3] photo
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:07:56 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-nobypass-01-step-1)
+[east-wing] 05:07:56 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:07:56 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-nobypass-01-step-2)
+[east-wing] 05:07:56 R1 -&gt; EDGE: go_to BLOCKED zone=south_equipment_approach (0.0s) Navigation blocked in corridor-2B: Security fire shutter closed
+      |   |--- Execution Mode : [SLM TAKEOVER TRIGGERED]
+      |   |   |--- Trigger Event  : Navigation blocked in corridor-2B: Security fire shutter closed in &#x27;corridor-2B&#x27;
+      |   |   \--- Reasoner Engine: Edge SLM (qwen2.5:1.5b, mode: mock)
+      |   |   |--- SLM Latency    : 15.0 ms (0.02 s) [PASS: &lt;= 10.0s SLA]
+      |   |   |--- Decided By     : Edge SLM (qwen2.5:1.5b)
+      |   |   |--- Final Decision : ESCALATE_UNEXPECTED
+      |   |   \--- SLM Reason     : \&quot;Corridor is completely blocked and no alternate detour exists within lease authority.\&quot;
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+      |   |   |--- Action Dispatch: ESCALATE_UNEXPECTED -&gt; Emitted UNEXPECTED_EVENT to Cloud
+      |   |   \--- Escalation Reason: \&quot;Corridor is completely blocked and no alternate detour exists within lease authority.\&quot;
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_tactical_autonomy.py::test_swap_robot_on_hardware_fault</td>
+          <td class="col-duration">0.20</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-swap-01 (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-swap-01 (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 0.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;corridor-2B-north&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:22:56Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+         [3] photo
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+      |   |--- Execution Mode : [SLM TAKEOVER TRIGGERED]
+      |   |   |--- Trigger Event  : Motor encoder failure in &#x27;north_hall&#x27;
+      |   |   \--- Reasoner Engine: Edge SLM (qwen2.5:1.5b, mode: mock)
+      |   |   |--- SLM Latency    : 15.0 ms (0.02 s) [PASS: &lt;= 10.0s SLA]
+      |   |   |--- Decided By     : Edge SLM (qwen2.5:1.5b)
+      |   |   |--- Final Decision : SWAP_ROBOT -&gt; Target: &#x27;R2&#x27;
+      |   |   \--- SLM Reason     : \&quot;Active robot R1 faulted; transferring remaining errand to R2.\&quot;
+      |   |   |--- Action Dispatch: SWAP_ROBOT -&gt; Stopped faulted R1; transferred task to R2
+      |   |   \--- Action Status  : COMPLETED (Active robot is now R2)
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R2)
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R2)
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+      |-- [Step 3/3] Sub-task: photo (Robot: R2)
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [4.5, 8.0] | Zone: east_waiting_approach | Battery: 95.0%
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+
+======================================================================
+  MISSION COMPLETED: [EAST-WING]
+======================================================================
+  Lease ID         : lease-swap-01 (Task ID: lease-swap-01)
+  Final Status     : COMPLETED
+  Executed Steps   : 3 sub-tasks
+  Mission Duration : 0.13 s
+  Battery Delta    : -0.0% (Remaining: 95.0%)
+  Delivery Proof   : storage://results/lease-swap-01/delivery-proof.jpg
+  SHA-256 Digest   : 82694b9288c7b8022c6db75a24cd82a866d4ae3e24d3bfdf13036d8ccc32b4a6
+  Cloud Escalation : OUTPUT_READY -&gt; POST /escalations (Queued in Local SQLite Outbox (Store-and-Forward))
+  Durable Audit    : Committed 3 execution records to SQLite &#x27;decision_log&#x27; table
+======================================================================
+
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_tactical_autonomy.py::test_slm_timeout_triggers_deterministic_rule_fallback</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">edge/tests/test_tactical_autonomy.py::test_boundary_guard_intercepts_unauthorized_slm_detour</td>
+          <td class="col-duration">0.13</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>======================================================================
+  [EAST-WING] INGESTED LEASE: lease-bad-detour (v1) | Priority: routine
+======================================================================
+  [1] Guard &amp; Invariant Validation:
+      |-- Schema Check       : PASS (Draft 2020-12 compliant)
+      |-- Monotonic Version  : PASS (v1 accepted, no duplicate)
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      \-- Local Persistence  : Committed to SQLite &#x27;leases&#x27; table
+
+  [2] Task Ingestion &amp; Execution Plan:
+      |-- Task / Lease ID    : lease-bad-detour (v1)
+      |-- Priority           : ROUTINE
+      |-- Assigned Robot     : R1 (Start Zone: north_hall, Pose: [0.0, 12.0])
+      |-- Allowed Zones      : [&#x27;south_equipment_approach&#x27;, &#x27;corridor-2B&#x27;, &#x27;east_waiting_approach&#x27;]
+      |-- Forbidden Zones    : [&#x27;ward-2C-isolation&#x27;]
+      |-- Expiry Deadline    : 2026-11-06T05:22:56Z
+      \-- Sub-task Sequence  : 3 steps planned:
+         [1] go_to -&gt; to &#x27;central-supply&#x27;
+         [2] go_to -&gt; to &#x27;2B-12&#x27;
+         [3] photo
+
+  [3] Sub-task Execution Stream:
+      |-- [Step 1/3] Sub-task: go_to to &#x27;south_equipment_approach&#x27; (Robot: R1)
+[east-wing] 05:07:56 EDGE -&gt; R1: go_to to=south_equipment_approach, target=[0.0, -15.0], max_speed=0.8  (cmd cmd-lease-bad-detour-step-1)
+[east-wing] 05:07:56 R1 -&gt; EDGE: go_to COMPLETED zone=south_equipment_approach (0.0s) Arrived at south_equipment_approach ([0.0, -15.0])
+      |   |--- Execution Mode : [PERFORMED IMMEDIATELY] (Nominal execution by edge controller, path clear)
+      |   \--- Step Status    : COMPLETED | Pose: [0.0, -15.0] | Zone: south_equipment_approach | Battery: 95.0%
+      |-- [Step 2/3] Sub-task: go_to to &#x27;east_waiting_approach&#x27; (Robot: R1)
+[east-wing] 05:07:56 EDGE -&gt; R1: go_to to=east_waiting_approach, target=[4.5, 8.0], max_speed=0.8  (cmd cmd-lease-bad-detour-step-2)
+[east-wing] 05:07:56 R1 -&gt; EDGE: go_to BLOCKED zone=south_equipment_approach (0.0s) Navigation blocked in corridor-2B: Hallway closed
+      |   |--- Execution Mode : [SLM TAKEOVER TRIGGERED]
+      |   |   |--- Trigger Event  : Navigation blocked in corridor-2B: Hallway closed in &#x27;corridor-2B&#x27;
+      |   |   \--- Reasoner Engine: Edge SLM (qwen2.5:1.5b, mode: mock)
+      |   |   |--- SLM Latency    : 15.0 ms (0.01 s) [PASS: &lt;= 10.0s SLA]
+      |   |   |--- Decided By     : Edge SLM (qwen2.5:1.5b)
+      |   |   |--- Final Decision : LOCAL_DETOUR -&gt; Target: &#x27;ward-2C-isolation&#x27;
+      |   |   \--- SLM Reason     : \&quot;Hallucinated shortcut\&quot;
+[east-wing] Escalation network error (saved in outbox): &lt;urlopen error [Errno 111] Connection refused&gt;
+      |   |   \--- Detour Rejected: Waypoint &#x27;ward-2C-isolation&#x27; violates lease boundaries: Destination &#x27;ward-2C-isolation&#x27; is explicitly inside forbidden_zones
+<br/></div></td></tr></tbody></table></body></html>

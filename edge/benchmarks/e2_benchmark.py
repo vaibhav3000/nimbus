@@ -860,6 +860,44 @@ def _write_report(slm_summary: Dict[str, Any], rule_summary: Dict[str, Any]):
     report_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n  [SUCCESS] Benchmark report successfully written to: {report_path}")
 
+    # Write real, dynamic results to results/e2_edge.csv and P2_Results/e2_edge.csv
+    import csv
+    csv_rows = []
+    for sc, slm_sc, rule_sc in zip(E2_SCENARIOS, slm_summary["details"], rule_summary["details"]):
+        csv_rows.append({
+            "situation_id": sc["id"],
+            "category": sc["category"],
+            "description": sc["description"],
+            "ground_truth": sc["expected_action"],
+            "edge_slm_action": slm_sc["actual"],
+            "edge_slm_match": "TRUE" if slm_sc["match"] else "FALSE",
+            "edge_rule_action": rule_sc["actual"],
+            "edge_rule_match": "TRUE" if rule_sc["match"] else "FALSE",
+            "deployed_edge_action": slm_sc["actual"],
+            "decided_by": slm_sc["decided_by"],
+            "deployed_edge_match": "TRUE" if slm_sc["match"] else "FALSE",
+            "latency_ms": f"{slm_sc['latency_ms']:.2f}",
+        })
+
+    csv_fields = [
+        "situation_id", "category", "description", "ground_truth",
+        "edge_slm_action", "edge_slm_match",
+        "edge_rule_action", "edge_rule_match",
+        "deployed_edge_action", "decided_by", "deployed_edge_match", "latency_ms"
+    ]
+    for dest in [ROOT_DIR / "results" / "e2_edge.csv", ROOT_DIR / "P2_Results" / "e2_edge.csv"]:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with open(dest, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=csv_fields)
+            writer.writeheader()
+            writer.writerows(csv_rows)
+        print(f"  [SUCCESS] CSV dataset successfully written to: {dest}")
+
+    for s_dest in [ROOT_DIR / "results" / "e2_situations.json", ROOT_DIR / "P2_Results" / "e2_situations.json"]:
+        s_dest.parent.mkdir(parents=True, exist_ok=True)
+        s_dest.write_text(json.dumps(E2_SCENARIOS, indent=2), encoding="utf-8")
+        print(f"  [SUCCESS] Situations JSON dataset successfully written to: {s_dest}")
+
 
 if __name__ == "__main__":
     run_e2_benchmark()

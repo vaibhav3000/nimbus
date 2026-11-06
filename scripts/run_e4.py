@@ -3,7 +3,8 @@ Nimbus Experiment E4: Network Trace Replay & WAN Degradation Profiler
 Co-owned by: Person 2 (Edge Tier) + Person 4 (Infra & Messaging)
 Validates PRD FR-6 (Lease Authority under link failure) & NFR-2 (Partition Resilience).
 
-Replays campus empirical traces (IISc basement outage, corridor jitter, lift shaft degradation)
+Dynamically loads and replays empirical traces from traces/
+(IISc basement outage, corridor jitter, lift shaft degradation)
 across Tasks T2, T4, T5, and T7 comparing:
   - C1: Nimbus Leased Edge Autonomy (Local execution under lease bounds)
   - C2: Cloud-Only Relay Baseline (Serial HTTP per physical step)
@@ -34,45 +35,100 @@ PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 P2_DIR.mkdir(parents=True, exist_ok=True)
 P2_PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
-TRACES = {
-    "Healthy": {"trace": "none", "rtt": 15.0, "loss": 0.0, "outage_s": 0.0},
-    "Mild WAN (Corridor)": {"trace": "traces/iisc_corridor.csv", "rtt": 65.0, "loss": 1.2, "outage_s": 0.0},
-    "Elevator Shaft": {"trace": "traces/iisc_lift.csv", "rtt": 320.0, "loss": 9.5, "outage_s": 10.0},
-    "Basement Outage": {"trace": "traces/iisc_basement.csv", "rtt": 450.0, "loss": 100.0, "outage_s": 20.0}
-}
+
+def parse_trace_file(trace_rel_path: str) -> dict:
+    """Dynamically parses empirical trace CSV files to extract empirical network metrics."""
+    if not trace_rel_path or trace_rel_path == "none":
+        return {"rtt": 15.0, "loss": 0.0, "outage_s": 0.0}
+
+    trace_file = ROOT / trace_rel_path
+    if not trace_file.exists():
+        return {"rtt": 15.0, "loss": 0.0, "outage_s": 0.0}
+
+    rtts = []
+    losses = []
+    outage_s = 0.0
+
+    with open(trace_file, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(row for row in f if not row.strip().startswith("#"))
+        prev_t = None
+        for row in reader:
+            try:
+                t = float(row.get("time_sec", 0.0))
+                rtt = float(row.get("rtt_ms", 0.0))
+                loss = float(row.get("loss_pct", 0.0))
+            except (ValueError, TypeError):
+                continue
+
+            if loss < 100.0 and rtt > 0:
+                rtts.append(rtt)
+            losses.append(loss)
+
+            if loss >= 99.0 and prev_t is not None:
+                outage_s += (t - prev_t)
+            prev_t = t
+
+    mean_rtt = sum(rtts) / len(rtts) if rtts else 450.0
+    mean_loss = sum(losses) / len(losses) if losses else 100.0
+    return {
+        "rtt": round(mean_rtt, 1),
+        "loss": round(mean_loss, 1),
+        "outage_s": round(outage_s, 1),
+    }
+
+
+TRACE_CONFIGS = [
+    {"name": "Healthy", "trace": "none"},
+    {"name": "Mild WAN (Corridor)", "trace": "traces/iisc_corridor.csv"},
+    {"name": "Elevator Shaft", "trace": "traces/iisc_lift.csv"},
+    {"name": "Basement Outage", "trace": "traces/iisc_basement.csv"},
+]
 
 TASKS = ["T2", "T4", "T5", "T7"]
 TASK_NAMES = {
     "T2": "Urgent delivery under background traffic",
     "T4": "Blocked corridor, detour inside lease",
     "T5": "Gate closed: cross-wing hand-over",
-    "T7": "Inventory sweep (survey)"
+    "T7": "Inventory sweep (survey)",
 }
 
 BASE_COMPLETION = {
     "T2": {"C1": 90.6, "C2": 119.0, "steps": 7},
     "T4": {"C1": 175.2, "C2": 203.7, "steps": 7},
     "T5": {"C1": 108.9, "C2": 137.4, "steps": 8},
-    "T7": {"C1": 211.4, "C2": 263.2, "steps": 8}
+    "T7": {"C1": 211.4, "C2": 263.2, "steps": 8},
 }
 
 DEADLINES = {
     "T2": 720.0,   # 12 min
     "T4": 3600.0,  # 60 min
     "T5": 3600.0,  # 60 min
-    "T7": 1800.0   # 30 min
+    "T7": 1800.0,  # 30 min
 }
 
 
 def run_e4_benchmark():
+    # Dynamically load and verify network traces
+    traces = {}
+    for cfg in TRACE_CONFIGS:
+        parsed = parse_trace_file(cfg["trace"])
+        traces[cfg["name"]] = {
+            "trace": cfg["trace"],
+            "rtt": parsed["rtt"],
+            "loss": parsed["loss"],
+            "outage_s": parsed["outage_s"],
+        }
+
     rows = []
+    c1_rec_by_cond = {}
+    c2_rec_by_cond = {}
 
     for task_id in TASKS:
         t_info = BASE_COMPLETION[task_id]
         steps = t_info["steps"]
         deadline = DEADLINES[task_id]
 
-        for cond_name, net in TRACES.items():
+        for cond_name, net in traces.items():
             loss = net["loss"] / 100.0
             rtt_s = net["rtt"] / 1000.0
             outage_s = net["outage_s"]
@@ -85,16 +141,16 @@ def run_e4_benchmark():
             if outage_s > 0:
                 c1_rec = min(outage_s * 0.08 + 1.2, 2.5)  # store-and-forward queue drain time
                 c1_comp = t_info["C1"] + c1_rec
-                c1_timeouts = 0
-                c1_stalls = 0
             else:
                 c1_rec = 0.0
                 c1_comp = t_info["C1"] + c1_net_delay
-                c1_timeouts = 0
-                c1_stalls = 0
 
+            c1_timeouts = 0
+            c1_stalls = 0
             c1_success = 1.0
             c1_deadline_ok = 1.0 if c1_comp <= deadline else 0.0
+
+            c1_rec_by_cond.setdefault(cond_name, []).append(c1_rec)
 
             rows.append({
                 "task": task_id,
@@ -110,7 +166,7 @@ def run_e4_benchmark():
                 "completion_time_s": f"{c1_comp:.1f}",
                 "timeouts_encountered": c1_timeouts,
                 "stalls_count": c1_stalls,
-                "architecture_mode": "Leased Edge Autonomy"
+                "architecture_mode": "Leased Edge Autonomy",
             })
 
             # --- C2 (Cloud-Only Relay Baseline) ---
@@ -124,13 +180,14 @@ def run_e4_benchmark():
                 c2_success = 0.90 if outage_s < 15 else 0.75
             else:
                 c2_net_delay = steps * (rtt_s / max(1.0 - loss, 0.05))
-                c2_rec = rtt_s * 4.0 if loss > 0.05 else 0.0
+                c2_rec = round(rtt_s * 4.0, 2) if loss > 0.05 else 0.0
                 c2_comp = t_info["C2"] + c2_net_delay
                 c2_timeouts = 1 if loss > 0.05 else 0
                 c2_stalls = 1 if loss > 0.05 else 0
                 c2_success = 1.0
 
             c2_deadline_ok = 1.0 if (c2_comp <= deadline and c2_success > 0.8) else 0.8
+            c2_rec_by_cond.setdefault(cond_name, []).append(c2_rec)
 
             rows.append({
                 "task": task_id,
@@ -146,11 +203,17 @@ def run_e4_benchmark():
                 "completion_time_s": f"{c2_comp:.1f}",
                 "timeouts_encountered": c2_timeouts,
                 "stalls_count": c2_stalls,
-                "architecture_mode": "Cloud-Only Relay"
+                "architecture_mode": "Cloud-Only Relay",
             })
 
-    # Save CSV
-    fieldnames = list(rows[0].keys())
+    # Save to CSV
+    fieldnames = [
+        "task", "task_description", "config", "network_condition", "trace_file",
+        "mean_rtt_ms", "loss_pct", "success_rate_pct", "deadline_met_pct",
+        "recovery_time_s", "completion_time_s", "timeouts_encountered", "stalls_count",
+        "architecture_mode",
+    ]
+
     for dest in [RESULTS_DIR / "e4.csv", P2_DIR / "e4.csv"]:
         with open(dest, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -160,23 +223,55 @@ def run_e4_benchmark():
             f.write("# 1. In C1 (Leased Authority), edge autonomy shields robot execution from WAN jitter & drops (100% success rate across all traces).\n")
             f.write("# 2. In C2 (Cloud Relay), loss & deadzones cause severe step stalls, increasing recovery time up to 35.0s and reducing completion reliability.\n")
 
-    print(f"Generated results/e4.csv with {len(rows)} data points.")
+    print(f"Generated results/e4.csv and P2_Results/e4.csv with {len(rows)} data points.")
 
-    # Generate Publication-Quality SVG Plot
-    generate_e4_plot(rows)
+    # Calculate average recovery time per condition for SVG rendering
+    avg_c1 = {k: sum(v) / len(v) for k, v in c1_rec_by_cond.items()}
+    avg_c2 = {k: sum(v) / len(v) for k, v in c2_rec_by_cond.items()}
 
+    def bar_geom(val_s: float, x_center: int):
+        # Y-axis spans 0s to 40s (height 320 px, baseline y=420)
+        h = max(2.0, (val_s / 40.0) * 320.0)
+        y = 420.0 - h
+        text_y = y - 6.0
+        return h, y, text_y
 
-def generate_e4_plot(rows):
-    """Generates comparison SVG plot for Recovery Time and Success across C1 vs C2."""
-    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" width="100%" height="100%">
+    conditions = [
+        ("Healthy", 160, f"{traces['Healthy']['rtt']}ms RTT, {traces['Healthy']['loss']}% drop"),
+        ("Mild WAN (Corridor)", 360, f"{traces['Mild WAN (Corridor)']['rtt']}ms RTT, {traces['Mild WAN (Corridor)']['loss']}% drop"),
+        ("Elevator Shaft", 560, f"{traces['Elevator Shaft']['rtt']}ms RTT, {traces['Elevator Shaft']['loss']}% drop"),
+        ("Basement Outage", 760, f"{traces['Basement Outage']['outage_s']:.0f}s Outage (100% loss)"),
+    ]
+
+    bars_svg = ""
+    for cond_name, cx, sub_lbl in conditions:
+        val1 = avg_c1.get(cond_name, 0.0)
+        val2 = avg_c2.get(cond_name, 0.0)
+
+        h1, y1, ty1 = bar_geom(val1, cx - 14)
+        h2, y2, ty2 = bar_geom(val2, cx + 14)
+
+        bars_svg += f"""
+<!-- Group: {cond_name} (x={cx}) -->
+<text x="{cx}" y="445" text-anchor="middle" class="axis-label">{cond_name}</text>
+<text x="{cx}" y="460" text-anchor="middle" class="tick-label">{sub_lbl}</text>
+<!-- C1 bar ({val1:.1f}s) -->
+<rect x="{cx - 25}" y="{y1:.1f}" width="22" height="{h1:.1f}" fill="#0284c7" rx="2"/>
+<text x="{cx - 14}" y="{ty1:.1f}" text-anchor="middle" class="val-label" fill="#0284c7">{val1:.1f}s</text>
+<!-- C2 bar ({val2:.1f}s) -->
+<rect x="{cx + 3}" y="{y2:.1f}" width="22" height="{h2:.1f}" fill="#ef4444" rx="2"/>
+<text x="{cx + 14}" y="{ty2:.1f}" text-anchor="middle" class="val-label" fill="#ef4444">{val2:.1f}s</text>
+"""
+
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" width="100%" height="100%">
 <style>
-  .title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 18px; font-weight: bold; fill: #1e293b; }
-  .subtitle { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #64748b; }
-  .axis-label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; fill: #475569; font-weight: 600; }
-  .tick-label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 11px; fill: #64748b; }
-  .grid { stroke: #e2e8f0; stroke-width: 1; stroke-dasharray: 4,4; }
-  .legend { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; font-weight: 500; }
-  .val-label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 10px; font-weight: bold; }
+  .title {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 16px; font-weight: bold; fill: #0f172a; }}
+  .subtitle {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #64748b; }}
+  .axis-label {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; fill: #475569; font-weight: 600; }}
+  .tick-label {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 11px; fill: #64748b; }}
+  .grid {{ stroke: #e2e8f0; stroke-width: 1; stroke-dasharray: 4,4; }}
+  .legend {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; font-weight: 500; }}
+  .val-label {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 10px; font-weight: bold; }}
 </style>
 
 <rect width="900" height="500" fill="#ffffff" rx="8"/>
@@ -191,7 +286,7 @@ def generate_e4_plot(rows):
 <rect x="620" y="52" width="14" height="14" fill="#ef4444" rx="3"/>
 <text x="640" y="64" class="legend" fill="#1e293b">C2 (Cloud-Only Relay Baseline)</text>
 
-<!-- Plot Area: x=80..840, y=90..420 (height=330, width=760) -->
+<!-- Plot Area: x=80..850, y=100..420 (height=320, width=770) -->
 <!-- Y-Axis Grid & Labels (0 to 40 seconds) -->
 <line x1="80" y1="420" x2="850" y2="420" stroke="#cbd5e1" stroke-width="1.5"/>
 <line x1="80" y1="340" x2="850" y2="340" class="grid"/>
@@ -207,48 +302,8 @@ def generate_e4_plot(rows):
 
 <text x="30" y="260" text-anchor="middle" transform="rotate(-90 30 260)" class="axis-label">Recovery Time (seconds)</text>
 
-<!-- Groups for 4 Network Conditions -->
-<!-- Group 1: Healthy (x=160) -->
-<text x="160" y="445" text-anchor="middle" class="axis-label">Healthy Link</text>
-<text x="160" y="460" text-anchor="middle" class="tick-label">15ms RTT, 0% drop</text>
-<!-- C1 bar (0s) -->
-<rect x="135" y="418" width="22" height="2" fill="#0284c7" rx="2"/>
-<text x="146" y="412" text-anchor="middle" class="val-label" fill="#0284c7">0.0s</text>
-<!-- C2 bar (0s) -->
-<rect x="163" y="418" width="22" height="2" fill="#ef4444" rx="2"/>
-<text x="174" y="412" text-anchor="middle" class="val-label" fill="#ef4444">0.0s</text>
-
-<!-- Group 2: Mild WAN Corridor (x=360) -->
-<text x="360" y="445" text-anchor="middle" class="axis-label">Mild WAN (Corridor)</text>
-<text x="360" y="460" text-anchor="middle" class="tick-label">65ms RTT, 1.2% drop</text>
-<!-- C1 bar (0.0s) -->
-<rect x="335" y="418" width="22" height="2" fill="#0284c7" rx="2"/>
-<text x="346" y="412" text-anchor="middle" class="val-label" fill="#0284c7">0.0s</text>
-<!-- C2 bar (0.3s) -->
-<rect x="363" y="415" width="22" height="5" fill="#ef4444" rx="2"/>
-<text x="374" y="408" text-anchor="middle" class="val-label" fill="#ef4444">0.3s</text>
-
-<!-- Group 3: Elevator Shaft (x=560) -->
-<text x="560" y="445" text-anchor="middle" class="axis-label">Elevator Shaft Trace</text>
-<text x="560" y="460" text-anchor="middle" class="tick-label">320ms RTT, 9.5% drop</text>
-<!-- C1 bar (2.0s: height=16) -->
-<rect x="535" y="404" width="22" height="16" fill="#0284c7" rx="2"/>
-<text x="546" y="398" text-anchor="middle" class="val-label" fill="#0284c7">2.0s</text>
-<!-- C2 bar (25.0s: height=200, y=220) -->
-<rect x="563" y="220" width="22" height="200" fill="#ef4444" rx="2"/>
-<text x="574" y="214" text-anchor="middle" class="val-label" fill="#ef4444">25.0s</text>
-
-<!-- Group 4: Basement Outage (x=760) -->
-<text x="760" y="445" text-anchor="middle" class="axis-label">Basement Deadzone</text>
-<text x="760" y="460" text-anchor="middle" class="tick-label">20s Outage (100% loss)</text>
-<!-- C1 bar (2.5s: height=20) -->
-<rect x="735" y="400" width="22" height="20" fill="#0284c7" rx="2"/>
-<text x="746" y="394" text-anchor="middle" class="val-label" fill="#0284c7">2.5s</text>
-<!-- C2 bar (35.0s: height=280, y=140) -->
-<rect x="763" y="140" width="22" height="280" fill="#ef4444" rx="2"/>
-<text x="774" y="134" text-anchor="middle" class="val-label" fill="#ef4444">35.0s</text>
-
-</svg>'''
+{bars_svg}
+</svg>"""
 
     for p in [PLOTS_DIR / "e4_recovery_plot.svg", P2_PLOTS_DIR / "e4_recovery_plot.svg"]:
         p.write_text(svg, encoding="utf-8")

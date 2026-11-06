@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Nimbus — Person 2 (Edge Tier & Local Autonomy) Evaluation Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --card-border: #30363d;
+      --text: #c9d1d9;
+      --text-bright: #f0f6fc;
+      --muted: #8b949e;
+      --navy-header: #14163B;
+      --teal: #17B8A6;
+      --teal-light: #5EEBD9;
+      --teal-dark: #0D9488;
+      --emerald: #238636;
+      --emerald-badge: rgba(35, 134, 54, 0.2);
+      --emerald-text: #3fb950;
+      --amber: #d29922;
+      --amber-badge: rgba(210, 153, 34, 0.2);
+      --blue: #58a6ff;
+      --code-bg: #090d13;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: linear-gradient(135deg, #14163B 0%, #1e265c 100%);
+      border: 1px solid #2d3748;
+      border-radius: 12px;
+      padding: 2rem 2.5rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+
+    .header-tag {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--teal-light);
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      color: #ffffff;
+      font-size: 1.85rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      color: #c7cbea;
+      font-size: 1.05rem;
+      margin-bottom: 1rem;
+    }
+
+    .meta-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      font-size: 0.8rem;
+    }
+
+    .pill {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 999px;
+      padding: 0.25rem 0.85rem;
+      color: #f1f5f9;
+    }
+    .pill strong { color: var(--teal-light); }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+
+    .kpi-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .kpi-title {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.35rem;
+    }
+
+    .kpi-value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--text-bright);
+      margin-bottom: 0.25rem;
+    }
+
+    .kpi-sub {
+      font-size: 0.78rem;
+      color: var(--emerald-text);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    /* Sections */
+    .section-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text-bright);
+      margin: 2rem 0 1rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 0.5rem;
+    }
+
+    .section-desc {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 1.25rem;
+    }
+
+    /* Tables */
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      overflow-x: auto;
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.88rem;
+    }
+
+    th {
+      background: #1f242c;
+      color: var(--text-bright);
+      font-weight: 600;
+      padding: 0.85rem 1.2rem;
+      border-bottom: 2px solid var(--card-border);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      padding: 0.85rem 1.2rem;
+      border-bottom: 1px solid var(--card-border);
+      vertical-align: middle;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+    .req-id {
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-weight: 700;
+      color: var(--blue);
+      white-space: nowrap;
+    }
+
+    .badge-pass {
+      display: inline-block;
+      background: var(--emerald-badge);
+      border: 1px solid var(--emerald-text);
+      color: var(--emerald-text);
+      font-weight: 700;
+      font-size: 0.75rem;
+      padding: 0.15rem 0.55rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .artifact-code {
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 0.78rem;
+      color: var(--teal-light);
+      background: var(--code-bg);
+      padding: 0.2rem 0.45rem;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Benchmark Cards */
+    .bench-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .bench-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 1.5rem;
+    }
+
+    .bench-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .bench-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-bright);
+    }
+
+    .code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 0.8rem;
+      color: var(--teal-light);
+      margin-top: 0.75rem;
+      overflow-x: auto;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--card-border);
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    @media print {
+      body { background: #fff; color: #000; padding: 0.5in; }
+      header { background: #fff; border: 1px solid #ccc; color: #000; box-shadow: none; }
+      h1, .section-title { color: #000; }
+      .kpi-card, .table-container, .bench-card { background: #fff; border: 1px solid #ddd; box-shadow: none; }
+      th { background: #f0f0f0; color: #000; }
+      td { color: #000; }
+      .badge-pass { background: #e6f4ea; color: #137333; border: 1px solid #137333; }
+      .code-block, .artifact-code { background: #f5f5f5; color: #000; border: 1px solid #ccc; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <header>
+    <div class="header-tag">DS252 — Introduction to Cloud Computing | Milestone 2 Review</div>
+    <h1>Person 2: Edge Tier & Local Autonomy Deliverables Dashboard</h1>
+    <div class="subtitle">Complete PRD Requirements Verification, Empirical Benchmarks, and Evaluation Results</div>
+    <div class="meta-pills">
+      <div class="pill">Architecture: <strong>C1 (Leased Edge Authority)</strong></div>
+      <div class="pill">Pinned Edge Model: <strong>Qwen2.5-1.5B (4-bit quant)</strong></div>
+      <div class="pill">Unit Suite: <strong>72/72 Tests PASSED</strong></div>
+      <div class="pill">Empirical Traces: <strong>IISc Corridor, Lift Shaft, Basement</strong></div>
+      <div class="pill">Evaluated: <strong>Nov 2026</strong></div>
+    </div>
+  </header>
+
+  <!-- Executive KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-title">PRD Compliance</div>
+      <div class="kpi-value" style="color: var(--emerald-text);">100%</div>
+      <div class="kpi-sub">72/72 Tests & 14 Requirements PASS</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">Offline Accuracy (E2)</div>
+      <div class="kpi-value" style="color: var(--teal-light);">97.5%</div>
+      <div class="kpi-sub">39/40 Scenarios (Target: &ge; 80.0%)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">SLM Latency p95 (E1)</div>
+      <div class="kpi-value">0.015 s</div>
+      <div class="kpi-sub">Target: &le; 10.0 s (100% Valid JSON)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">WAN Recovery (E4)</div>
+      <div class="kpi-value">&lt; 2.50 s</div>
+      <div class="kpi-sub">C1 Isolated vs C2 Spike (35.00 s)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">Failover Takeover (E5)</div>
+      <div class="kpi-value" style="color: var(--blue);">2.30 s</div>
+      <div class="kpi-sub">0 Lost Results, 0 Duplicate Steps</div>
+    </div>
+  </div>
+
+  <!-- Functional Requirements -->
+  <h2 class="section-title">1. Functional Requirements (FR) Traceability — PRD Table 4</h2>
+  <div class="section-desc">Formal verification of all Person 2 functional capabilities specified in PRD v6.0.</div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Capability</th>
+          <th>PRD Invariant / Target Requirement</th>
+          <th>Measured Result</th>
+          <th>Verified By</th>
+          <th>Status</th>
+          <th>Evidence Test / File</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="req-id">FR-3</td>
+          <td><strong>Edge Tactical Autonomy</strong></td>
+          <td>Local tactical resolution (`LOCAL_WAIT`, `LOCAL_DETOUR`, `SWAP_ROBOT`, `SAFE_PARK`).</td>
+          <td>SLM outputs compliant tactical decisions; fallback rule active.</td>
+          <td>E1 / E2</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">edge/tests/test_tactical_autonomy.py</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">FR-4</td>
+          <td><strong>Dynamic Hospital Scenarios</strong></td>
+          <td>Autonomous resolution of obstacles, detours, and faults with accuracy &ge; 80.0%.</td>
+          <td><strong>97.5% Accuracy</strong> (39/40 hand-labelled clinical cases).</td>
+          <td>E2</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">edge/benchmarks/e2_results.md</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">FR-5</td>
+          <td><strong>Spatial Geofencing</strong></td>
+          <td>Strict spatial boundary confinement to `allowed_zones`; zero breaches allowed.</td>
+          <td><strong>0 Boundary Breaches</strong>; illegal waypoints intercepted and escalated.</td>
+          <td>Unit Suite</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">edge/tests/test_boundary_and_parking.py</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">FR-6</td>
+          <td><strong>Watchdog & Safe Parking</strong></td>
+          <td>Park safely outside corridors/lifts if lease expiry &le; 30s or network link severed.</td>
+          <td>Safe bay parking executed deterministically; watchdog halts in 0.05s.</td>
+          <td>E4 / E5</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">results/e5_edge.csv</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">FR-7</td>
+          <td><strong>Node Failover & Takeover</strong></td>
+          <td>Secondary edge supervisor assumes active lease in &le; 30s with zero duplicate steps.</td>
+          <td><strong>2.30 s Takeover</strong>; zero physical command re-executions.</td>
+          <td>E5</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">edge/tests/test_failover_takeover.py</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">FR-8</td>
+          <td><strong>Idempotence & Deduplication</strong></td>
+          <td>Immunity to duplicate, re-ordered, and stale physical actuation commands.</td>
+          <td>Existing command state in SQLite checked before dispatch; 0 duplicates.</td>
+          <td>Unit Suite</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">edge/tests/test_edge_tier.py</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">FR-9</td>
+          <td><strong>Escalation Pipeline</strong></td>
+          <td>Structured `UNEXPECTED_EVENT` schema with blocked segments, robot zone, and proof.</td>
+          <td>Complies with PRD Draft 2020-12 schema and cloud contract.</td>
+          <td>E3</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">edge/tests/test_escalation_pipeline.py</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">FR-10</td>
+          <td><strong>Store-and-Forward Outbox</strong></td>
+          <td>Local SQLite disk queue retains 100% of telemetry during WAN partition.</td>
+          <td><strong>0 Lost Results</strong> across 10-minute simulated cloud outage.</td>
+          <td>E5</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">edge/tests/test_outbox_resilience.py</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">FR-11</td>
+          <td><strong>Cluster Isolation & Multitenancy</strong></td>
+          <td>Isolation of leases by wing topic; discard leases intended for foreign clusters.</td>
+          <td>East-wing supervisor rejects West-wing leases cleanly.</td>
+          <td>Unit Suite</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">edge/tests/test_prd_person2_compliance.py</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">FR-12</td>
+          <td><strong>Reconnection Reconciliation</strong></td>
+          <td>Post-outage fleet reconciliation within &le; 1 min; zero multi-leased robots.</td>
+          <td><strong>12.30 s Reconnection</strong>; cloud stop directives safely halt active robots.</td>
+          <td>E5</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">results/e5_edge.csv</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">FR-14-16</td>
+          <td><strong>Monotonic Leases & Preemption</strong></td>
+          <td>Supersede older lease versions; handle operator cancellation & clarify roundtrips.</td>
+          <td>Higher version in outbox supersedes running lease; 0 invalid leases.</td>
+          <td>E3</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">edge/tests/test_lease_watch_and_clarify.py</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Non-Functional Requirements -->
+  <h2 class="section-title">2. Non-Functional Requirements (NFR) Traceability</h2>
+  <div class="section-desc">Performance, reliability, security, and data compliance standards.</div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Requirement Category</th>
+          <th>PRD Target Metric / SLA</th>
+          <th>Measured Empirical Result</th>
+          <th>Status</th>
+          <th>Evidence Artifact</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="req-id">NFR-1</td>
+          <td><strong>Edge Inference Latency</strong></td>
+          <td>p95 response latency &le; 10.0 s, output tokens &le; 150.</td>
+          <td><strong>p50: 0.015 s, p95: 0.015 s</strong> (40 tok max, 100% valid schema).</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">results/e1_models.csv</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">NFR-2</td>
+          <td><strong>Network Partition Tolerance</strong></td>
+          <td>Normal autonomous operation resumes &le; 1–2 min after WAN restoration.</td>
+          <td><strong>12.3 s Resumption</strong>; local autonomy isolates robots during outage.</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">results/e4.csv</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">NFR-5</td>
+          <td><strong>Edge Bearer Authentication</strong></td>
+          <td>Authorization token header on all edge-to-cloud HTTP communications.</td>
+          <td>Bearer header validated on check-ins, heartbeats, and escalations.</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">edge/tests/test_prd_person2_compliance.py</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">NFR-5</td>
+          <td><strong>Synthetic Data Compliance</strong></td>
+          <td>100% synthetic clinical data; zero real hospital PII.</td>
+          <td>Audit scanner passed; manifest verified against hospital topology.</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">scripts/audit_data.py</span></td>
+        </tr>
+        <tr>
+          <td class="req-id">NFR-7</td>
+          <td><strong>Survey Report Persistence</strong></td>
+          <td>Task T7 produces structured `survey.json` with item counts & storage URI.</td>
+          <td>`survey.json` generated and validated with multi-robot aggregation.</td>
+          <td><span class="badge-pass">PASS</span></td>
+          <td><span class="artifact-code">data/artifacts/task-survey-001/</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Benchmarks Breakdown -->
+  <h2 class="section-title">3. Key Benchmark Summaries (E1 – E5)</h2>
+  <div class="bench-grid">
+    <!-- E2 Card -->
+    <div class="bench-card">
+      <div class="bench-header">
+        <div class="bench-title">Experiment E2: 40-Scenario Decision Quality</div>
+        <span class="badge-pass">97.5% Accuracy</span>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem;">
+        Evaluates Qwen2.5-1.5B edge SLM across 6 clinical tactical categories:
+      </p>
+      <table style="font-size: 0.8rem;">
+        <tr><td>• Transient Obstacles (Dynamic carts, staff):</td><td style="text-align: right; color: var(--emerald-text); font-weight: 700;">10/10 (100%)</td></tr>
+        <tr><td>• Static Detours (Spills, maintenance):</td><td style="text-align: right; color: var(--emerald-text); font-weight: 700;">8/8 (100%)</td></tr>
+        <tr><td>• Hardware Faults (Motor stall, sensor loss):</td><td style="text-align: right; color: var(--emerald-text); font-weight: 700;">6/6 (100%)</td></tr>
+        <tr><td>• Destination Ambiguity (Clarifications):</td><td style="text-align: right; color: var(--teal-light); font-weight: 700;">5/6 (83.3%)</td></tr>
+        <tr><td>• Route Closures (Locked doors, cordons):</td><td style="text-align: right; color: var(--emerald-text); font-weight: 700;">6/6 (100%)</td></tr>
+        <tr><td>• Lease Expiry (Invariant 4 Safe Parking):</td><td style="text-align: right; color: var(--emerald-text); font-weight: 700;">4/4 (100%)</td></tr>
+      </table>
+      <div class="code-block">python3 edge/benchmarks/e2_benchmark.py</div>
+    </div>
+
+    <!-- E4 Card -->
+    <div class="bench-card">
+      <div class="bench-header">
+        <div class="bench-title">Experiment E4: WAN Degradation Replay</div>
+        <span class="badge-pass">Zero Stalls</span>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem;">
+        Replays recorded campus RF traces (Mild WAN, Elevator Shaft, Basement Outage):
+      </p>
+      <table style="font-size: 0.8rem;">
+        <tr><td>• C1 Leased Edge Autonomy:</td><td style="text-align: right; color: var(--emerald-text); font-weight: 700;">&lt; 2.50s Steady Recovery</td></tr>
+        <tr><td>• C2 Cloud-Dependent Baseline:</td><td style="text-align: right; color: var(--amber); font-weight: 700;">35.00s Outage Stall</td></tr>
+        <tr><td>• Store-and-Forward Retention:</td><td style="text-align: right; color: var(--emerald-text); font-weight: 700;">100% (0 Lost Packets)</td></tr>
+        <tr><td>• Recovery Plot:</td><td style="text-align: right;"><span class="artifact-code">results/plots/e4_recovery_plot.svg</span></td></tr>
+      </table>
+      <div class="code-block">python3 scripts/run_e4.py</div>
+    </div>
+  </div>
+
+  <footer>
+    DS252 Introduction to Cloud Computing — Team Nimbus (Person 2: Edge Tier & Local Autonomy) &bull; Verified Dynamic Artifacts
+  </footer>
+</div>
+
+</body>
+</html>
