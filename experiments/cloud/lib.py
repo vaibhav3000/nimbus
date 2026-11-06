@@ -130,8 +130,22 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+def require_bedrock(model_id: str = "apac.amazon.nova-lite-v1:0") -> None:
+    """Fail loudly if Bedrock is unreachable. Without this the cloud silently falls back to its rules and a run would be
+    labelled real_bedrock although the model was never called (credentials had expired in one earlier run)."""
+    import boto3
+    try:
+        boto3.client("bedrock-runtime", region_name=os.environ.get("AWS_REGION", "ap-south-1")).converse(
+            modelId=model_id, messages=[{"role": "user", "content": [{"text": "say ok"}]}], inferenceConfig={"maxTokens": 5})
+    except Exception as exc:
+        raise RuntimeError(f"Bedrock is not reachable ({type(exc).__name__}: {exc}). Refusing to run a real-model "
+                           "experiment: the cloud would fall back to rules and the result would not be real_bedrock.") from exc
+
+
 def start_local(mode: str = "C1", *, bedrock: bool = False, extra_env: dict | None = None, tick_s: float = 1.0) -> Target:
     """Start server.py on a free port with its own empty data folder (hermetic: nothing is shared between runs)."""
+    if bedrock:
+        require_bedrock((extra_env or {}).get("NIMBUS_BEDROCK_MODEL") or os.environ.get("NIMBUS_BEDROCK_MODEL", "apac.amazon.nova-lite-v1:0"))
     port, data = _free_port(), Path(tempfile.mkdtemp(prefix=f"nimbus-{mode}-"))
     env = {**os.environ, "PORT": str(port), "DATA_DIR": str(data), "NIMBUS_MODE": mode, "NIMBUS_PACK": "hospital_sim6",
            "NIMBUS_BACKEND": "local", "NIMBUS_DEMO_FAULTS": "1", "NIMBUS_TICK_S": str(tick_s), "PYTHONUNBUFFERED": "1"}
