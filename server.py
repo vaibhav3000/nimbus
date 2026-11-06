@@ -406,6 +406,14 @@ class Handler(BaseHTTPRequestHandler):
                     "fault_down": fault_down,
                     "circuit_open": cb_open
                 })
+        elif path == "/ui-config":
+            # Which optional UI affordances the app may show.  `demo_controls`
+            # gates the one-click OUTPUT_READY stand-in: it fabricates a result
+            # without the edge or a robot, so SC-1/FR-21 must not be
+            # demonstrable through it unless someone deliberately asked.
+            self._send_json(200, {
+                "demo_controls": os.environ.get("NIMBUS_DEMO_CONTROLS", "0").lower() in ("1", "true", "yes"),
+            })
         elif path == "/outbox":
             active_only = "active=1" in (self.path.split("?", 1)[1] if "?" in self.path else "")
             self._send_json(200, {"outbox": self._live_outbox() if active_only else self.store.outbox()})

@@ -17,6 +17,11 @@ import urllib.request
 import urllib.error
 
 
+# Modes in which a real quantised model produces the decision.  Anything else
+# ("mock", "rules_only") is deterministic local code: useful for CI and as the
+# FR-3 fallback, but it must never be reported as edge-SLM behaviour (PRD E1/E2).
+REAL_MODEL_MODES = ("ollama", "llama_cpp")
+
 ALLOWED_TACTICAL_ACTIONS = {
     "DISPATCH_STEP",
     "LOCAL_DETOUR",
@@ -59,6 +64,16 @@ class EdgeSLMEngine:
                 self.Llama = Llama
             except ImportError:
                 self.mode = "mock"
+
+    @property
+    def is_real_model(self) -> bool:
+        """True only when a quantised model is actually being invoked.
+
+        ``mode="auto"`` silently resolves to ``"mock"`` when no Ollama server
+        answers, so callers that publish measurements must check this before
+        writing an artifact.
+        """
+        return self.mode in REAL_MODEL_MODES
 
     def format_prompt(self, context: Dict[str, Any]) -> str:
         """Formats tactical prompt according to SPEC-P2 Sec 4.2."""
@@ -144,7 +159,11 @@ class EdgeSLMEngine:
         # 1b. Deterministic rule: the robot itself is stuck / off the map. Waiting never fixes this, and a small
         #     model must not be allowed to wait three times on it (seen live: "departed the traversable costmap").
         ev_low = str(context.get("event_description", "")).lower()
-        if any(w in ev_low for w in ("departed the traversable costmap", "localization", "odometry is stale", "range contact lost", "range sensor", "sensor stale", "sensor unavailable")):
+        if context.get("failure_cause") == "LEFT_COSTMAP" or "departed the traversable costmap" in ev_low:
+            latency_ms = (time.time() - start_time) * 1000.0
+            return {"action": "ESCALATE_UNEXPECTED", "target_waypoint": None,
+                    "reason": "Robot left its verified map; it was stopped and must be re-localized before any retry."}, "RULE", latency_ms
+        if any(w in ev_low for w in ("localization", "odometry is stale", "range contact lost", "range sensor", "sensor stale", "sensor unavailable")):
             current = context.get("robot_id", "")
             failed = set(context.get("failed_robots", [])) | {current}
             idle = context.get("idle_robots") or [r for r in context.get("assigned_robots", []) if r not in failed]

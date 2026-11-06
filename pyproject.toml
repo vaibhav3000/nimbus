@@ -1,2 +1,7 @@
 [tool.pytest.ini_options]
 testpaths = ["tests", "edge/tests"]
+# The installed `pytest_filter_subpackage` plugin still declares the pre-8
+# `pytest_ignore_collect(path, config)` hook, which pytest >= 8 rejects at
+# load time -- a bare `pytest` then aborts before collecting anything.
+# We do not use that plugin, so switch it off rather than pinning pytest back.
+addopts = "-p no:filter_subpackage"

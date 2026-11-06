@@ -296,6 +296,7 @@
         "cmd": "go_to",
         "params": {
           "to": "{source}",
+          "via": "{approach}",
           "purpose": "pickup"
         }
       },

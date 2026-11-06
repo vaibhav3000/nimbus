@@ -325,7 +325,7 @@ class SpatialGeofenceValidator:
     ) -> Tuple[bool, str]:
         """
         Validates all spatial parameters of a sub-task command against lease boundaries.
-        Inspects 'to', 'target', 'waypoints', 'destination' in params.
+        Inspects 'to', 'target', 'waypoints', 'via', 'destination' in params.
         """
         cmd = subtask.get("cmd")
         params = subtask.get("params", {})
@@ -341,7 +341,11 @@ class SpatialGeofenceValidator:
                 return False, reason
 
             # If intermediate waypoints are specified, validate all of them
-            waypoints = params.get("waypoints", [])
+            # ``via`` is the cloud's topology route while ``waypoints`` is
+            # retained for older callers.  Both describe actual travelled
+            # intermediate zones, so accepting one without fencing it would
+            # let a valid destination take an invalid corridor.
+            waypoints = list(params.get("waypoints", [])) + list(params.get("via", []))
             for idx, wp in enumerate(waypoints):
                 wp_valid, wp_reason, _ = self.validate_destination(wp, allowed_zones, forbidden_zones)
                 if not wp_valid:

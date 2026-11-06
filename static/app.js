@@ -6,6 +6,10 @@
 const $ = (id) => document.getElementById(id);
 let selectedTaskId = null;
 
+/* Off unless the server says NIMBUS_DEMO_CONTROLS=1.  Gates the OUTPUT_READY
+   stand-in below, which reports a delivery no robot performed. */
+let demoControls = false;
+
 async function api(method, path, body) {
   const opts = { method, headers: { "Content-Type": "application/json" } };
   if (body) opts.body = JSON.stringify(body);
@@ -85,7 +89,7 @@ async function renderDetail() {
   if (task.result_ref) {
     html += `<div class="result"><strong>Result:</strong> ${esc(task.result_ref)}</div>`;
   }
-  if (task.status === "leased") {
+  if (task.status === "leased" && demoControls) {
     html += `<p><button class="secondary" id="finish-btn">Demo: edge sends OUTPUT_READY</button></p>`;
   }
 
@@ -111,10 +115,25 @@ async function submitAnswer() {
   await refreshTasks();
 }
 
+/* Learn which optional controls this deployment allows, before the first render. */
+async function loadUiConfig() {
+  try {
+    const { data } = await api("GET", "/ui-config");
+    demoControls = Boolean(data && data.demo_controls);
+  } catch (e) {
+    demoControls = false;   // unreachable or old server: stay off, never fabricate
+  }
+}
+
 async function simulateOutputReady() {
   // In the real system the edge sends this; here the app offers it as a
   // one-click stand-in so the full result path is demoable. It reports under
   // the lease version currently in force (a re-plan moves it past 1).
+  //
+  // Hidden unless NIMBUS_DEMO_CONTROLS=1: it manufactures a delivery no robot
+  // performed, so leaving it on makes an FR-21 demo look complete when edge
+  // execution never happened.  Re-checked here, not just at render time.
+  if (!demoControls) return;
   const { data: current } = await api("GET", `/tasks/${selectedTaskId}`);
   await api("POST", "/escalations", {
     type: "OUTPUT_READY",
@@ -140,7 +159,8 @@ window.onhashchange = () => {
   if (location.hash.slice(1) !== selectedTaskId) selectTask(location.hash.slice(1));
 };
 
-refreshTasks().then(() => {
+/* Config first: a render that ran before it would briefly show a gated control. */
+loadUiConfig().then(refreshTasks).then(() => {
   const fromHash = location.hash.slice(1);
   if (fromHash) selectTask(fromHash);
 });

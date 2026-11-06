@@ -631,7 +631,28 @@ E2_SCENARIOS: List[Dict[str, Any]] = [
 ]
 
 
-def run_e2_benchmark() -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def require_real_model(engine, allow_mock: bool) -> None:
+    """Refuse to publish E2 accuracy taken from the deterministic stand-in.
+
+    ``EdgeSLMEngine(mode="auto")`` falls back to ``"mock"`` -- a keyword
+    cascade -- when no Ollama server answers, and still labels its decisions
+    ``SLM``.  Scoring that as the "Edge SLM" column compares one rule engine
+    against another while reporting it as Qwen2.5-1.5B.
+    """
+    if engine.is_real_model or allow_mock:
+        return
+    print("\n" + "!" * 80)
+    print(f"  E2 ABORTED: the SLM engine resolved to mode '{engine.mode}', not a real model.")
+    print("  No result file was written.  The 'Edge SLM' column would have been the")
+    print("  keyword fallback, making the SLM-vs-rules comparison meaningless.")
+    print("")
+    print("  Start the model first:   ollama serve &   ollama pull qwen2.5:1.5b")
+    print("  Or, to produce a clearly-labelled smoke-test run:  --allow-mock")
+    print("!" * 80)
+    raise SystemExit(2)
+
+
+def run_e2_benchmark(allow_mock: bool = False) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Runs Experiment E2 across all 40 scenarios for SLM and Rule Engine."""
     print("=" * 80)
     print("  NIMBUS EXPERIMENT E2: OFFLINE DECISION QUALITY BENCHMARK")
@@ -644,6 +665,7 @@ def run_e2_benchmark() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     # 1. Evaluate Edge SLM Engine
     slm_engine = EdgeSLMEngine(mode="auto")
     print(f"  [1/2] Evaluating Edge SLM Engine (model: {slm_engine.model_name}, mode: {slm_engine.mode})...")
+    require_real_model(slm_engine, allow_mock)
 
     slm_correct = 0
     slm_latencies: List[float] = []
@@ -900,4 +922,4 @@ def _write_report(slm_summary: Dict[str, Any], rule_summary: Dict[str, Any]):
 
 
 if __name__ == "__main__":
-    run_e2_benchmark()
+    run_e2_benchmark(allow_mock="--allow-mock" in sys.argv)

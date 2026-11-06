@@ -22,6 +22,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -50,6 +51,37 @@ def _find_simulation_dir() -> Optional[Path]:
         except Exception:
             continue
     return None
+
+
+def _load_static_human_obstacles() -> List[Tuple[float, float, float]]:
+    """Read fixed human props from the active Gazebo world.
+
+    This is intentionally limited to people, whose footprint is both
+    safety-critical and unambiguous from the SDF.  Wall mesh slicing and
+    furniture footprints require an offline geometry export; we do not
+    fabricate those boundaries from model names.
+    """
+    if not SIM_DIR:
+        return []
+    world = SIM_DIR / "hospital_six_racecars.sdf"
+    try:
+        root = ET.parse(world).getroot()
+    except (OSError, ET.ParseError):
+        return []
+    obstacles = []
+    for model in root.findall(".//model"):
+        name = (model.findtext("name") or model.get("name") or "").lower()
+        uri = (model.findtext("uri") or "").lower()
+        if not any(token in f"{name} {uri}" for token in ("scrubs", "visitor", "patient", "male", "female")):
+            continue
+        values = (model.findtext("pose") or "").split()
+        if len(values) < 2:
+            continue
+        try:
+            obstacles.append((float(values[0]), float(values[1]), 0.55))
+        except ValueError:
+            continue
+    return obstacles
 
 
 # Ensure simulation dir is in sys.path
@@ -169,6 +201,10 @@ FALLBACK_TOPOLOGY_WAYPOINTS = {
     "nurse_station_approach": [0.0, 5.0],
     "west_south_hall": [-4.5, -8.0],
     "east_south_hall": [4.5, -8.0],
+    # Corners are graph nodes, not optional visual details: omitting them
+    # makes an East-only route collapse into an invalid diagonal to the store.
+    "west_south_hall_corner": [-4.5, -15.0],
+    "east_south_hall_corner": [4.5, -15.0],
     "south_equipment_approach": [0.0, -15.0],
     "south_room_approach": [0.0, -28.0],
     "central-supply": [0.0, 0.0],
@@ -333,7 +369,7 @@ class SimRobot:
         if sensor_timeout is None:
             sensor_timeout = float(os.environ.get("NIMBUS_SENSOR_TIMEOUT", "1.0"))
         self.goal_timeout = float(os.environ.get("NIMBUS_GOAL_TIMEOUT", "600"))
-        self.minimum_front_distance = float(os.environ.get("NIMBUS_MINIMUM_FRONT_DISTANCE", "0.20"))
+        self.minimum_front_distance = float(os.environ.get("NIMBUS_MINIMUM_FRONT_DISTANCE", "0.45"))
         self.robot_id = robot_id
         cfg = DEFAULT_ROBOT_DEPLOYMENT.get(robot_id, DEFAULT_ROBOT_DEPLOYMENT["R1"])
         self.sim_name = cfg["sim_name"]
@@ -386,6 +422,7 @@ class SimRobot:
         self.current_cmd_id = None
         self.history: List[Dict[str, Any]] = []
         self.injected_obstacles: Dict[str, Dict[str, Any]] = {}
+        self._static_human_obstacles = _load_static_human_obstacles() if self.execution_mode == "gazebo" else []
 
         # Load topology nodes & edges for corridor routing
         self.topology_nodes = {}
@@ -412,9 +449,10 @@ class SimRobot:
                 ("east_mid_hall", "nurse_station_approach", 4.92),
                 ("west_mid_hall", "west_south_hall", 11.0),
                 ("east_mid_hall", "east_south_hall", 11.0),
-                ("west_south_hall", "south_equipment_approach", 8.32),
-                ("east_south_hall", "south_equipment_approach", 8.32),
-                ("south_equipment_approach", "south_room_approach", 13.0),
+                ("west_south_hall", "west_south_hall_corner", 7.0),
+                ("west_south_hall_corner", "south_equipment_approach", 4.5),
+                ("east_south_hall", "east_south_hall_corner", 7.0),
+                ("east_south_hall_corner", "south_equipment_approach", 4.5),
             ]
 
         # Determine whether to use live Gazebo or MockAdapter
@@ -613,17 +651,86 @@ class SimRobot:
         c,s=math.cos(syaw),math.sin(syaw)
         return c*dx+s*dy,-s*dx+c*dy
 
-    def _configure_navigation_costmap(self, runtime: Any = None) -> None:
+    def _peer_navigation_points(self, runtime: Any) -> List[Tuple[float, float]]:
+        """Return fresh Gazebo peer positions in this robot's odometry frame."""
+        getter=getattr(getattr(runtime, "adapter", None), "peer_world_poses", None)
+        if not callable(getter):
+            return []
+        try:
+            return [self._world_to_navigation((x,y)) for x,y in getter()]
+        except Exception:
+            return []
+
+    def _configure_navigation_costmap(
+        self,
+        runtime: Any = None,
+        allowed_zones: Optional[List[str]] = None,
+        blocked_zones: Optional[set[str]] = None,
+    ) -> None:
         runtime=runtime or self.runtime
         if not runtime or not self.topology_edges: return
-        node_names={str(edge[0]) for edge in self.topology_edges}|{str(edge[1]) for edge in self.topology_edges}
+        allowed = None
+        if allowed_zones:
+            allowed = {canonical_topology_location(zone) for zone in allowed_zones}
+            # A robot may start on a shared approach node.  It is safe to
+            # leave that node only through an edge whose other endpoint is in
+            # the lease, never through an arbitrary wing.
+            allowed.add(canonical_topology_location(self.current_zone))
+        edges = [
+            edge for edge in self.topology_edges
+            if allowed is None or (str(edge[0]) in allowed and str(edge[1]) in allowed)
+        ]
+        if not edges:
+            return
+        node_names={str(edge[0]) for edge in edges}|{str(edge[1]) for edge in edges}
         local_waypoints={name:self._world_to_navigation(tuple(self.waypoints[name][:2])) for name in node_names if name in self.waypoints}
+        # R2 is physically spawned on the shared approach between named graph
+        # nodes.  Its fleet state correctly identifies the next usable node
+        # (``current_zone``), but a fenced graph otherwise has no cell that
+        # contains its measured pose.  Add one ephemeral connector only to
+        # that already-authorised node.  It makes the approach traversable
+        # without restoring unleased West-wing corridors to the costmap.
+        current_node = canonical_topology_location(self.current_zone)
+        if allowed is not None and current_node in allowed and current_node in local_waypoints:
+            with self._pose_lock:
+                current_pose = tuple(self.pose[:2])
+            virtual_node = "__current_robot_pose__"
+            local_waypoints[virtual_node] = self._world_to_navigation(current_pose)
+            endpoint = self.waypoints.get(current_node)
+            if endpoint:
+                edges.append((virtual_node, current_node, math.hypot(
+                    current_pose[0] - endpoint[0], current_pose[1] - endpoint[1]
+                )))
         if len(local_waypoints) < 2: return
         costmap=OccupancyGrid.from_corridor_graph(
-            local_waypoints,self.topology_edges,
+            local_waypoints,edges,
             CostmapConfig(resolution=.20,corridor_width=2.0,robot_radius=.28,margin=1.0,junction_radius=2.0),
         )
-        runtime.navigation.configure_costmap(costmap)
+        # A topology edge says where travel is physically possible; it does
+        # not say that it is clear *right now*.  Known persistent obstacles
+        # (including viewer closures) must therefore become occupied cells
+        # before A* receives the command.  The radius blocks the usable
+        # corridor width after the robot footprint has been accounted for.
+        # Unknown names are ignored here and remain an edge escalation, not a
+        # reason to corrupt the navigation map.
+        for zone in blocked_zones or set():
+            point = local_waypoints.get(canonical_topology_location(zone))
+            if point is not None:
+                costmap.paint_disk(point, .85, True)
+        # Static people are collision geometry in Gazebo but were absent from
+        # the historical topology-only costmap.  Stamp conservative
+        # footprints before planning so A* cannot select a path through them.
+        for x, y, radius in self._static_human_obstacles:
+            costmap.paint_disk(self._world_to_navigation((x, y)), radius, True)
+        # Other racecars are dynamic physical obstacles.  Seed their current
+        # footprints before the first A* plan; live range sensing remains the
+        # final reflex guard while driving.
+        for point in self._peer_navigation_points(runtime):
+            costmap.paint_disk(point, .85, True)
+        runtime.navigation.configure_costmap(
+            costmap,
+            obstacle_provider=lambda: self._peer_navigation_points(runtime),
+        )
 
     def _record_pose(self, pose: List[float], source: str, timestamp: Optional[float]) -> None:
         with self._pose_lock:
@@ -672,7 +779,13 @@ class SimRobot:
     def get_status(self) -> Dict[str, Any]:
         return {"robot_id":self.robot_id,"current_cmd_id":self.current_cmd_id,"status":self.status,"zone":self.current_zone,"battery_pct":self.battery_pct,"connection_state":self.refresh_readiness(),"execution_mode":self.execution_mode,**self.pose_snapshot(),"timestamp":time.time()}
 
-    def _find_route(self, start_zone: str, target_zone: str) -> List[str]:
+    def _find_route(
+        self,
+        start_zone: str,
+        target_zone: str,
+        allowed_zones: Optional[List[str]] = None,
+        avoid_zones: Optional[set[str]] = None,
+    ) -> List[str]:
         """Calculates collision-free topology corridor waypoints between two nodes."""
         lookup_start = canonical_topology_location(start_zone)
         lookup_target = canonical_topology_location(target_zone)
@@ -692,13 +805,35 @@ class SimRobot:
         if start_node == target_node or not self.topology_edges:
             return [target_node]
 
+        allowed = None
+        if allowed_zones:
+            allowed = {canonical_topology_location(zone) for zone in allowed_zones}
+            # The start is permitted only as the point from which the robot
+            # exits into the leased topology; no other unleased node is added.
+            allowed.add(start_node)
+            if target_node not in allowed:
+                return []
+
+        avoid = {canonical_topology_location(zone) for zone in (avoid_zones or set())}
+        # A robot cannot route from or to a known blocked topology node.  The
+        # caller reports this as BLOCKED rather than falling back to a direct
+        # point-to-point drive.
+        if start_node in avoid or target_node in avoid:
+            return []
+
         adj: Dict[str, List[Tuple[str, float]]] = {}
         for u, v, w in self.topology_edges:
+            if allowed is not None and (u not in allowed or v not in allowed):
+                continue
+            if u in avoid or v in avoid:
+                continue
             adj.setdefault(u, []).append((v, float(w)))
             adj.setdefault(v, []).append((u, float(w)))
 
+        # A graph-disconnected lease must never silently become a direct
+        # point-to-point drive.  The caller treats this as a blocked route.
         if start_node not in adj or target_node not in adj:
-            return [target_node]
+            return []
 
         q = [(0.0, start_node, [start_node])]
         visited = set()
@@ -779,12 +914,26 @@ class SimRobot:
                 (bool(extra.get("arrival_verified")) and verification_source in {"odometry","ground_truth"})
                 or (bool(extra.get("has_photo")) and verification_source == "gazebo_camera")
             )
+            message_l = message.lower()
+            failure_cause = None
+            if status != "COMPLETED":
+                if "behind the robot" in message_l:
+                    failure_cause = "HEADING_BEHIND"
+                elif "departed the traversable costmap" in message_l:
+                    failure_cause = "LEFT_COSTMAP"
+                elif "no obstacle-free route" in message_l or "no route" in message_l:
+                    failure_cause = "NO_PATH"
+                elif "front obstacle" in message_l or "dynamic obstacle" in message_l:
+                    failure_cause = "OBSTACLE"
+                elif "stale" in message_l or "unavailable" in message_l:
+                    failure_cause = "SENSOR_OR_LOCALIZATION"
             return {
                 "robot_id":self.robot_id,"cmd_id":cmd_id,"status":status,
                 "zone":self.current_zone,"message":message,"timestamp":time.time(),
                 "execution_mode":self.execution_mode,"connection_state":self.refresh_readiness(),
                 "arrival_verified":bool(extra.pop("arrival_verified",False)),
                 "physical_verification":physical_verification,
+                "failure_cause":failure_cause,
                 "distance_travelled_m":round(self.measured_distance_m,3),**snapshot,**extra,
             }
 
@@ -841,7 +990,27 @@ class SimRobot:
             except (TypeError,ValueError):
                 return finish("INVALID_DESTINATION",f"Invalid destination coordinates for {target_name!r}")
 
-            # 2. Check injected obstacles for tactical autonomy testing
+            allowed_zones = params.get("allowed_zones")
+            forbidden_zones = {canonical_topology_location(zone) for zone in params.get("forbidden_zones", [])}
+            if allowed_zones is not None and not isinstance(allowed_zones, list):
+                return finish("INVALID_DESTINATION", "allowed_zones must be a list when supplied")
+            allowed_nodes = ({canonical_topology_location(zone) for zone in allowed_zones}
+                             if allowed_zones else None)
+            if allowed_nodes is not None and canonical_topology_location(target_name) not in allowed_nodes:
+                return finish("INVALID_DESTINATION", f"Lease route target {target_name!r} is outside allowed_zones")
+
+            # 2. Convert known persistent obstacles into both topology and
+            # occupancy constraints.  A* can now choose another allowed
+            # corridor before velocity is published instead of attempting a
+            # straight drive toward the blocked waypoint.
+            persistent_obstacles = {
+                canonical_topology_location(zone)
+                for zone, info in self.injected_obstacles.items()
+                if info.get("type") == "persistent"
+            }
+
+            # A blocked start/goal cannot be safely bypassed.  Other blocked
+            # nodes are removed from the route and painted into the costmap.
             blocked_zone = None
             if target_name in self.injected_obstacles:
                 blocked_zone = target_name
@@ -856,13 +1025,6 @@ class SimRobot:
                 elif "east_mid_hall" in self.injected_obstacles:
                     blocked_zone = "east_mid_hall"
 
-            if not blocked_zone and self.injected_obstacles and target_name:
-                # an obstacle anywhere along the corridor route blocks the leg
-                for node in self._find_route(self.current_zone, target_name)[1:]:
-                    if node in self.injected_obstacles:
-                        blocked_zone = node
-                        break
-
             if blocked_zone:
                 obs_info = self.injected_obstacles[blocked_zone]
                 if obs_info["type"] == "transient" and obs_info["wait_count"] >= obs_info["clears_after_waits"]:
@@ -876,7 +1038,42 @@ class SimRobot:
             # 3. Expand corridor route using Dijkstra topology graph
             waypoints_to_visit = []
             if target_name:
-                route = self._find_route(self.current_zone, target_name)
+                supplied_via = params.get("via")
+                if supplied_via is not None and not isinstance(supplied_via, list):
+                    return finish("INVALID_DESTINATION", "Route 'via' must be a list")
+                if supplied_via:
+                    route = [canonical_topology_location(node) for node in supplied_via]
+                    start_node = canonical_topology_location(self.current_zone)
+                    if not route or route[0] != start_node:
+                        route.insert(0, start_node)
+                    target_node = canonical_topology_location(target_name)
+                    if route[-1] != target_node:
+                        route.append(target_node)
+                else:
+                    route = self._find_route(
+                        self.current_zone,
+                        target_name,
+                        allowed_zones=allowed_zones,
+                        avoid_zones=persistent_obstacles,
+                    )
+                if not route:
+                    return finish("BLOCKED", f"No obstacle-free route to {target_name!r} exists inside allowed_zones")
+                illegal = [node for node in route[1:] if (allowed_nodes is not None and node not in allowed_nodes) or node in forbidden_zones]
+                if illegal:
+                    return finish("INVALID_DESTINATION", f"Lease route leaves permitted zones via {illegal[0]!r}")
+                # A cloud-supplied `via` route is authoritative, so do not
+                # silently leave it.  Refuse it if a persistent obstacle is
+                # on it; tactical re-planning must remain inside the lease.
+                blocked_on_route = [node for node in route[1:] if node in persistent_obstacles]
+                if blocked_on_route:
+                    return finish("BLOCKED", f"Navigation blocked in {blocked_on_route[0]}: persistent obstacle")
+                # Fence the SDK A* planner as well as the graph route.  This
+                # prevents a continuous path from crossing a closed zone or
+                # leaving the leased wing at a junction.
+                self._configure_navigation_costmap(
+                    allowed_zones=allowed_zones,
+                    blocked_zones=persistent_obstacles,
+                )
                 for wp_node in route[1:]:
                     wp_xy = None
                     if HAS_SDK:
@@ -899,6 +1096,10 @@ class SimRobot:
                         target_xy = self.waypoints[target_name]
                 if target_xy is None:
                     return finish("INVALID_DESTINATION",f"Unknown destination: {target_name!r}")
+                self._configure_navigation_costmap(
+                    allowed_zones=allowed_zones,
+                    blocked_zones=persistent_obstacles,
+                )
                 waypoints_to_visit.append((target_name or "target", target_xy, float(params.get("speed", params.get("max_speed", 1.0)))))
 
             # 4. Sequentially execute each corridor waypoint

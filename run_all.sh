@@ -4,6 +4,8 @@
 #   ./run_all.sh                 # auto: real Gazebo if `ign` + ROS 2 are present, else the kinematic stand-in
 #   ./run_all.sh kinematic       # Gazebo-less: P1's map + SDK navigation, live viewer on :8090
 #   ./run_all.sh gazebo          # real Gazebo Fortress (run inside the Docker image, see scripts/docker_gazebo.sh)
+#   ./run_all.sh kinematic --not-quiet  # include detailed edge-to-robot commands in logs
+#   ./run_all.sh kinematic --slm-mode ollama  # require a real local Ollama model
 #   HEADLESS=1 ./run_all.sh gazebo   # Gazebo without a GUI window
 #
 # By default the requester and lease authority are the deployed cloud. Set
@@ -13,7 +15,50 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 ROOT="$PWD"
-MODE="${1:-auto}"
+MODE="auto"
+EDGE_QUIET_ARGS=(--quiet)
+SLM_MODE="${NIMBUS_SLM_MODE:-auto}"
+SLM_MODEL="${NIMBUS_SLM_MODEL:-qwen2.5:1.5b}"
+while [ "$#" -gt 0 ]; do
+  arg="$1"
+  case "$arg" in
+    auto|kinematic|gazebo)
+      if [ "$MODE" != "auto" ]; then
+        echo "!! simulator mode specified more than once: $MODE and $arg" >&2
+        exit 2
+      fi
+      MODE="$arg"
+      ;;
+    --not-quiet)
+      EDGE_QUIET_ARGS=()
+      ;;
+    --slm-mode)
+      shift
+      if [ "$#" -eq 0 ]; then
+        echo "!! --slm-mode requires auto, ollama, llama_cpp, mock, or rules_only" >&2
+        exit 2
+      fi
+      SLM_MODE="$1"
+      ;;
+    --slm-model)
+      shift
+      if [ "$#" -eq 0 ]; then
+        echo "!! --slm-model requires an Ollama model name" >&2
+        exit 2
+      fi
+      SLM_MODEL="$1"
+      ;;
+    *)
+      echo "Usage: $0 [auto|kinematic|gazebo] [--not-quiet] [--slm-mode auto|ollama|llama_cpp|mock|rules_only] [--slm-model MODEL]" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+case "$SLM_MODE" in
+  auto|ollama|llama_cpp|mock|rules_only) ;;
+  *) echo "!! invalid --slm-mode: $SLM_MODE" >&2; exit 2 ;;
+esac
 LOGS="${LOGS_DIR:-$ROOT/logs}"; PIDS="$LOGS/pids"; mkdir -p "$LOGS"; : > "$PIDS"
 
 # --- environment (ROS 2 if present) -------------------------------------------------------------
@@ -34,7 +79,9 @@ export IGN_PARTITION="${IGN_PARTITION:-custom_hospital_world}"; export GZ_PARTIT
 export NIMBUS_SENSOR_TIMEOUT="${NIMBUS_SENSOR_TIMEOUT:-5.0}"
 export NIMBUS_CAMERA_TIMEOUT="${NIMBUS_CAMERA_TIMEOUT:-10.0}"
 export NIMBUS_GOAL_TIMEOUT="${NIMBUS_GOAL_TIMEOUT:-600.0}"
-export NIMBUS_MINIMUM_FRONT_DISTANCE="${NIMBUS_MINIMUM_FRONT_DISTANCE:-0.20}"
+export NIMBUS_MINIMUM_FRONT_DISTANCE="${NIMBUS_MINIMUM_FRONT_DISTANCE:-0.45}"
+export NIMBUS_SLM_MODE="$SLM_MODE"
+export NIMBUS_SLM_MODEL="$SLM_MODEL"
 DEPLOYED_CLOUD_URL="https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com"
 if [ "${NIMBUS_LOCAL_CLOUD:-0}" = 1 ]; then
   CLOUD="http://127.0.0.1:$PORT"
@@ -52,8 +99,43 @@ waitfor() { for _ in $(seq 1 "${3:-60}"); do curl -fs "$1" >/dev/null 2>&1 && re
 
 LOGS_DIR="$LOGS" ./stop_all.sh quiet 2>/dev/null || true
 : > "$PIDS"
-[ "${KEEP_DATA:-0}" = 1 ] || rm -rf "$DATA_DIR" "$ROOT"/edge_*.db
+# A run starts from clean state, but the previous run's decision log is FR-20
+# evidence -- so rotate it aside instead of deleting it.  KEEP_DATA=1 reuses the
+# existing state in place; NIMBUS_PRUNE_RUNS caps how many rotations are kept.
+if [ "${KEEP_DATA:-0}" != 1 ]; then
+  if [ -d "$DATA_DIR" ] && [ -n "$(ls -A "$DATA_DIR" 2>/dev/null)" ]; then
+    _stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    _prev="${DATA_DIR%/}.prev/$_stamp"
+    mkdir -p "$_prev"
+    mv "$DATA_DIR"/* "$_prev"/ 2>/dev/null || true
+    for _db in "$ROOT"/edge_*.db; do [ -e "$_db" ] && mv "$_db" "$_prev"/ 2>/dev/null || true; done
+    echo "   previous run's data kept in ${_prev#$ROOT/}  (KEEP_DATA=1 to reuse in place)"
+    # Keep the last N rotations so this cannot grow without bound.
+    _keep="${NIMBUS_PRUNE_RUNS:-5}"
+    ls -1d "${DATA_DIR%/}.prev"/*/ 2>/dev/null | head -n "-$_keep" | while read -r _old; do rm -rf "$_old"; done
+  fi
+  rm -rf "$DATA_DIR" "$ROOT"/edge_*.db
+fi
 mkdir -p "$DATA_DIR"
+
+# `auto` falls back to mock for CI.  Real-inference runs must fail closed
+# before any robot is started if Ollama or the selected model is unavailable.
+if [ "$SLM_MODE" = ollama ]; then
+  command -v ollama >/dev/null || { echo "!! Ollama is required for --slm-mode ollama" >&2; exit 1; }
+  if ! curl -fsS --max-time 2 http://127.0.0.1:11434/api/tags >/dev/null; then
+    echo "== starting Ollama"
+    start ollama ollama serve
+    waitfor http://127.0.0.1:11434/api/tags ollama 15 || exit 1
+  fi
+  if ! ollama show "$SLM_MODEL" >/dev/null 2>&1; then
+    echo "!! Ollama model '$SLM_MODEL' is not installed. Run: ollama pull $SLM_MODEL" >&2
+    ./stop_all.sh quiet 2>/dev/null || true
+    exit 1
+  fi
+  echo "== edge SLM: Ollama model $SLM_MODEL (real inference required)"
+else
+  echo "== edge SLM mode: $SLM_MODE ($SLM_MODEL)"
+fi
 
 # --- 1. simulator --------------------------------------------------------------------------------
 if [ "$MODE" = gazebo ]; then
@@ -63,7 +145,7 @@ if [ "$MODE" = gazebo ]; then
   ok=0; for _ in $(seq 1 120); do
     n=$(ign topic -l 2>/dev/null | grep -c "/robot_[1-6]/odom"); [ "$n" -ge 6 ] && { ok=1; break; }; sleep 1; done
   [ "$ok" = 1 ] && echo "   Gazebo is publishing all 6 robots." || echo "!! Gazebo topics not seen after 120 s: check logs/gazebo.log (continuing anyway)"
-  SIM_ARGS=(--robot-backend sim --sim-mode gazebo --gazebo-validation odometry)
+  SIM_ARGS=(--robot-backend sim --sim-mode gazebo --gazebo-validation ground_truth)
 else
   echo "== starting kinematic viewer"
   start viewer python3 simulation/lite/viewer.py --port "${VIEWER_PORT:-8090}" --cloud "$CLOUD"
@@ -84,7 +166,7 @@ fi
 # --- 3. edge supervisors (one per wing) -----------------------------------------------------------
 echo "== starting edge supervisors"
 for c in east-wing west-wing; do
-  start "edge_$c" python3 -u edge/run_supervisor.py --cluster "$c" --cloud-url "$CLOUD" "${SIM_ARGS[@]}" --quiet --db "$DATA_DIR/edge_${c//-/_}.db"
+  start "edge_$c" python3 -u edge/run_supervisor.py --cluster "$c" --cloud-url "$CLOUD" "${SIM_ARGS[@]}" "${EDGE_QUIET_ARGS[@]}" --slm-mode "$SLM_MODE" --slm-model "$SLM_MODEL" --db "$DATA_DIR/edge_${c//-/_}.db"
 done
 sleep 6
 
