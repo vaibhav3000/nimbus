@@ -280,7 +280,7 @@ The full table is [results/final/RESULTS.md](results/final/RESULTS.md).
 | C3, memory (FR-19) | With memory, 10 of 10 repeat requests were resolved without asking. Without memory, all 10 needed a question. |
 | C4, Rule Checker under attack (FR-15) | 0 of 180 invalid proposals approved. 0 invalid leases from 60 requests with an adversarial model. The fallback took over every time it had to. |
 | C5, scheduling (FR-14, T8) | Over 113,000 simulated tasks: 0 times did a routine task take a robot while an urgent one waited (first-come-first-served: 25,009). At overload, 0% of urgent deadlines missed against 77%. |
-| C6, re-planning (FR-16, T5) | Real Bedrock Nova Lite on a local server, 32 incidents: every new plan avoided the closed zone or the failed robot, decision time p95 0.03 s against the 30 s bar. When no route was left, the operator was alerted. The rules decided all 32 incidents and the model was never called, so the time is the same as with the stand-in. |
+| C6, re-planning (FR-16, T5) | 32 incidents: every new plan avoided the closed zone or the failed robot. When no route was left, the operator was alerted. |
 | C7, model outage (FR-18) | During a 10-minute outage every request still got a decision from the rules, every user was told, and leased work finished. |
 | C8, parallel requests (NFR-1) | Measured on a local cloud. The run against the deployed infrastructure is still to be done. |
 | C9, model calls (NFR-4) | Nimbus (C1) makes 22% of the cloud model calls of the cloud-only design (C2): 1.16 against 5.16 calls per task over T1 to T5, T7 and T8. The plan's bar is 50%. |
