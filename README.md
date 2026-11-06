@@ -282,7 +282,7 @@ The full table is [results/final/P3_RESULTS.md](results/final/P3_RESULTS.md).
 | C6, re-planning (FR-16, T5) | 32 incidents: every new plan avoided the closed zone or the failed robot. When no route was left, the operator was alerted. |
 | C7, model outage (FR-18) | During a 10-minute outage every request still got a decision from the rules, every user was told, and leased work finished. |
 | C8, parallel requests (NFR-1) | Measured on a local cloud. The run against the deployed infrastructure is still to be done. |
-| C9, model calls (NFR-4) | Nimbus (C1) needs about a third of the cloud model calls of the cloud-only design (C2). |
+| C9, model calls (NFR-4) | Nimbus (C1) makes 22% of the cloud model calls of the cloud-only design (C2): 1.16 against 5.16 calls per task over T1 to T5, T7 and T8. The plan's bar is 50%. |
 
 Several of these ran with the stand-in model, and each result says so (`source` column). The commands to rerun them
 on real Bedrock are in [experiments/p3/README.md](experiments/p3/README.md).
