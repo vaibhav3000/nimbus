@@ -1,0 +1,1 @@
+{"t": 300.15, "event": "outage_started", "reply": {"http": 201, "model_down": true, "seconds": 600}}

@@ -1,0 +1,4 @@
+phase,requests,leased,queued,asked,rejected_or_error,understood_by_model,user_notified_reduced_mode,decision_p50_s,decision_p95_s,completed_by_end,source
+before,20,14,6,0,0,20,0,0.698,1.115,14,real_bedrock
+during,14,5,9,0,0,0,14,0.01,0.023,5,real_bedrock
+after,0,0,0,0,0,0,0,,,0,real_bedrock
