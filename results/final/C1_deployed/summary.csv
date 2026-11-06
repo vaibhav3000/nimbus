@@ -1,0 +1,10 @@
+decider,set,source,model,requests,clear,vague,field_accuracy,field_ci_low,field_ci_high,acc_item,acc_destination,acc_priority,acc_deadline_minutes,request_accuracy,clarification_recall,clarification_precision,questions_on_clear_requests,latency_p50_s,latency_p95_s,repeat_consistency
+bedrock,all,real_bedrock,apac.amazon.nova-lite-v1:0,300,216,84,0.94,0.922,0.954,0.977,0.977,0.87,0.935,0.823,0.726,0.924,5,1.434,1.678,0.92
+bedrock,prd,real_bedrock,apac.amazon.nova-lite-v1:0,150,111,39,0.98,0.962,0.989,1.0,1.0,0.919,1.0,0.867,0.718,1.0,0,1.441,1.687,0.94
+bedrock,paraphrase,real_bedrock,apac.amazon.nova-lite-v1:0,150,105,45,0.898,0.865,0.923,0.952,0.952,0.819,0.867,0.78,0.733,0.868,5,1.431,1.673,0.9
+standin,all,mock_llm,rule-based-stand-in,100,72,28,0.972,0.946,0.986,0.986,0.986,0.972,0.944,0.96,1.0,0.966,1,0.004,0.013,
+standin,prd,mock_llm,rule-based-stand-in,50,37,13,1.0,0.975,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0,0.004,0.014,
+standin,paraphrase,mock_llm,rule-based-stand-in,50,35,15,0.943,0.891,0.971,0.971,0.971,0.943,0.886,0.92,1.0,0.938,1,0.004,0.006,
+rules,all,measured,,100,72,28,0.972,0.946,0.986,0.986,0.986,0.972,0.944,0.89,0.75,0.955,1,0.004,0.009,
+rules,prd,measured,,50,37,13,1.0,0.975,1.0,1.0,1.0,1.0,1.0,0.92,0.692,1.0,0,0.003,0.014,
+rules,paraphrase,measured,,50,35,15,0.943,0.891,0.971,0.971,0.971,0.943,0.886,0.86,0.8,0.923,1,0.004,0.008,

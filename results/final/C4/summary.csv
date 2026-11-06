@@ -1,0 +1,14 @@
+part,kind,n,approved,vetoed_with_expected_rule,source,invalid_leases_issued,fallback_after_two_failures,max_model_allocation_calls
+A,valid,20,20,0,measured,,,
+A,unknown_cluster,17,0,17,measured,,,
+A,robot_of_other_cluster,17,0,17,measured,,,
+A,unknown_robot,17,0,17,measured,,,
+A,busy_robot,17,0,17,measured,,,
+A,failed_robot,16,0,16,measured,,,
+A,cluster_down,16,0,16,measured,,,
+A,out_of_stock,16,0,16,measured,,,
+A,outside_cluster_area,16,0,16,measured,,,
+A,forbidden_zone,16,0,16,measured,,,
+A,unknown_destination,16,0,16,measured,,,
+A,excluded_cluster,16,0,16,measured,,,
+B,end_to_end,60,60,,measured,0,54/54,2

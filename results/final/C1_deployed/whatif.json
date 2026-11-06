@@ -1,0 +1,26 @@
+{
+ "recorded_on": "the cloud as deployed at the time of the run",
+ "as_recorded": {
+  "field_accuracy": 0.9398,
+  "field_ci": [
+   0.9219,
+   0.9538
+  ],
+  "clarification_recall": 0.7262,
+  "clarification_precision": 0.9242,
+  "questions_on_clear_requests": 5,
+  "decisions": 300
+ },
+ "with_current_grounding": {
+  "field_accuracy": 0.963,
+  "field_ci": [
+   0.9482,
+   0.9736
+  ],
+  "clarification_recall": 0.9286,
+  "clarification_precision": 0.9398,
+  "questions_on_clear_requests": 5,
+  "decisions": 300
+ },
+ "note": "same model answers; only the deterministic code after the model differs"
+}

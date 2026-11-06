@@ -1,0 +1,7 @@
+decider,set,source,model,requests,clear,vague,field_accuracy,field_ci_low,field_ci_high,acc_item,acc_destination,acc_priority,acc_deadline_minutes,request_accuracy,clarification_recall,clarification_precision,questions_on_clear_requests,latency_p50_s,latency_p95_s,repeat_consistency
+standin,all,mock_llm,rule-based-stand-in,100,72,28,0.986,0.965,0.995,1.0,1.0,0.986,0.958,0.97,1.0,1.0,0,0.004,0.009,
+standin,prd,mock_llm,rule-based-stand-in,50,37,13,1.0,0.975,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0,0.004,0.01,
+standin,paraphrase,mock_llm,rule-based-stand-in,50,35,15,0.971,0.929,0.989,1.0,1.0,0.971,0.914,0.94,1.0,1.0,0,0.004,0.006,
+rules,all,measured,,100,72,28,0.986,0.965,0.995,1.0,1.0,0.986,0.958,0.9,0.75,1.0,0,0.003,0.011,
+rules,prd,measured,,50,37,13,1.0,0.975,1.0,1.0,1.0,1.0,1.0,0.92,0.692,1.0,0,0.003,0.018,
+rules,paraphrase,measured,,50,35,15,0.971,0.929,0.989,1.0,1.0,0.971,0.914,0.88,0.8,1.0,0,0.004,0.005,

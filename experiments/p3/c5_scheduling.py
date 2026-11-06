@@ -272,7 +272,9 @@ def main(argv=None) -> int:
     if a.replot:
         import json
         rd = lib.ResultDir("C5", "Priority scheduling (FR-14, T8)", None)
-        rows = [json.loads(line) for f in sorted((rd.dir / "raw").glob("tasks_*.jsonl")) for line in f.open()]
+        import gzip
+        files = sorted((rd.dir / "raw").glob("tasks_*.jsonl")) + sorted((rd.dir / "raw").glob("tasks_*.jsonl.gz"))
+        rows = [json.loads(line) for f in files for line in (gzip.open(f, "rt") if f.suffix == ".gz" else f.open())]
         print("redrew", plots(rd, rows))
         return 0
     rd = lib.ResultDir("C5", "Priority scheduling (FR-14, T8)", None)
@@ -304,6 +306,12 @@ def main(argv=None) -> int:
                                     "queue_inversions": sum(r["inversion"] for r in sub), "source": "measured"})
     rd.summary(summary)
     names = plots(rd, rows)
+    import gzip
+    import shutil
+    for f in (rd.dir / "raw").glob("tasks_*.jsonl"):     # 100k+ task records: keep them compressed in the repository
+        with f.open("rb") as src, gzip.open(f.with_suffix(".jsonl.gz"), "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        f.unlink()
     inv_ours = sum(r["inversion"] for r in rows if r["scheduler"] == "ours")
     inv_fifo = sum(r["inversion"] for r in rows if r["scheduler"] == "fifo")
     hi = [s for s in summary if s["rho"] == max(a.loads) and s["robots"] == 4]

@@ -209,6 +209,8 @@ def main(argv=None) -> int:
     rd = lib.ResultDir(rid, "Request understanding (FR-13, E2 cloud)", info_target)
     if info_target is not None and not info_target.is_deployed:
         info_target.close()
+    if info_target is None:
+        rd.env.update({"source": "mock_llm (standin) / measured (rules)", "target": "local", "model": "rule-based-stand-in"})
     rd.reset_raw()
     recs_by, aggs, summary = {}, {}, []
     for d in deciders:

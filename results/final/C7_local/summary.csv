@@ -1,0 +1,4 @@
+phase,requests,leased,queued,asked,rejected_or_error,understood_by_model,user_notified_reduced_mode,decision_p50_s,decision_p95_s,completed_by_end,source
+before,20,14,6,0,0,20,0,0.012,0.016,14,mock_llm
+during,32,9,23,0,0,0,32,0.006,0.014,9,mock_llm
+after,23,6,17,0,0,22,1,0.007,0.017,6,mock_llm

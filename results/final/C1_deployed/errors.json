@@ -1,0 +1,220 @@
+{
+ "counts": {
+  "bedrock | should have asked": 9,
+  "bedrock | priority": 8,
+  "rules | should have asked": 7,
+  "bedrock | asked although clear": 2,
+  "standin | deadline_minutes": 2,
+  "rules | deadline_minutes": 2,
+  "standin | priority": 1,
+  "standin | asked although clear": 1,
+  "rules | priority": 1,
+  "rules | asked although clear": 1
+ },
+ "examples": [
+  {
+   "decider": "bedrock",
+   "id": "req-03",
+   "text": "Please bring a wheelchair to ward 2B within 15 minutes.",
+   "why": "priority: 'urgent' not 'routine'"
+  },
+  {
+   "decider": "bedrock",
+   "id": "req-05",
+   "text": "A wheelchair to ward 3 please within 45 minutes.",
+   "why": "priority: 'urgent' not 'routine'"
+  },
+  {
+   "decider": "bedrock",
+   "id": "req-10",
+   "text": "I need a wheelchair",
+   "why": "should have asked"
+  },
+  {
+   "decider": "bedrock",
+   "id": "req-17",
+   "text": "Need an infusion pump at 2B-12, urgent.",
+   "why": "should have asked"
+  },
+  {
+   "decider": "bedrock",
+   "id": "req-23",
+   "text": "Deliver a wheel chair to ward 2B within 20 minutes.",
+   "why": "priority: 'urgent' not 'routine'"
+  },
+  {
+   "decider": "bedrock",
+   "id": "req-34",
+   "text": "send an iv pole urgently",
+   "why": "should have asked"
+  },
+  {
+   "decider": "bedrock",
+   "id": "req-36",
+   "text": "need a blanket",
+   "why": "should have asked"
+  },
+  {
+   "decider": "bedrock",
+   "id": "req-44",
+   "text": "bring a monitor",
+   "why": "should have asked"
+  },
+  {
+   "decider": "bedrock",
+   "id": "para-02",
+   "text": "We're out of blankets on 2B, please send one.",
+   "why": "priority: 'urgent' not 'routine'; deadline_minutes: 12 not 60"
+  },
+  {
+   "decider": "bedrock",
+   "id": "para-06",
+   "text": "Send a paediatric pump to ward 2B within 30 minutes.",
+   "why": "priority: 'urgent' not 'routine'"
+  },
+  {
+   "decider": "bedrock",
+   "id": "para-07",
+   "text": "Ward 3 needs a wheelchair in the next 20 minutes.",
+   "why": "priority: 'urgent' not 'routine'; deadline_minutes: 12 not 20"
+  },
+  {
+   "decider": "bedrock",
+   "id": "para-10",
+   "text": "Bring an infusion pump to 2C.",
+   "why": "asked although clear"
+  },
+  {
+   "decider": "bedrock",
+   "id": "para-11",
+   "text": "An IV stand to ward 2B please, within half an hour.",
+   "why": "priority: 'urgent' not 'routine'; deadline_minutes: 12 not 30"
+  },
+  {
+   "decider": "bedrock",
+   "id": "para-16",
+   "text": "Need a wheelchair on ward 2B within 40 minutes.",
+   "why": "priority: 'urgent' not 'routine'"
+  },
+  {
+   "decider": "bedrock",
+   "id": "para-27",
+   "text": "2B needs a paediatric infusion pump asap.",
+   "why": "asked although clear"
+  },
+  {
+   "decider": "bedrock",
+   "id": "para-40",
+   "text": "get a wheelchair over asap",
+   "why": "should have asked"
+  },
+  {
+   "decider": "bedrock",
+   "id": "para-43",
+   "text": "an infusion pump to ward 2B, urgent",
+   "why": "should have asked"
+  },
+  {
+   "decider": "bedrock",
+   "id": "para-47",
+   "text": "could you bring an IV pole",
+   "why": "should have asked"
+  },
+  {
+   "decider": "bedrock",
+   "id": "para-50",
+   "text": "monitor urgently please",
+   "why": "should have asked"
+  },
+  {
+   "decider": "standin",
+   "id": "para-07",
+   "text": "Ward 3 needs a wheelchair in the next 20 minutes.",
+   "why": "deadline_minutes: 60 not 20"
+  },
+  {
+   "decider": "standin",
+   "id": "para-11",
+   "text": "An IV stand to ward 2B please, within half an hour.",
+   "why": "deadline_minutes: 60 not 30"
+  },
+  {
+   "decider": "standin",
+   "id": "para-18",
+   "text": "Send one IV pole to ward 3 urgently.",
+   "why": "priority: 'routine' not 'urgent'; deadline_minutes: 60 not 12"
+  },
+  {
+   "decider": "standin",
+   "id": "para-25",
+   "text": "Please bring a wheelchair to ward three.",
+   "why": "asked although clear"
+  },
+  {
+   "decider": "rules",
+   "id": "req-12",
+   "text": "infusion pump to 2B please",
+   "why": "should have asked"
+  },
+  {
+   "decider": "rules",
+   "id": "req-17",
+   "text": "Need an infusion pump at 2B-12, urgent.",
+   "why": "should have asked"
+  },
+  {
+   "decider": "rules",
+   "id": "req-25",
+   "text": "pump needed at 2B",
+   "why": "should have asked"
+  },
+  {
+   "decider": "rules",
+   "id": "req-40",
+   "text": "a pump to 2B",
+   "why": "should have asked"
+  },
+  {
+   "decider": "rules",
+   "id": "para-07",
+   "text": "Ward 3 needs a wheelchair in the next 20 minutes.",
+   "why": "deadline_minutes: 60 not 20"
+  },
+  {
+   "decider": "rules",
+   "id": "para-11",
+   "text": "An IV stand to ward 2B please, within half an hour.",
+   "why": "deadline_minutes: 60 not 30"
+  },
+  {
+   "decider": "rules",
+   "id": "para-18",
+   "text": "Send one IV pole to ward 3 urgently.",
+   "why": "priority: 'routine' not 'urgent'; deadline_minutes: 60 not 12"
+  },
+  {
+   "decider": "rules",
+   "id": "para-25",
+   "text": "Please bring a wheelchair to ward three.",
+   "why": "asked although clear"
+  },
+  {
+   "decider": "rules",
+   "id": "para-42",
+   "text": "infusion pump for 2B",
+   "why": "should have asked"
+  },
+  {
+   "decider": "rules",
+   "id": "para-43",
+   "text": "an infusion pump to ward 2B, urgent",
+   "why": "should have asked"
+  },
+  {
+   "decider": "rules",
+   "id": "para-48",
+   "text": "2B needs a pump straight away",
+   "why": "should have asked"
+  }
+ ]
+}

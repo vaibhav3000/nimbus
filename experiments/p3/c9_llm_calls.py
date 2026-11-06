@@ -77,7 +77,11 @@ def run_mode(mode: str, spec: str, repeats: int, rd) -> list[dict]:
     edges = lib.Edges(target, work_s=0.1, on_lease=make_edge(mode, plan)).start()
     recs = []
     try:
+        s, pk, _ = target.api.get("/pack")
+        children: dict = {}
         for rep in range(1, repeats + 1):
+            for cid in edges.robots:               # deliveries consume stock: restock so every repeat can be leased
+                target.api.post("/fleet/stock", {"cluster_id": cid, "stock": {i: 1000 for i in pk.get("items", [])}})
             for tname, sc in TASKS.items():
                 texts = sc["text"] if isinstance(sc["text"], list) else [sc["text"]]
                 tids = []
@@ -91,20 +95,32 @@ def run_mode(mode: str, spec: str, repeats: int, rd) -> list[dict]:
                     tids.append(tid)
                     if out.get("status") == "needs_clarification" and sc.get("answer"):
                         target.api.post(f"/requests/{tid}/answer", {"text": sc["answer"], "message_id": f"exp-ans-{uuid.uuid4().hex[:8]}"})
+                    # a survey (T7) or a multi-item request creates child tasks: the edge must run those leases too
+                    for child in (target.api.get(f"/tasks/{tid}")[1].get("children") or []):
+                        cid_ = child if isinstance(child, str) else child.get("task_id")
+                        if cid_:
+                            plan[cid_] = sc
+                            edges.tasks.add(cid_)
+                            children.setdefault(tid, []).append(cid_)
                 for tid in tids:
                     scenarios.wait_for(lambda: target.api.get(f"/tasks/{tid}")[1].get("status") in ("completed", "failed", "cancelled", "rejected", "needs_clarification"), 25, 0.2)
                 time.sleep(0.5)
                 for tid in tids:
                     s, task, _ = target.api.get(f"/tasks/{tid}")
-                    if task.get("status") not in ("completed", "failed", "cancelled", "rejected"):
-                        target.api.post(f"/tasks/{tid}/control", {"action": "cancel", "message_id": f"exp-c-{uuid.uuid4().hex[:8]}"})
-                    s, tr, _ = target.api.get(f"/tasks/{tid}/trace")
-                    llm = [e["detail"] for e in tr.get("events", []) if e.get("kind") == "llm"]
+                    for t_ in [tid] + children.get(tid, []):
+                        s_, tk_, _ = target.api.get(f"/tasks/{t_}")
+                        if tk_.get("status") not in ("completed", "failed", "cancelled", "rejected"):
+                            target.api.post(f"/tasks/{t_}/control", {"action": "cancel", "message_id": f"exp-c-{uuid.uuid4().hex[:8]}"})
+                    llm = []
+                    for t_ in [tid] + children.get(tid, []):      # a task's cost includes the children it created
+                        s, tr, _ = target.api.get(f"/tasks/{t_}/trace")
+                        llm += [e["detail"] for e in tr.get("events", []) if e.get("kind") == "llm"]
                     by_step = Counter(d.get("step") for d in llm)
-                    rec = {"mode": mode, "repeat": rep, "task": tname, "task_id": tid, "final_status": task.get("status"),
+                    rec = {"mode": mode, "repeat": rep, "task": tname, "task_id": tid, "final_status": task.get("status"), "reason": task.get("reason"),
                            "calls": len(llm), "calls_by_step": dict(by_step),
                            "tokens_in": sum(d.get("tokens_in") or 0 for d in llm), "tokens_out": sum(d.get("tokens_out") or 0 for d in llm),
                            "tokens_estimated": any(d.get("estimated") for d in llm), "model": llm[0].get("model") if llm else None,
+                           "leased": any(k[0] == tid for k in edges.seen), "children": children.get(tid, []),
                            "lease_versions": max((k[1] for k in edges.seen if k[0] == tid), default=0), "source": target.source}
                     recs.append(rec)
                     rd.raw("tasks", rec)

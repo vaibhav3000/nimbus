@@ -1,0 +1,26 @@
+{
+ "ours": {
+  "initial": [
+   "leased",
+   "leased",
+   "queued",
+   "queued"
+  ],
+  "next_served_after_a_robot_frees": [
+   "task-000004"
+  ],
+  "urgent_served_next": true
+ },
+ "fifo": {
+  "initial": [
+   "leased",
+   "leased",
+   "queued",
+   "queued"
+  ],
+  "next_served_after_a_robot_frees": [
+   "task-000003"
+  ],
+  "urgent_served_next": false
+ }
+}

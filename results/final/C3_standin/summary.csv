@@ -1,0 +1,9 @@
+memory,kind,cases,correct,rate,ci_low,ci_high,questions_asked,source
+on,habit,10,10,1.0,0.722,1.0,0,mock_llm
+on,control,5,5,1.0,0.566,1.0,5,mock_llm
+on,override,5,5,1.0,0.566,1.0,0,mock_llm
+on,all,20,20,1.0,0.839,1.0,5,mock_llm
+off,habit,10,0,0.0,0.0,0.278,10,mock_llm
+off,control,5,5,1.0,0.566,1.0,5,mock_llm
+off,override,5,5,1.0,0.566,1.0,0,mock_llm
+off,all,20,10,0.5,0.299,0.701,15,mock_llm
