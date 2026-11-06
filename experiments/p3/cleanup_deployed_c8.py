@@ -1,7 +1,8 @@
 """Cancel the C8 load-test tasks that were left open on the deployed cloud when the run was interrupted.
 
-Only tasks that (a) were created at or after the first task id recorded in results/final/C8/raw/requests.jsonl and
-(b) carry one of C8's fixed request texts (c8_load.TEXTS) are touched; it prints them first and asks before cancelling.
+Only tasks that (a) lie in the interrupted C8 run's id range (task-000649 to task-000722 on 2026-11-06, override with
+--first/--last) and (b) carry one of C8's fixed request texts (c8_load.TEXTS) are touched; it prints them first and
+asks before cancelling.
 Cancelling frees the robot and returns the reserved item (stock).
 
     python experiments/p3/cleanup_deployed_c8.py
@@ -10,7 +11,6 @@ Cancelling frees the robot and returns the reserved item (stock).
 from __future__ import annotations
 
 import collections
-import json
 import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -23,11 +23,15 @@ import lib  # noqa: E402
 
 def main() -> int:
     api = lib.Api(lib.DEFAULT_DEPLOYED)
-    raw = [json.loads(line)["task_id"] for line in (lib.RESULTS / "C8" / "raw" / "requests.jsonl").open() if json.loads(line).get("task_id")]
-    first = min(int(t.split("-")[1]) for t in raw)
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--first", type=int, default=649)
+    ap.add_argument("--last", type=int, default=722)
+    a = ap.parse_args()
+    first, last = a.first, a.last
     texts = set(c8_load.TEXTS)
     st, t, _ = api.get("/tasks")
-    mine = [x for x in t["tasks"] if int(x["task_id"].split("-")[1]) >= first and x["request_text"] in texts
+    mine = [x for x in t["tasks"] if first <= int(x["task_id"].split("-")[1]) <= last and x["request_text"] in texts
             and x["status"] not in ("completed", "cancelled", "failed", "rejected")]
     print(f"C8 run started at task-{first:06d}; open C8 tasks: {len(mine)} {dict(collections.Counter(x['status'] for x in mine))}")
     for x in mine[:10]:
