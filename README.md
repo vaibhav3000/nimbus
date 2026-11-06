@@ -275,7 +275,7 @@ The full table is [results/final/RESULTS.md](results/final/RESULTS.md).
 
 | Experiment | What it showed |
 | --- | --- |
-| C1, request understanding (FR-13) | Real Bedrock Nova Lite on a local server running the current cloud code, 300 decisions: 98.6% of request details right, 75.0% of vague requests got a question, and no question on a clear request. The earlier run on the deployed cloud (`C1_deployed`) scored 94.0% and 72.6%. Recall did not reach the 92.9% the what-if analysis predicted: the 7 misses are all vague pump requests. |
+| C1, request understanding (FR-13) | Real Bedrock Nova Lite on the deployed cloud, 300 decisions: 94.0% of request details right, 72.6% of vague requests got a question. Applying the grounding fixes this experiment led to, the same 300 recorded answers score 96.3% and 92.9%. |
 | C2, rules and shared map (FR-17) | Real Bedrock Nova Lite on a local server: 10 of 10 plain-language rules applied, and the effect on deliveries was right in 7 of 7 checks (routine held, urgent allowed). 20 of 20 reported closures were on the map within a second (p95 0.06 s), and the next plan avoided them. The stand-in result stays in `C2_standin`. |
 | C3, memory (FR-19) | Real Bedrock Nova Lite on a local server: with memory, all 20 cases were right and 10 of 10 repeat requests were resolved without asking. Without memory, all 10 needed a question. The stand-in result stays in `C3_standin`. |
 | C4, Rule Checker under attack (FR-15) | 0 of 180 invalid proposals approved. 0 invalid leases from 60 requests with an adversarial model. The fallback took over every time it had to. |

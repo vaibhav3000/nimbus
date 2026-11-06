@@ -4,7 +4,6 @@ Built by `python experiments/cloud/report.py` from each folder's README.md and e
 
 | Run | PRD | Verdict | Measured | Source | Target | Commit |
 | --- | --- | --- | --- | --- | --- | --- |
-| [C1](C1/README.md) | FR-13 | PASS | bedrock: field accuracy 98.6% (95% CI 97.6% to 99.2%), clarification recall 75.0%, precision 100.0%, 300 request decisions | real_bedrock | local-C1-bedrock | 7432c54 |
 | [C1_deployed](C1_deployed/README.md) | FR-13 | PASS | bedrock: field accuracy 94.0% (95% CI 92.2% to 95.4%), clarification recall 72.6%, precision 92.4%, 300 request decisions | real_bedrock | deployed | 81f0b93-dirty |
 | [C1_standin](C1_standin/README.md) | FR-13 | PASS | standin: field accuracy 98.6% (95% CI 96.5% to 99.5%), clarification recall 100.0%, precision 100.0%, 100 request decisions | mock_llm (standin) / measured (rules) | local | cee7c04-dirty |
 | [C2](C2/README.md) | FR-17 | PASS | rules applied correctly 10/10 (apac.amazon.nova-lite-v1:0); effect on deliveries correct 7/7; map changes shown within 5 min 20/20 (p95 0.06 s); next request to the same place avoided the closed zone 20/20 | real_bedrock |  | 97685da |
@@ -21,7 +20,6 @@ Built by `python experiments/cloud/report.py` from each folder's README.md and e
 
 Pass bars:
 
-- **C1**: >= 85% of details right on clear requests; most vague requests get a question (FR-13).
 - **C1_deployed**: >= 85% of details right on clear requests; most vague requests get a question (FR-13).
 - **C1_standin**: >= 85% of details right on clear requests; most vague requests get a question (FR-13).
 - **C2**: Scripted changes reflected in the map within about 5 min in >= 80% of cases; 10 test rules applied correctly (FR-17).

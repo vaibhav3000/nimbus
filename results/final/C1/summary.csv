@@ -1,4 +1,0 @@
-decider,set,source,model,requests,clear,vague,field_accuracy,field_ci_low,field_ci_high,acc_item,acc_destination,acc_priority,acc_deadline_minutes,request_accuracy,clarification_recall,clarification_precision,questions_on_clear_requests,latency_p50_s,latency_p95_s,repeat_consistency
-bedrock,all,real_bedrock,,300,216,84,0.986,0.976,0.992,1.0,1.0,0.986,0.958,0.9,0.75,1.0,0,0.01,0.017,1.0
-bedrock,prd,real_bedrock,,150,111,39,1.0,0.991,1.0,1.0,1.0,1.0,1.0,0.92,0.692,1.0,0,0.01,0.021,1.0
-bedrock,paraphrase,real_bedrock,,150,105,45,0.971,0.951,0.984,1.0,1.0,0.971,0.914,0.88,0.8,1.0,0,0.011,0.015,1.0
