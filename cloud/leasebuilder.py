@@ -50,7 +50,7 @@ def build_lease(task_id: str, spec: dict, proposal: Proposal, result: CheckResul
     template = pack.doc["task_templates"][item.get("template", pack.doc["default_template"])]
     # Both travel legs need an explicit, checked route.  Previously only the
     # delivery leg received ``route``; the pickup leg was left to the edge
-    # planner, which could select an equal-cost corridor in the other wing.
+    # planner, which could select an equal-cost corridor in another cluster's area.
     vars_ = {
         "source": result.source_zone,
         "destination": destination,

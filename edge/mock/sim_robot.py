@@ -617,7 +617,12 @@ class SimRobot:
         c,s=math.cos(syaw),math.sin(syaw)
         return c*dx+s*dy,-s*dx+c*dy
 
-    def _configure_navigation_costmap(self, runtime: Any = None, allowed_zones: Optional[List[str]] = None) -> None:
+    def _configure_navigation_costmap(
+        self,
+        runtime: Any = None,
+        allowed_zones: Optional[List[str]] = None,
+        blocked_zones: Optional[set[str]] = None,
+    ) -> None:
         runtime=runtime or self.runtime
         if not runtime or not self.topology_edges: return
         allowed = None
@@ -657,6 +662,17 @@ class SimRobot:
             local_waypoints,edges,
             CostmapConfig(resolution=.20,corridor_width=2.0,robot_radius=.28,margin=1.0,junction_radius=2.0),
         )
+        # A topology edge says where travel is physically possible; it does
+        # not say that it is clear *right now*.  Known persistent obstacles
+        # (including viewer closures) must therefore become occupied cells
+        # before A* receives the command.  The radius blocks the usable
+        # corridor width after the robot footprint has been accounted for.
+        # Unknown names are ignored here and remain an edge escalation, not a
+        # reason to corrupt the navigation map.
+        for zone in blocked_zones or set():
+            point = local_waypoints.get(canonical_topology_location(zone))
+            if point is not None:
+                costmap.paint_disk(point, .85, True)
         runtime.navigation.configure_costmap(costmap)
 
     def _record_pose(self, pose: List[float], source: str, timestamp: Optional[float]) -> None:
@@ -706,7 +722,13 @@ class SimRobot:
     def get_status(self) -> Dict[str, Any]:
         return {"robot_id":self.robot_id,"current_cmd_id":self.current_cmd_id,"status":self.status,"zone":self.current_zone,"battery_pct":self.battery_pct,"connection_state":self.refresh_readiness(),"execution_mode":self.execution_mode,**self.pose_snapshot(),"timestamp":time.time()}
 
-    def _find_route(self, start_zone: str, target_zone: str, allowed_zones: Optional[List[str]] = None) -> List[str]:
+    def _find_route(
+        self,
+        start_zone: str,
+        target_zone: str,
+        allowed_zones: Optional[List[str]] = None,
+        avoid_zones: Optional[set[str]] = None,
+    ) -> List[str]:
         """Calculates collision-free topology corridor waypoints between two nodes."""
         lookup_start = canonical_topology_location(start_zone)
         lookup_target = canonical_topology_location(target_zone)
@@ -735,9 +757,18 @@ class SimRobot:
             if target_node not in allowed:
                 return []
 
+        avoid = {canonical_topology_location(zone) for zone in (avoid_zones or set())}
+        # A robot cannot route from or to a known blocked topology node.  The
+        # caller reports this as BLOCKED rather than falling back to a direct
+        # point-to-point drive.
+        if start_node in avoid or target_node in avoid:
+            return []
+
         adj: Dict[str, List[Tuple[str, float]]] = {}
         for u, v, w in self.topology_edges:
             if allowed is not None and (u not in allowed or v not in allowed):
+                continue
+            if u in avoid or v in avoid:
                 continue
             adj.setdefault(u, []).append((v, float(w)))
             adj.setdefault(v, []).append((u, float(w)))
@@ -895,12 +926,18 @@ class SimRobot:
             if allowed_nodes is not None and canonical_topology_location(target_name) not in allowed_nodes:
                 return finish("INVALID_DESTINATION", f"Lease route target {target_name!r} is outside allowed_zones")
 
-            # Fence the SDK planner as well as the high-level route.  Without
-            # this, A* can choose an equally short West-wing corridor between
-            # two valid East-wing waypoints.
-            self._configure_navigation_costmap(allowed_zones=allowed_zones)
+            # 2. Convert known persistent obstacles into both topology and
+            # occupancy constraints.  A* can now choose another allowed
+            # corridor before velocity is published instead of attempting a
+            # straight drive toward the blocked waypoint.
+            persistent_obstacles = {
+                canonical_topology_location(zone)
+                for zone, info in self.injected_obstacles.items()
+                if info.get("type") == "persistent"
+            }
 
-            # 2. Check injected obstacles for tactical autonomy testing
+            # A blocked start/goal cannot be safely bypassed.  Other blocked
+            # nodes are removed from the route and painted into the costmap.
             blocked_zone = None
             if target_name in self.injected_obstacles:
                 blocked_zone = target_name
@@ -914,13 +951,6 @@ class SimRobot:
                     blocked_zone = "corridor-2B"
                 elif "east_mid_hall" in self.injected_obstacles:
                     blocked_zone = "east_mid_hall"
-
-            if not blocked_zone and self.injected_obstacles and target_name:
-                # an obstacle anywhere along the corridor route blocks the leg
-                for node in self._find_route(self.current_zone, target_name)[1:]:
-                    if node in self.injected_obstacles:
-                        blocked_zone = node
-                        break
 
             if blocked_zone:
                 obs_info = self.injected_obstacles[blocked_zone]
@@ -947,12 +977,30 @@ class SimRobot:
                     if route[-1] != target_node:
                         route.append(target_node)
                 else:
-                    route = self._find_route(self.current_zone, target_name, allowed_zones=allowed_zones)
+                    route = self._find_route(
+                        self.current_zone,
+                        target_name,
+                        allowed_zones=allowed_zones,
+                        avoid_zones=persistent_obstacles,
+                    )
                 if not route:
-                    return finish("INVALID_DESTINATION", f"No route to {target_name!r} exists inside allowed_zones")
+                    return finish("BLOCKED", f"No obstacle-free route to {target_name!r} exists inside allowed_zones")
                 illegal = [node for node in route[1:] if (allowed_nodes is not None and node not in allowed_nodes) or node in forbidden_zones]
                 if illegal:
                     return finish("INVALID_DESTINATION", f"Lease route leaves permitted zones via {illegal[0]!r}")
+                # A cloud-supplied `via` route is authoritative, so do not
+                # silently leave it.  Refuse it if a persistent obstacle is
+                # on it; tactical re-planning must remain inside the lease.
+                blocked_on_route = [node for node in route[1:] if node in persistent_obstacles]
+                if blocked_on_route:
+                    return finish("BLOCKED", f"Navigation blocked in {blocked_on_route[0]}: persistent obstacle")
+                # Fence the SDK A* planner as well as the graph route.  This
+                # prevents a continuous path from crossing a closed zone or
+                # leaving the leased wing at a junction.
+                self._configure_navigation_costmap(
+                    allowed_zones=allowed_zones,
+                    blocked_zones=persistent_obstacles,
+                )
                 for wp_node in route[1:]:
                     wp_xy = None
                     if HAS_SDK:
@@ -975,6 +1023,10 @@ class SimRobot:
                         target_xy = self.waypoints[target_name]
                 if target_xy is None:
                     return finish("INVALID_DESTINATION",f"Unknown destination: {target_name!r}")
+                self._configure_navigation_costmap(
+                    allowed_zones=allowed_zones,
+                    blocked_zones=persistent_obstacles,
+                )
                 waypoints_to_visit.append((target_name or "target", target_xy, float(params.get("speed", params.get("max_speed", 1.0)))))
 
             # 4. Sequentially execute each corridor waypoint

@@ -17,6 +17,7 @@ Then open the deployed requester URL printed by the launcher (or set `NIMBUS_LOC
 
 `./run_all.sh` auto-selects real Gazebo when `ign` + ROS 2 are present, else the kinematic stand-in
 (same P1 map, same SDK navigation). Force one with `./run_all.sh gazebo` / `./run_all.sh kinematic`.
+Add `--not-quiet` to stream detailed edge-to-robot commands to `logs/edge_*.log`.
 
 ## Real Gazebo (Docker image)
 ```bash

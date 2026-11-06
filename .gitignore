@@ -26,6 +26,7 @@ Thumbs.db
 
 # Project data & infrastructure (from main)
 data/
+data.prev/       # rotated decision logs from previous run_all.sh runs
 !cloud/data/
 tools/
 .terraform/
@@ -37,7 +38,6 @@ Before_confirmation_files/
 prd.pdf
 # generated at runtime
 edge/artifacts/
-data/
 results/tmp/
 .hypothesis/
 logs/

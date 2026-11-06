@@ -118,6 +118,31 @@ def test_east_pickup_route_cannot_detour_through_west_wing():
     finally: robot.close()
 
 
+def test_persistent_obstacle_is_in_astar_costmap_and_route_search():
+    """Known obstacles must cause a route choice before motion is commanded."""
+    robot=SimRobot("R2",use_gazebo=False,sensor_timeout=.15)
+    allowed=["nurse_station_approach", "east_mid_hall", "east_south_hall",
+             "east_south_hall_corner", "west_mid_hall", "west_south_hall",
+             "west_south_hall_corner", "south_equipment_approach"]
+    try:
+        robot.inject_obstacle("east_mid_hall", obstacle_type="persistent")
+        route=robot._find_route(
+            "nurse_station_approach", "south_equipment_approach", allowed,
+            avoid_zones={"east_mid_hall"},
+        )
+        assert "east_mid_hall" not in route
+        assert route == ["nurse_station_approach", "west_mid_hall", "west_south_hall",
+                         "west_south_hall_corner", "south_equipment_approach"]
+
+        robot._configure_navigation_costmap(
+            allowed_zones=allowed, blocked_zones={"east_mid_hall"},
+        )
+        point=robot._world_to_navigation(tuple(robot.waypoints["east_mid_hall"][:2]))
+        cell=robot.runtime.navigation._costmap.world_to_cell(*point)
+        assert robot.runtime.navigation._costmap.is_occupied(cell)
+    finally: robot.close()
+
+
 def test_coordinate_outside_corridor_costmap_is_rejected():
     robot=SimRobot("R1",use_gazebo=False,sensor_timeout=.15)
     try:

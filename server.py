@@ -33,7 +33,7 @@ from store import Store
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 _STATE_LOCK = threading.RLock()
-TERMINAL_STATUSES = ("completed", "cancelled", "rejected")
+TERMINAL_STATUSES = ("completed", "cancelled", "rejected", "failed")
 
 INVENTORY_FILE = Path("data/inventory.json")
 
@@ -160,6 +160,20 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
             task["status"], task["reason"] = "queued", outcome.reason
         elif outcome.kind == "rejected":
             task["status"], task["reason"] = "rejected", outcome.reason
+        elif outcome.kind == "replan_failed":
+            # Nothing inside the lease, and no other cluster, can finish this
+            # work.  Close it out rather than leaving a live lease nobody will
+            # ever act on: free the robot and zones, give the item back, and
+            # tell the requester (PRD Fig. 3: the cloud always reports the
+            # result, or why it failed, back to the user).
+            task["status"], task["reason"] = "failed", outcome.reason
+            orch.cancel(task)
+            task["lease"] = None
+            orch.notifier.send(Notice(
+                "requester",
+                f"{task_id} could not be completed: {outcome.reason}. "
+                "The robot and the reserved item have been released.",
+                type="ANSWER", task_id=task_id))
         elif outcome.kind == "stood_down":
             task["lease"] = outcome.lease   # the stop lease is now the highest version the edge may honour
         elif outcome.kind == "held":
@@ -406,6 +420,14 @@ class Handler(BaseHTTPRequestHandler):
                     "fault_down": fault_down,
                     "circuit_open": cb_open
                 })
+        elif path == "/ui-config":
+            # Which optional UI affordances the app may show.  `demo_controls`
+            # gates the one-click OUTPUT_READY stand-in: it fabricates a result
+            # without the edge or a robot, so SC-1/FR-21 must not be
+            # demonstrable through it unless someone deliberately asked.
+            self._send_json(200, {
+                "demo_controls": os.environ.get("NIMBUS_DEMO_CONTROLS", "0").lower() in ("1", "true", "yes"),
+            })
         elif path == "/outbox":
             active_only = "active=1" in (self.path.split("?", 1)[1] if "?" in self.path else "")
             self._send_json(200, {"outbox": self._live_outbox() if active_only else self.store.outbox()})

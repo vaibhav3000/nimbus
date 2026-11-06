@@ -17,6 +17,11 @@ import urllib.request
 import urllib.error
 
 
+# Modes in which a real quantised model produces the decision.  Anything else
+# ("mock", "rules_only") is deterministic local code: useful for CI and as the
+# FR-3 fallback, but it must never be reported as edge-SLM behaviour (PRD E1/E2).
+REAL_MODEL_MODES = ("ollama", "llama_cpp")
+
 ALLOWED_TACTICAL_ACTIONS = {
     "DISPATCH_STEP",
     "LOCAL_DETOUR",
@@ -59,6 +64,16 @@ class EdgeSLMEngine:
                 self.Llama = Llama
             except ImportError:
                 self.mode = "mock"
+
+    @property
+    def is_real_model(self) -> bool:
+        """True only when a quantised model is actually being invoked.
+
+        ``mode="auto"`` silently resolves to ``"mock"`` when no Ollama server
+        answers, so callers that publish measurements must check this before
+        writing an artifact.
+        """
+        return self.mode in REAL_MODEL_MODES
 
     def format_prompt(self, context: Dict[str, Any]) -> str:
         """Formats tactical prompt according to SPEC-P2 Sec 4.2."""
