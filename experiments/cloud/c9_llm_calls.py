@@ -42,6 +42,19 @@ TASKS = {
 RELAY_CMDS = ("go_to", "wait", "photo")
 
 
+RELAY_HTTP: dict = {}        # task_id -> Counter of the HTTP statuses (and errors) that /relay/decide answered
+
+
+RELAY_PACE_S = 3.0           # a real robot spends seconds on each step; a burst of calls would only measure Bedrock throttling
+
+
+def _relay(edge, tid: str, body: dict) -> None:
+    if edge.t.source == "real_bedrock":
+        time.sleep(RELAY_PACE_S)
+    st, out, _ = edge.t.api.post("/relay/decide", body)
+    RELAY_HTTP.setdefault(tid, Counter())[f"{st} {(out or {}).get('source') or str((out or {}).get('error'))[:60]}"] += 1
+
+
 def make_edge(mode: str, plan: dict):
     def on_lease(edge: lib.Edges, cluster: str, lease: dict):
         tid = edge.task_of(lease)
@@ -49,7 +62,7 @@ def make_edge(mode: str, plan: dict):
         steps = lease.get("task_sequence", [])
         for i, s in enumerate(steps):
             if mode == "C2" and s.get("cmd") in RELAY_CMDS:
-                edge.t.api.post("/relay/decide", {"cluster_id": cluster, "lease_id": lease["lease_id"], "lease_version": lease["version"],
+                _relay(edge, tid, {"cluster_id": cluster, "lease_id": lease["lease_id"], "lease_version": lease["version"],
                                                   "step_index": i, "cmd": s["cmd"], "zone": s.get("params", {}).get("to"),
                                                   "situation": "about to start this step", "message_id": f"exp-relay-{uuid.uuid4().hex[:10]}"})
             last_go = max((k for k, x in enumerate(steps) if x.get("cmd") == "go_to"), default=-1)
@@ -58,7 +71,7 @@ def make_edge(mode: str, plan: dict):
                 zone = (route[1:-1] or route)[len(route[1:-1]) // 2] if route else None
                 if sc["incident"] == "local":
                     if mode == "C2":    # the thin relay asks the cloud even for a detour the lease allows
-                        edge.t.api.post("/relay/decide", {"cluster_id": cluster, "lease_id": lease["lease_id"], "lease_version": lease["version"],
+                        _relay(edge, tid, {"cluster_id": cluster, "lease_id": lease["lease_id"], "lease_version": lease["version"],
                                                           "step_index": i, "cmd": "go_to", "zone": zone, "situation": f"{zone} is blocked by a trolley",
                                                           "blocked_zones": [zone], "message_id": f"exp-relay-{uuid.uuid4().hex[:10]}"})
                     # C1 and C3: the edge detours inside the lease on its own; nothing is sent
@@ -73,6 +86,7 @@ def make_edge(mode: str, plan: dict):
 
 def run_mode(mode: str, spec: str, repeats: int, rd) -> list[dict]:
     target = lib.start_local(mode, bedrock=spec == "local-bedrock")
+    RELAY_HTTP.clear()
     plan: dict = {}
     edges = lib.Edges(target, work_s=0.1, on_lease=make_edge(mode, plan)).start()
     recs = []
@@ -111,17 +125,18 @@ def run_mode(mode: str, spec: str, repeats: int, rd) -> list[dict]:
                         s_, tk_, _ = target.api.get(f"/tasks/{t_}")
                         if tk_.get("status") not in ("completed", "failed", "cancelled", "rejected"):
                             target.api.post(f"/tasks/{t_}/control", {"action": "cancel", "message_id": f"exp-c-{uuid.uuid4().hex[:8]}"})
-                    llm = []
+                    llm, llm_errors = [], []
                     for t_ in [tid] + children.get(tid, []):      # a task's cost includes the children it created
                         s, tr, _ = target.api.get(f"/tasks/{t_}/trace")
                         llm += [e["detail"] for e in tr.get("events", []) if e.get("kind") == "llm"]
+                        llm_errors += [str(e.get("summary") or e.get("text") or e)[:160] for e in tr.get("events", []) if e.get("kind") == "llm-error"]
                     by_step = Counter(d.get("step") for d in llm)
                     rec = {"mode": mode, "repeat": rep, "task": tname, "task_id": tid, "final_status": task.get("status"), "reason": task.get("reason"),
                            "calls": len(llm), "calls_by_step": dict(by_step),
                            "tokens_in": sum(d.get("tokens_in") or 0 for d in llm), "tokens_out": sum(d.get("tokens_out") or 0 for d in llm),
                            "tokens_estimated": any(d.get("estimated") for d in llm), "model": llm[0].get("model") if llm else None,
                            "leased": any(k[0] == tid for k in edges.seen), "children": children.get(tid, []),
-                           "lease_versions": max((k[1] for k in edges.seen if k[0] == tid), default=0), "source": target.source}
+                           "llm_errors": llm_errors, "relay_http": dict(RELAY_HTTP.get(tid, {})), "lease_versions": max((k[1] for k in edges.seen if k[0] == tid), default=0), "source": target.source}
                     recs.append(rec)
                     rd.raw("tasks", rec)
                 s, m, _ = target.api.get("/map.json")      # every task starts from a clear map
@@ -193,6 +208,7 @@ def main(argv=None) -> int:
                         if ratio is not None else "no data"),
               notes=["Call counts come from the cloud's trace of each task; the simulated edge only decides WHEN to call (per protocol), never what the model answers.",
                      "C2's relay here is the cloud's real POST /relay/decide; the edge supervisor does not call it yet, so this is the C2 protocol as specified, driven by the harness.",
+                     "With a real model, the C2 relay calls are paced 3 s apart (a robot takes seconds per step). Fired as a burst, Bedrock answered ThrottlingException, the cloud's circuit breaker opened and the rest of the C2 run was decided by rules: that measured 1.89 calls per task and C1/C2 = 61.2%, which was throttling, not the protocol. raw/tasks.jsonl records relay_http and llm_errors per task so this is visible.",
                      "Token counts are estimates unless the run used a real model (see tokens_estimated)."],
               plots=[name])
     return 0

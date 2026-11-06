@@ -283,7 +283,7 @@ The full table is [results/final/RESULTS.md](results/final/RESULTS.md).
 | C6, re-planning (FR-16, T5) | Real Bedrock Nova Lite on a local server, 32 incidents: every new plan avoided the closed zone or the failed robot. Decision time p50 0.84 s and p95 1.58 s against the 30 s bar (the model decided 21 incidents, the rules 11). When no route was left, the operator was alerted. |
 | C7, model outage (FR-18) | During a 10-minute outage every request still got a decision from the rules, every user was told, and leased work finished. |
 | C8, parallel requests (NFR-1) | Measured on a local cloud. The run against the deployed infrastructure is still to be done. |
-| C9, model calls (NFR-4) | Nimbus (C1) makes 22% of the cloud model calls of the cloud-only design (C2): 1.16 against 5.16 calls per task over T1 to T5, T7 and T8. The plan's bar is 50%. |
+| C9, model calls (NFR-4) | Real Bedrock Nova Lite on a local server: Nimbus (C1) makes 22% of the cloud model calls of the cloud-only design (C2): 1.18 against 5.27 calls per task over T1 to T5, T7 and T8, and about 2,650 against 7,400 input tokens per task. The plan's bar is 50%. The C2 relay calls are paced 3 s apart; as a burst, Bedrock throttled them. |
 
 Several of these ran with the stand-in model, and each result says so (`source` column). The commands to rerun them
 on real Bedrock are in [experiments/cloud/README.md](experiments/cloud/README.md).

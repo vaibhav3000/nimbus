@@ -17,6 +17,7 @@ Built by `python experiments/cloud/report.py` from each folder's README.md and e
 | [C6_local](C6_local/README.md) | FR-16, T5 | PASS | decision p95 0.02 s, p50 0.02 s over 32 events; 18 new lease versions, 18/18 avoid the closed zone or failed robot; outcomes {'rerouted lease': 10, 'operator alerted (no route left)': 14, 'another robot took over': 8} | mock_llm | local-C1 | 81f0b93-dirty |
 | [C7_local](C7_local/README.md) | FR-18 | PASS | 32 requests during the 600 s outage: 9 leased, 23 queued for a robot, 0 answered by the model, 32 carried the reduced-autonomy notice; 14/14 tasks leased before the outage completed; breaker/fault seen at 300.86 s, normal again at 916.99 s (outage 300 to 900 s) | mock_llm | local-C1 | 81f0b93-dirty |
 | [C8_local](C8_local/README.md) | NFR-1 (cloud) | PASS | at 0.5 req/s: p95 0.042 s, errors 0.0; worst p95 over all levels 2.38 s; p95 first above 30 s at N=None; fitted S=0.02 s, c=2 -> capacity about 83.3 req/s | mock_llm | local-C1 | 81f0b93-dirty |
+| [C9](C9/README.md) | NFR-4 | PASS | calls per task C1 1.18, C2 5.27, C3 0.00; C1/C2 = 22.4% | real_bedrock | local-bedrock | 4c97ce3-dirty |
 | [C9_standin](C9_standin/README.md) | NFR-4 | PASS | calls per task C1 1.16, C2 5.16, C3 0.00; C1/C2 = 22.4% | mock_llm | local | cee7c04-dirty |
 
 Pass bars:
@@ -34,4 +35,5 @@ Pass bars:
 - **C6_local**: New plan issued within about 30 s on a good network (FR-16).
 - **C7_local**: Model calls forced to fail for 10 min mid-run: leased tasks continue; new requests still leased via the fallback; user told (FR-18).
 - **C8_local**: Request to lease p95 <= 30 s on a good network (NFR-1).
+- **C9**: C1 cloud LLM calls per task <= 50% of C2 (NFR-4).
 - **C9_standin**: C1 cloud LLM calls per task <= 50% of C2 (NFR-4).
