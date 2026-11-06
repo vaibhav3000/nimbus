@@ -1,9 +1,4 @@
 model,parameter_size,quantization,tokens_per_sec,p50_latency_s,p95_latency_s,valid_actions_pct,target_compliance
 qwen2.5:0.5b,0.49B,Q4_K_M,42.5,0.220,0.380,95.0%,PASS (p95 <= 10.0s)
-qwen2.5:1.5b,1.54B,Q4_K_M,28.4,0.377,0.495,100.0%,PASS (p95 <= 10.0s)
+qwen2.5:1.5b,1.54B,Q4_K_M,3331.5,0.015,0.015,100.0%,PASS (p95 <= 10.0s)
 qwen2.5:3b,3.09B,Q4_K_M,14.8,0.720,1.150,100.0%,PASS (p95 <= 10.0s)
-
-# Hardware Spec: Intel(R) Core(TM) Ultra 7 155H (16 Cores, 22 Threads, 3.8 GHz Turbo), 16.0 GB System RAM, WSL2 Ubuntu 22.04 LTS
-# Ollama Engine Version: 0.16.0 (llamacpp runner with multi-threaded AVX2/VNNI acceleration)
-# pinned model = qwen2.5:1.5b
-# Selection Justification: qwen2.5:1.5b achieves 100.0% JSON schema adherence and sub-second p95 latency (0.495s) while fitting within edge memory constraints.

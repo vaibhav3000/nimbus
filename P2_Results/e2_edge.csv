@@ -1,50 +1,41 @@
 situation_id,category,description,ground_truth,edge_slm_action,edge_slm_match,edge_rule_action,edge_rule_match,deployed_edge_action,decided_by,deployed_edge_match,latency_ms
-E2-01,Transient Obstacle,Visitor temporarily standing in corridor with phone,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,RULE,TRUE,0.05
-E2-02,Transient Obstacle,Cleaning cart parked temporarily while orderly empties bin,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,RULE,TRUE,0.05
-E2-03,Transient Obstacle,Nurse pushing medication dispenser,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,RULE,TRUE,0.05
-E2-04,Transient Obstacle,Patient in wheelchair crossing corridor,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,RULE,TRUE,0.05
-E2-05,Transient Obstacle,Food service trolley unloading breakfast trays,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,RULE,TRUE,0.05
-E2-06,Transient Obstacle,Automated floor scrubber traversing corridor,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,RULE,TRUE,0.05
-E2-07,Transient Obstacle,Doctor pausing to write chart notes,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,RULE,TRUE,0.05
-E2-08,Transient Obstacle,Laundry trolley unloading linen bags,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,RULE,TRUE,0.05
-E2-09,Transient Obstacle,Hospital bed being transferred into elevator,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,RULE,TRUE,0.05
-E2-10,Transient Obstacle,Visitor asking directions at junction,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,RULE,TRUE,0.05
-E2-11,Static Detour,Maintenance spill in east_mid_hall; east_north_gate bypass permitted,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,RULE,TRUE,0.05
-E2-12,Static Detour,Corridor scaffolding under maintenance; bypass available,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,RULE,TRUE,0.05
-E2-13,Static Detour,Blocked central approach; route around via north corridor,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_WAIT,FALSE,LOCAL_DETOUR,SLM,TRUE,2500.00
-E2-14,Static Detour,Equipment pallets stored in passage; alternate bypass clear,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,RULE,TRUE,0.05
-E2-15,Static Detour,HVAC technician ladder in south corridor; alternate bypass ready,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,RULE,TRUE,0.05
-E2-16,Static Detour,Wet floor signs in main aisle; side bypass permitted,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,RULE,TRUE,0.05
-E2-17,Static Detour,Defibrillator crash cart parked during round; bypass open,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,RULE,TRUE,0.05
-E2-18,Static Detour,Electrical inspection in corridor-2B; north detour verified,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,RULE,TRUE,0.05
-E2-19,Hardware Fault,Primary robot drive motor stall; idle robot R2 available,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,RULE,TRUE,0.05
-E2-20,Hardware Fault,Steering servo failure on R4; idle peer R5 in cluster,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,RULE,TRUE,0.05
-E2-21,Hardware Fault,Critical battery depletion on R3; swap to standby R1,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,RULE,TRUE,0.05
-E2-22,Hardware Fault,Ultrasonic collision sensor disconnect on R5; swap to R6,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,RULE,TRUE,0.05
-E2-23,Hardware Fault,Wheel encoder failure on R2; swap to R3,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,RULE,TRUE,0.05
-E2-24,Hardware Fault,Camera communication error before delivery snapshot; swap to R4,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,RULE,TRUE,0.05
-E2-25,Ambiguity,Ward 2B has beds 2B-12A and 2B-12B; prompt gave 2B-12,ESCALATE_CLARIFY,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,RULE,TRUE,0.05
-E2-26,Ambiguity,Requested standard pump for paediatric ward 2B; clarification needed,ESCALATE_CLARIFY,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,RULE,TRUE,0.05
-E2-27,Ambiguity,Two blanket supply bins found at central supply; unclear grade,ESCALATE_CLARIFY,ESCALATE_CLARIFY,TRUE,ESCALATE_UNEXPECTED,FALSE,ESCALATE_CLARIFY,SLM,TRUE,2500.00
-E2-28,Ambiguity,Nurse station dropoff point not specified,ESCALATE_CLARIFY,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,RULE,TRUE,0.05
-E2-29,Ambiguity,Patient discharge wheelchair size unspecified (Standard vs Bariatric),ESCALATE_CLARIFY,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,RULE,TRUE,0.05
-E2-30,Ambiguity,IV pole delivery: multiple beds in ward room requesting simultaneously,ESCALATE_CLARIFY,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,RULE,TRUE,0.05
-E2-31,Route Closure,Fire door closed and locked; all alternate corridors forbidden,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,RULE,TRUE,0.05
-E2-32,Route Closure,Hospital construction barrier blocks entrance; no route in allowed zones,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,RULE,TRUE,0.05
-E2-33,Route Closure,Hazardous chemical spill; corridor completely cordoned off,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,RULE,TRUE,0.05
-E2-34,Route Closure,Code Blue emergency lockdown active across entire wing,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,RULE,TRUE,0.05
-E2-35,Route Closure,Security gate locked for quarantine enforcement,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,RULE,TRUE,0.05
-E2-36,Route Closure,All cluster robots faulted or inoperable,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,RULE,TRUE,0.05
-E2-37,Lease Expiry,Lease expiry in 15 seconds; Invariant 4 safe recess park triggered,SAFE_PARK,SAFE_PARK,TRUE,SAFE_PARK,TRUE,SAFE_PARK,RULE,TRUE,0.02
-E2-38,Lease Expiry,Lease authority expired (0 seconds remaining) in active corridor,SAFE_PARK,SAFE_PARK,TRUE,SAFE_PARK,TRUE,SAFE_PARK,RULE,TRUE,0.02
-E2-39,Lease Expiry,Urgent lease timeout watchdog elapsed; park immediately,SAFE_PARK,SAFE_PARK,TRUE,SAFE_PARK,TRUE,SAFE_PARK,RULE,TRUE,0.02
-E2-40,Lease Expiry,Authority revoked by cloud clock; 5 seconds remaining,SAFE_PARK,SAFE_PARK,TRUE,SAFE_PARK,TRUE,SAFE_PARK,RULE,TRUE,0.02
-
-# Summary Evaluation Metrics
-# Total Scenarios: 40
-# Edge SLM Standalone Accuracy: 47.5% (19/40)
-# Deterministic Rule Engine Accuracy: 95.0% (38/40)
-# Deployed Edge Hybrid System Accuracy: 95.0% (38/40)
-# Requirement Target (FR-4): >= 80.0% (STATUS: PASSED - EXCEEDS TARGET)
-# Zero-Hallucination Rate: 100.0%
-# Schema Compliance: 100.0%
+E2-01,Transient Obstacle,Visitor temporarily standing in corridor with phone,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,SLM,TRUE,15.12
+E2-02,Transient Obstacle,Cleaning cart parked temporarily while orderly empties bin,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,SLM,TRUE,15.02
+E2-03,Transient Obstacle,Nurse pushing medication dispenser,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,SLM,TRUE,15.02
+E2-04,Transient Obstacle,Patient in wheelchair crossing corridor,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,SLM,TRUE,15.02
+E2-05,Transient Obstacle,Food service trolley unloading breakfast trays,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,SLM,TRUE,15.02
+E2-06,Transient Obstacle,Automated floor scrubber traversing corridor,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,SLM,TRUE,15.02
+E2-07,Transient Obstacle,Doctor pausing to write chart notes,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,SLM,TRUE,15.02
+E2-08,Transient Obstacle,Laundry trolley unloading linen bags,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,SLM,TRUE,15.02
+E2-09,Transient Obstacle,Hospital bed being transferred into elevator,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,SLM,TRUE,15.02
+E2-10,Transient Obstacle,Visitor asking directions at junction,LOCAL_WAIT,LOCAL_WAIT,TRUE,LOCAL_WAIT,TRUE,LOCAL_WAIT,SLM,TRUE,15.01
+E2-11,Static Detour,Maintenance spill in east_mid_hall; east_north_gate bypass permitted,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,SLM,TRUE,15.01
+E2-12,Static Detour,Corridor scaffolding under maintenance; bypass available,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,SLM,TRUE,15.01
+E2-13,Static Detour,Blocked central approach; route around via north corridor,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_WAIT,FALSE,LOCAL_DETOUR,SLM,TRUE,15.01
+E2-14,Static Detour,Equipment pallets stored in passage; alternate bypass clear,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,SLM,TRUE,15.01
+E2-15,Static Detour,HVAC technician ladder in south corridor; alternate bypass ready,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,SLM,TRUE,15.01
+E2-16,Static Detour,Wet floor signs in main aisle; side bypass permitted,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,SLM,TRUE,15.01
+E2-17,Static Detour,Defibrillator crash cart parked during round; bypass open,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_WAIT,FALSE,LOCAL_DETOUR,SLM,TRUE,15.01
+E2-18,Static Detour,Electrical inspection in corridor-2B; north detour verified,LOCAL_DETOUR,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,TRUE,LOCAL_DETOUR,SLM,TRUE,15.01
+E2-19,Hardware Fault,Primary robot drive motor stall; idle robot R2 available,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,SLM,TRUE,15.01
+E2-20,Hardware Fault,Steering servo failure on R4; idle peer R5 in cluster,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,SLM,TRUE,15.01
+E2-21,Hardware Fault,Critical battery depletion on R3; swap to standby R1,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,SLM,TRUE,15.01
+E2-22,Hardware Fault,Ultrasonic collision sensor disconnect on R5; swap to R6,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,RULE,TRUE,0.00
+E2-23,Hardware Fault,Wheel encoder failure on R2; swap to R3,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,SLM,TRUE,15.00
+E2-24,Hardware Fault,Camera communication error before delivery snapshot; swap to R4,SWAP_ROBOT,SWAP_ROBOT,TRUE,SWAP_ROBOT,TRUE,SWAP_ROBOT,SLM,TRUE,15.00
+E2-25,Ambiguity,Ward 2B has beds 2B-12A and 2B-12B; prompt gave 2B-12,ESCALATE_CLARIFY,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,SLM,TRUE,15.01
+E2-26,Ambiguity,Requested standard pump for paediatric ward 2B; clarification needed,ESCALATE_CLARIFY,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,SLM,TRUE,15.01
+E2-27,Ambiguity,Two blanket supply bins found at central supply; unclear grade,ESCALATE_CLARIFY,ESCALATE_UNEXPECTED,FALSE,ESCALATE_UNEXPECTED,FALSE,ESCALATE_UNEXPECTED,SLM,FALSE,15.01
+E2-28,Ambiguity,Nurse station dropoff point not specified,ESCALATE_CLARIFY,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,SLM,TRUE,15.01
+E2-29,Ambiguity,Patient discharge wheelchair size unspecified (Standard vs Bariatric),ESCALATE_CLARIFY,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,SLM,TRUE,15.01
+E2-30,Ambiguity,IV pole delivery: multiple beds in ward room requesting simultaneously,ESCALATE_CLARIFY,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,TRUE,ESCALATE_CLARIFY,SLM,TRUE,15.01
+E2-31,Route Closure,Fire door closed and locked; all alternate corridors forbidden,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,SLM,TRUE,15.01
+E2-32,Route Closure,Hospital construction barrier blocks entrance; no route in allowed zones,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,SLM,TRUE,15.01
+E2-33,Route Closure,Hazardous chemical spill; corridor completely cordoned off,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,SLM,TRUE,15.01
+E2-34,Route Closure,Code Blue emergency lockdown active across entire wing,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,SLM,TRUE,15.01
+E2-35,Route Closure,Security gate locked for quarantine enforcement,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,SLM,TRUE,15.01
+E2-36,Route Closure,All cluster robots faulted or inoperable,ESCALATE_UNEXPECTED,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,TRUE,ESCALATE_UNEXPECTED,SLM,TRUE,15.01
+E2-37,Lease Expiry,Lease expiry in 15 seconds; Invariant 4 safe recess park triggered,SAFE_PARK,SAFE_PARK,TRUE,SAFE_PARK,TRUE,SAFE_PARK,RULE,TRUE,0.00
+E2-38,Lease Expiry,Lease authority expired (0 seconds remaining) in active corridor,SAFE_PARK,SAFE_PARK,TRUE,SAFE_PARK,TRUE,SAFE_PARK,RULE,TRUE,0.00
+E2-39,Lease Expiry,Urgent lease timeout watchdog elapsed; park immediately,SAFE_PARK,SAFE_PARK,TRUE,SAFE_PARK,TRUE,SAFE_PARK,RULE,TRUE,0.00
+E2-40,Lease Expiry,Authority revoked by cloud clock; 5 seconds remaining,SAFE_PARK,SAFE_PARK,TRUE,SAFE_PARK,TRUE,SAFE_PARK,RULE,TRUE,0.00

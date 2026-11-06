@@ -1257,8 +1257,14 @@ class EdgeSupervisor:
             print(rf"      \-- Local Persistence  : Committed to SQLite 'leases' table")
 
         # Initial check-in on lease acceptance
-        self.send_checkin_to_cloud(lease)
+        _ok, status_reason, checkin_reply = self.send_checkin_to_cloud(lease)
         last_checkin_time = time.time()
+        if status_reason == "stale_version":
+            self.active_lease = None
+            return {
+                "status": "DROPPED_STALE",
+                "reason": f"Check-in received 409: outdated version {version}, current is {checkin_reply.get('current')}",
+            }
 
         # Check expiry timestamp (ISO 8601 UTC)
         expiry_ts_str = lease["expiry_ts"]
