@@ -1,0 +1,31 @@
+{
+  "experiment": "N3 Trace Replay",
+  "total_runs": 720,
+  "configurations": [
+    "C1",
+    "C2",
+    "C3"
+  ],
+  "tasks": [
+    "T2",
+    "T4",
+    "T5",
+    "T7"
+  ],
+  "sample_run": {
+    "seed": 1,
+    "task": "T2",
+    "config": "C1",
+    "trace": "Healthy",
+    "rtt_ms": 15.0,
+    "loss_pct": 0.0,
+    "outage_s": 0.0,
+    "success": 1,
+    "deadline_met": 1,
+    "completion_time_s": 87.3,
+    "recovery_time_s": 0.11,
+    "stalls": 0,
+    "wan_bytes": 8625,
+    "source": "modelled"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "poisson_arrival": {
+    "mean_inter_arrival_sec": 152.270004226719,
+    "lambda_per_sec": 0.006567281619767163,
+    "lambda_per_hour": 23.642213831161786,
+    "ks_test_p_value": 0.8526688517005154,
+    "ks_statistic": 0.0830238858180748
+  },
+  "duration_distribution": {
+    "selected_best_fit": "weibull",
+    "fits": {
+      "exponential": {
+        "aic": 374.2275980620077,
+        "params": [
+          0.0,
+          15.214911711736592
+        ]
+      },
+      "lognormal": {
+        "aic": 330.14876782496725,
+        "params": [
+          0.4555579738307434,
+          0.0,
+          13.856874181221668
+        ]
+      },
+      "weibull": {
+        "aic": 325.4173759461323,
+        "params": [
+          2.6737772937194455,
+          0.0,
+          17.142273972234097
+        ]
+      }
+    }
+  },
+  "gilbert_elliott_markov_chain": {
+    "p_GB": 0.006567281619767163,
+    "p_BG": 0.06572499525111358,
+    "loss_good_state": 0.005,
+    "loss_bad_state": 0.995
+  },
+  "monte_carlo_validation": {
+    "missions_per_seed": 10000,
+    "seeds": 10,
+    "c1_mean_success_at_20_outages_hr": 0.81996,
+    "c2_mean_success_at_20_outages_hr": 0.7806300000000002
+  }
+}
