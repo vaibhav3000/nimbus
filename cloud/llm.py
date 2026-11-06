@@ -61,7 +61,7 @@ class RuleBasedLLM:
     def converse(self, *, system: str, messages: list, tools: list, tool_choice=None,
                  context: Context | None = None, fleet_view=None) -> LLMResult:
         t0 = time.perf_counter()
-        prompt = system + "\n" + "\n".join(m["text"] for m in messages)
+        prompt = system + "\n" + "\n".join(m.get("text") or json.dumps(m.get("tool_results") or m.get("tool_calls") or "") for m in messages)
         if "decide_step" in tools:
             call = self._step(messages)
         elif "summarise_result" in tools:
@@ -124,6 +124,8 @@ class RuleBasedLLM:
         zones = ast.literal_eval(text.split("BLOCKED_ZONES:", 1)[1].splitlines()[0].strip())
         if zones:
             return {"name": "replan", "input": {"avoid_zones": zones, "rationale": "route around the reported zones"}}
+        if "ASSIGNED_ROBOT_STATE:" in text and "'failed'" in text.split("ASSIGNED_ROBOT_STATE:", 1)[1].splitlines()[0]:
+            return {"name": "replan", "input": {"avoid_zones": [], "rationale": "the assigned robot has failed; another robot takes over"}}
         return {"name": "no_action", "input": {"rationale": "no zone was reported"}}
 
     @staticmethod

@@ -1,0 +1,478 @@
+{
+ "status": "DRAFT: written for C1 as a held-out paraphrase set; same label scheme as requests.json; review before treating as gold",
+ "synthetic": true,
+ "n": 50,
+ "vague": 15,
+ "requests": [
+  {
+   "id": "para-01",
+   "text": "Could you send a wheelchair over to ward 2C when you get a chance?",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "west_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-02",
+   "text": "We're out of blankets on 2B, please send one.",
+   "gold": {
+    "item": "blanket",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-03",
+   "text": "Patient monitor needed in ward 3 ASAP.",
+   "gold": {
+    "item": "monitor",
+    "destination": "south_room_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-04",
+   "text": "Stat: IV pole to 2C.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "west_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-05",
+   "text": "Please get a paediatric infusion pump to 2B, urgent.",
+   "gold": {
+    "item": "infusion_pump_paediatric",
+    "destination": "east_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-06",
+   "text": "Send a paediatric pump to ward 2B within 30 minutes.",
+   "gold": {
+    "item": "infusion_pump_paediatric",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 30
+   }
+  },
+  {
+   "id": "para-07",
+   "text": "Ward 3 needs a wheelchair in the next 20 minutes.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 20
+   }
+  },
+  {
+   "id": "para-08",
+   "text": "Emergency, a monitor to 2B please.",
+   "gold": {
+    "item": "monitor",
+    "destination": "east_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-09",
+   "text": "Could a robot drop a blanket at ward 3?",
+   "gold": {
+    "item": "blanket",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-10",
+   "text": "Bring an infusion pump to 2C.",
+   "gold": {
+    "item": "infusion_pump",
+    "destination": "west_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-11",
+   "text": "An IV stand to ward 2B please, within half an hour.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 30
+   }
+  },
+  {
+   "id": "para-12",
+   "text": "Wheelchair for ward 3, urgent, within 10 minutes.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "south_room_approach",
+    "priority": "urgent",
+    "deadline_minutes": 10
+   }
+  },
+  {
+   "id": "para-13",
+   "text": "Ward 2C is asking for a patient monitor.",
+   "gold": {
+    "item": "monitor",
+    "destination": "west_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-14",
+   "text": "Immediately bring a blanket to 2C.",
+   "gold": {
+    "item": "blanket",
+    "destination": "west_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-15",
+   "text": "Please deliver an infusion pump to ward 3, routine.",
+   "gold": {
+    "item": "infusion_pump",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-16",
+   "text": "Need a wheelchair on ward 2B within 40 minutes.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 40
+   }
+  },
+  {
+   "id": "para-17",
+   "text": "A paediatric infusion pump to 2B please.",
+   "gold": {
+    "item": "infusion_pump_paediatric",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-18",
+   "text": "Send one IV pole to ward 3 urgently.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "south_room_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-19",
+   "text": "Requesting a monitor for 2C, no rush.",
+   "gold": {
+    "item": "monitor",
+    "destination": "west_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-20",
+   "text": "Get a blanket up to ward 2B in 15 minutes.",
+   "gold": {
+    "item": "blanket",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 15
+   }
+  },
+  {
+   "id": "para-21",
+   "text": "Urgent: wheelchair needed at 2C.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "west_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-22",
+   "text": "Could someone move a patient monitor to ward 3 within 25 minutes?",
+   "gold": {
+    "item": "monitor",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 25
+   }
+  },
+  {
+   "id": "para-23",
+   "text": "One infusion pump for ward 2C, urgent please.",
+   "gold": {
+    "item": "infusion_pump",
+    "destination": "west_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-24",
+   "text": "IV pole to 2B.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-25",
+   "text": "Please bring a wheelchair to ward three.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-26",
+   "text": "Kindly send a blanket to ward 2C within 50 minutes.",
+   "gold": {
+    "item": "blanket",
+    "destination": "west_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 50
+   }
+  },
+  {
+   "id": "para-27",
+   "text": "2B needs a paediatric infusion pump asap.",
+   "gold": {
+    "item": "infusion_pump_paediatric",
+    "destination": "east_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-28",
+   "text": "Could we get a monitor in ward 2B, routine?",
+   "gold": {
+    "item": "monitor",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-29",
+   "text": "Infusion pump to ward 3 within 35 minutes please.",
+   "gold": {
+    "item": "infusion_pump",
+    "destination": "south_room_approach",
+    "priority": "routine",
+    "deadline_minutes": 35
+   }
+  },
+  {
+   "id": "para-30",
+   "text": "Send a wheelchair to 2C immediately.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "west_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-31",
+   "text": "An extra blanket for ward 3, urgent.",
+   "gold": {
+    "item": "blanket",
+    "destination": "south_room_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-32",
+   "text": "Please have an IV pole taken to ward 2C.",
+   "gold": {
+    "item": "iv_pole",
+    "destination": "west_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-33",
+   "text": "Paediatric pump for 2B, urgent within 8 minutes.",
+   "gold": {
+    "item": "infusion_pump_paediatric",
+    "destination": "east_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 8
+   }
+  },
+  {
+   "id": "para-34",
+   "text": "Ward 2B could use a wheelchair, routine.",
+   "gold": {
+    "item": "wheelchair",
+    "destination": "east_waiting_approach",
+    "priority": "routine",
+    "deadline_minutes": 60
+   }
+  },
+  {
+   "id": "para-35",
+   "text": "Monitor to ward 3, stat.",
+   "gold": {
+    "item": "monitor",
+    "destination": "south_room_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12
+   }
+  },
+  {
+   "id": "para-36",
+   "text": "send the usual",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "para-37",
+   "text": "we need one up here quickly",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "para-38",
+   "text": "can a robot come to 2C",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "para-39",
+   "text": "pump please",
+   "gold": {
+    "ask": true,
+    "about": "destination"
+   }
+  },
+  {
+   "id": "para-40",
+   "text": "get a wheelchair over asap",
+   "gold": {
+    "ask": true,
+    "about": "destination"
+   }
+  },
+  {
+   "id": "para-41",
+   "text": "I need something for bed 12",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "para-42",
+   "text": "infusion pump for 2B",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   }
+  },
+  {
+   "id": "para-43",
+   "text": "an infusion pump to ward 2B, urgent",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   }
+  },
+  {
+   "id": "para-44",
+   "text": "deliver it to ward 3 when free",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "para-45",
+   "text": "blankets",
+   "gold": {
+    "ask": true,
+    "about": "destination"
+   }
+  },
+  {
+   "id": "para-46",
+   "text": "move the equipment",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "para-47",
+   "text": "could you bring an IV pole",
+   "gold": {
+    "ask": true,
+    "about": "destination"
+   }
+  },
+  {
+   "id": "para-48",
+   "text": "2B needs a pump straight away",
+   "gold": {
+    "ask": true,
+    "about": "variant"
+   }
+  },
+  {
+   "id": "para-49",
+   "text": "help with supplies on 2C",
+   "gold": {
+    "ask": true,
+    "about": "item"
+   }
+  },
+  {
+   "id": "para-50",
+   "text": "monitor urgently please",
+   "gold": {
+    "ask": true,
+    "about": "destination"
+   }
+  }
+ ]
+}

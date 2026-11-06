@@ -55,8 +55,18 @@ def _resolve_rule(pack: Pack, rule: dict, parsed: Parsed, text_all: str, answer:
             parsed.fields[key] = value
 
 
+_NUMBER_WORDS = {"one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7", "eight": "8",
+                 "nine": "9", "ten": "10"}
+
+
+def _place_numbers(s: str) -> str:
+    """Number words to digits ('three' -> '3'), so a place written in words is found like one written in digits."""
+    return re.sub(r"\b(" + "|".join(_NUMBER_WORDS) + r")\b", lambda m: _NUMBER_WORDS[m.group(1).lower()], s, flags=re.IGNORECASE)
+
+
 def parse(pack: Pack, topo: Topology, text: str, *, answer: str | None = None) -> Parsed:
     p = Parsed()
+    text, answer = _place_numbers(text), (_place_numbers(answer) if answer else answer)
     text_all = f"{text} {answer}" if answer else text
 
     def item_in(s: str) -> str | None:

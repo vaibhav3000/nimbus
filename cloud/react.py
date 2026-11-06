@@ -34,13 +34,18 @@ class Reaction:
     tokens_out: int = 0
 
 
+_BLOCKING = re.compile(r"block|clos|shut|lock|obstruct|crowd|spill|flood|impassab|no (?:way|route|access)|cordon|cannot pass|can't pass", re.I)
+
+
 def blocked_zones(topo, payload: dict) -> list[str]:
     """Zones an UNEXPECTED_EVENT says are unusable: structured segments first,
     otherwise any known zone id (or alias) named in its 'where' text."""
     zones = [topo.resolve_node(s["segment_id"]) for s in payload.get("segments", [])
              if isinstance(s, dict) and s.get("state") in ("blocked", "closed", "crowded")]
     zones = [z for z in zones if z]
-    if not zones:
+    if not zones and _BLOCKING.search(payload.get("what_happened", "")):
+        # without structured segments, a zone named in 'where' is closed only when the event says the way is
+        # unusable: a robot fault 'where' it stopped is a location, not a closure of that place
         names = list(topo.nodes) + list(getattr(topo, "_alias", {}))
         zones = [topo.resolve_node(n) for n in names
                  if re.search(rf"(?<![\w-]){re.escape(n)}(?![\w-])", payload.get("where", ""), re.I)]
@@ -125,14 +130,20 @@ class Reactor:
 
     def _choose_event(self, task, payload, cur, zones, robot_zone, react: Reaction) -> dict:
         o = self.o
-        fallback = {"action": "replan" if zones else "no_action", "avoid": zones, "source": "rules",
-                    "rationale": "rules: route around the reported zones" if zones else "rules: no zone named, nothing to avoid"}
+        robot_states = {r: (o.fleet.clusters.get(cur["cluster_id"], {}).get("robots", {}).get(r) or {}).get("state")
+                        for r in cur["assigned_robots"]}
+        robot_down = any(st == "failed" for st in robot_states.values())
+        act = "replan" if zones or robot_down else "no_action"
+        why = ("rules: route around the reported zones" if zones else
+               "rules: the assigned robot has failed; give the task to another robot" if robot_down else
+               "rules: no zone named, nothing to avoid")
+        fallback = {"action": act, "avoid": zones, "source": "rules", "rationale": why}
         if o.mode not in LLM_MODES:
             return fallback
         ctx = o.build_context(payload["what_happened"], task["task_id"], [])
         options = o.preview_options(task, zones, robot_zone)
         user = (f"UNEXPECTED_EVENT: {payload['what_happened']} at {payload['where']}; robots saw: {payload['robots_saw']}\n"
-                f"BLOCKED_ZONES: {zones}\nROBOT_ZONE: {robot_zone}\n"
+                f"BLOCKED_ZONES: {zones}\nROBOT_ZONE: {robot_zone}\nASSIGNED_ROBOT_STATE: {robot_states}\n"
                 f"LEASE: allowed={cur['allowed_zones']} forbidden={cur['forbidden_zones']} cluster={cur['cluster_id']}\n"
                 f"OPTIONS (already computed by code): {options}")
 
@@ -154,8 +165,9 @@ class Reactor:
         if res.call is None:
             return {**fallback, "error": res.error, "trace": res.trace}
         i = res.call["input"]
-        if res.call["name"] == "no_action" and zones:
-            return {**fallback, "error": "model chose no_action although zones were reported", "trace": res.trace}
+        if res.call["name"] == "no_action" and (zones or robot_down):
+            return {**fallback, "error": "model chose no_action although " + ("zones were reported" if zones else "the robot has failed"),
+                    "trace": res.trace}
         if res.call["name"] == "no_action":
             return {"action": "no_action", "avoid": [], "source": "llm", "rationale": i["rationale"], "trace": res.trace}
         if res.call["name"] == "wait_and_retry":

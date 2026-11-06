@@ -130,7 +130,7 @@ class Orchestrator:
             llm = CircuitBreakerLLM(faulty, clock)         # the breaker sees injected outages exactly as it sees real ones
         else:
             faulty = FaultyLLM.from_env(RuleBasedLLM(pack, topo), clock)
-            llm = faulty
+            llm = CircuitBreakerLLM(faulty, clock)         # same breaker as the Bedrock path, so outage tests see it trip
         if os.environ.get("NIMBUS_CASSETTE"):  # record real calls once, replay them free
             from .llm import CassetteLLM
             mode = os.environ.get("NIMBUS_CASSETTE_MODE", "replay")
@@ -221,6 +221,13 @@ class Orchestrator:
         if parsed is None:
             parsed = self._form_intent(text, answer)
         kind, payload = parsed
+        if kind in ("spec", "specs") and use_llm:
+            # the model may fill in a place the requester never named (seen in experiment C1: "need a blanket" became
+            # a delivery to 2B): a destination must come from the requester's words, otherwise ask for it
+            words = nlp.parse(self.pack, self.topo, text, answer=answer)
+            if "destination" in words.missing and not (question and question.get("missing_fields") == ["item"]):
+                words.missing = ["destination"]
+                kind, payload = "clarify", nlp.missing_question(self.pack, words)
         if kind == "clarify" and answer is None and (alt := self._memory_spec(text)):
             kind, payload = "spec", alt        # this place has confirmed its usual choice: do not ask again (the checker still runs)
         if kind == "clarify":
@@ -272,9 +279,9 @@ class Orchestrator:
         p = nlp.parse(self.pack, self.topo, text, answer=answer)
         if p.source and not spec.get("source"):
             spec["source"] = p.source["zone"]
-        default = self.pack.doc["default_priority"]
-        if p.priority != default and spec["priority"] == default:
-            spec["priority"] = p.priority
+        # priority comes from the requester's words (the pack's urgent patterns), in both directions: a stated
+        # deadline alone ("within 15 minutes") does not make a task urgent, and an urgent wording always does
+        spec["priority"] = p.priority
         usual = self.memory.usual(self.topo.anchor_of(spec["destination"]) or spec["destination"], spec["item"])
         if usual and not p.fields.get("variant_confirmed_by_requester"):   # not an explicit "the standard one": use the habit
             spec["item"] = usual
@@ -659,6 +666,18 @@ class Orchestrator:
         view = self.view(task_id, {z: f"blocked: {reason}" for z in blocked_zones})
         prop = Proposal(cur["cluster_id"], list(cur["assigned_robots"]), f"re-plan: {reason}", "classical")
         res = check(spec, prop, view, holds_stock=True)
+        if not res.ok and any(v["rule"] == "capacity" for v in res.violations):
+            # the robot itself cannot go on (it failed): another free robot of the same cluster takes the task,
+            # nearest first, each one checked like any proposal
+            options, _ = eligible_options(spec, view)
+            for opt in options:
+                if opt.cluster_id != cur["cluster_id"] or opt.robot_id in cur["assigned_robots"]:
+                    continue
+                alt = Proposal(cur["cluster_id"], [opt.robot_id], f"re-plan with {opt.robot_id}: {reason}", "classical")
+                alt_res = check(spec, alt, view, holds_stock=True)
+                if alt_res.ok:
+                    prop, res = alt, alt_res
+                    break
         if not res.ok:
             why = "; ".join(f"{v['rule']}: {v['detail']}" for v in res.violations)
             return Outcome("replan_failed", reason=why, spec=spec,

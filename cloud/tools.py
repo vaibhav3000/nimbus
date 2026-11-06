@@ -139,9 +139,10 @@ class ToolRegistry:
                                "schema": {"type": "object", "additionalProperties": False, "required": ["seconds", "rationale"],
                                           "properties": {"seconds": {"type": "integer", "minimum": 10, "maximum": 600},
                                                          "rationale": {"type": "string", "minLength": 1}}}},
-            "replan": {"class": "propose", "description": "Issue a new lease version for the same cluster that avoids these zones.",
+            "replan": {"class": "propose", "description": "Issue a new lease version for the same cluster that avoids these zones "
+                                                         "(empty when the assigned robot failed: another robot of the cluster takes over).",
                        "schema": {"type": "object", "additionalProperties": False, "required": ["avoid_zones", "rationale"],
-                                  "properties": {"avoid_zones": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+                                  "properties": {"avoid_zones": {"type": "array", "items": {"type": "string"}},
                                                  "rationale": {"type": "string", "minLength": 1}}}},
             "hand_over": {"class": "propose", "description": "Give the rest of the task to another cluster.",
                           "schema": {"type": "object", "additionalProperties": False, "required": ["to_cluster", "rationale"],
