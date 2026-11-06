@@ -1,0 +1,6 @@
+kind,events,source,decision_p50_s,decision_p50_ci_low,decision_p50_ci_high,decision_p95_s,decision_max_s,edge_new_version_p50_s,edge_new_version_p95_s,new_lease_versions,model_ms_p50,outcomes
+blocked_with_detour,8,real_bedrock,0.024,0.024,0.026,0.085,0.116,0.179,0.207,8,0.0,{'rerouted lease': 8}
+blocked_no_detour,8,real_bedrock,0.019,0.008,0.024,0.025,0.025,0.198,0.199,2,0.0,"{'operator alerted (no route left)': 6, 'rerouted lease': 2}"
+closed_door,8,real_bedrock,0.018,0.011,0.02,0.02,0.02,,,0,0.0,{'operator alerted (no route left)': 8}
+robot_failed,8,real_bedrock,0.018,0.016,0.021,0.022,0.022,0.199,0.241,8,0.0,{'another robot took over': 8}
+all,32,real_bedrock,0.019,0.018,0.021,0.026,0.116,0.192,0.241,18,0.0,"{'rerouted lease': 10, 'operator alerted (no route left)': 14, 'another robot took over': 8}"
