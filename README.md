@@ -276,7 +276,7 @@ The full table is [results/final/RESULTS.md](results/final/RESULTS.md).
 | Experiment | What it showed |
 | --- | --- |
 | C1, request understanding (FR-13) | Real Bedrock Nova Lite on the deployed cloud, 300 decisions: 94.0% of request details right, 72.6% of vague requests got a question. Applying the grounding fixes this experiment led to, the same 300 recorded answers score 96.3% and 92.9%. |
-| C2, rules and shared map (FR-17) | 10 of 10 plain-language rules applied, including their effect (routine held, urgent allowed). 21 of 21 reported closures were on the map within a second, and the next plan avoided them. |
+| C2, rules and shared map (FR-17) | Real Bedrock Nova Lite on a local server: 10 of 10 plain-language rules applied, and the effect on deliveries was right in 7 of 7 checks (routine held, urgent allowed). 20 of 20 reported closures were on the map within a second (p95 0.06 s), and the next plan avoided them. The stand-in result stays in `C2_standin`. |
 | C3, memory (FR-19) | With memory, 10 of 10 repeat requests were resolved without asking. Without memory, all 10 needed a question. |
 | C4, Rule Checker under attack (FR-15) | 0 of 180 invalid proposals approved. 0 invalid leases from 60 requests with an adversarial model. The fallback took over every time it had to. |
 | C5, scheduling (FR-14, T8) | Over 113,000 simulated tasks: 0 times did a routine task take a robot while an urgent one waited (first-come-first-served: 25,009). At overload, 0% of urgent deadlines missed against 77%. |

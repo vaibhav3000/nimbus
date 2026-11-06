@@ -6,6 +6,7 @@ Built by `python experiments/cloud/report.py` from each folder's README.md and e
 | --- | --- | --- | --- | --- | --- | --- |
 | [C1_deployed](C1_deployed/README.md) | FR-13 | PASS | bedrock: field accuracy 94.0% (95% CI 92.2% to 95.4%), clarification recall 72.6%, precision 92.4%, 300 request decisions | real_bedrock | deployed | 81f0b93-dirty |
 | [C1_standin](C1_standin/README.md) | FR-13 | PASS | standin: field accuracy 98.6% (95% CI 96.5% to 99.5%), clarification recall 100.0%, precision 100.0%, 100 request decisions | mock_llm (standin) / measured (rules) | local | cee7c04-dirty |
+| [C2](C2/README.md) | FR-17 | PASS | rules applied correctly 10/10 (apac.amazon.nova-lite-v1:0); effect on deliveries correct 7/7; map changes shown within 5 min 20/20 (p95 0.06 s); next request to the same place avoided the closed zone 20/20 | real_bedrock |  | 97685da |
 | [C2_standin](C2_standin/README.md) | FR-17 | PASS | rules applied correctly 10/10 (rule-based-stand-in); effect on deliveries correct 7/7; map changes shown within 5 min 21/21 (p95 0.03 s); next request to the same place avoided the closed zone 21/21 | mock_llm |  | 81f0b93-dirty |
 | [C3_standin](C3_standin/README.md) | FR-19 | PASS | memory on: 20/20 cases right, habit cases resolved without asking 10/10; memory off: the same habit requests asked 10/10 times (questions saved by memory) | mock_llm | local | 81f0b93-dirty |
 | [C4](C4/README.md) | FR-15 | PASS | part A: 0/180 invalid proposals approved (Wilson 95% upper bound 2.1%), 180/180 vetoed citing the expected rule, 0/20 valid controls wrongly vetoed; part B: 0 invalid leases from 60 adversarial requests, fallback used 54/54 times it was required, at most 2 model proposals per request | measured | in-process cloud (pack hospital_sim6) | 81f0b93-dirty |
@@ -20,6 +21,7 @@ Pass bars:
 
 - **C1_deployed**: >= 85% of details right on clear requests; most vague requests get a question (FR-13).
 - **C1_standin**: >= 85% of details right on clear requests; most vague requests get a question (FR-13).
+- **C2**: Scripted changes reflected in the map within about 5 min in >= 80% of cases; 10 test rules applied correctly (FR-17).
 - **C2_standin**: Scripted changes reflected in the map within about 5 min in >= 80% of cases; 10 test rules applied correctly (FR-17).
 - **C3_standin**: Most of 20 context-dependent requests resolved without asking (FR-19).
 - **C4**: No invalid lease issued; fallback after 2 failed proposals (FR-15).
