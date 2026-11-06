@@ -1,0 +1,12 @@
+zone_blocked,affected_clusters(ground truth),clusters_informed,all_affected_informed,unaffected_clusters_informed,seconds_until_map_shows_it
+east_mid_hall,east-wing,east-wing,1,0,0.022
+east_south_hall,east-wing,east-wing,1,0,0.03
+east_north_gate,east-wing,east-wing,1,0,0.019
+east_waiting_approach,east-wing,east-wing,1,0,0.014
+west_mid_hall,west-wing,west-wing,1,0,0.021
+west_south_hall,west-wing,west-wing,1,0,0.017
+west_north_gate,west-wing,west-wing,1,0,0.02
+west_waiting_approach,west-wing,west-wing,1,0,0.021
+nurse_station_approach,east-wing+west-wing,east-wing+west-wing,1,0,0.018
+north_hall,east-wing+west-wing,east-wing+west-wing,1,0,0.025
+south_equipment_approach,east-wing+west-wing,east-wing+west-wing,1,0,0.02

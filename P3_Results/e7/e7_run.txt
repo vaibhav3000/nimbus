@@ -1,0 +1,10 @@
+1029 requests over 24.0 h (seed 1); decision time is the cloud code's own wall time per decision, best of 2 runs (stand-in model, no model latency)
+robots   done  missed  wait p50 s  wait p95 s  dec p95 ms   vs 3  calls/task     cost $  replay
+     3   1029    0.0%           0         206       15.54    1.0         1.0   5.26e-05  identical
+     6   1029    0.0%           0          41       16.31   1.05         1.0   5.31e-05  identical
+    10   1029    0.0%           0           0       16.14   1.04         1.0   5.37e-05  identical
+    20   1029    0.0%           0           0       16.69   1.07         1.0   5.52e-05  identical
+
+NFR-3 (cloud side): at 10 robots the decision p95 is 1.04x the 3-robot baseline (target <= 1.5): MET
+
+exit code: 0

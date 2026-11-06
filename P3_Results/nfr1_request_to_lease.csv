@@ -1,0 +1,51 @@
+n,request,status,wall_seconds_request_to_lease
+1,Please bring a wheelchair to ward 2B,leased,0.0134
+2,Please bring a wheelchair to ward 2C,leased,0.0116
+3,Please bring a wheelchair to ward 3A,leased,0.0144
+4,Please bring a wheelchair to ward 3,leased,0.012
+5,Please bring a blanket to ward 2B,leased,0.0115
+6,Please bring a blanket to ward 2C,leased,0.0108
+7,Please bring a blanket to ward 3A,leased,0.0134
+8,Please bring a blanket to ward 3,leased,0.0123
+9,Please bring a monitor to ward 2B,leased,0.0102
+10,Please bring a monitor to ward 2C,leased,0.0104
+11,Please bring a monitor to ward 3A,leased,0.0139
+12,Please bring a monitor to ward 3,queued,0.0047
+13,Please bring a iv pole to ward 2B,leased,0.0106
+14,Please bring a iv pole to ward 2C,leased,0.0104
+15,Please bring a iv pole to ward 3A,leased,0.0137
+16,Please bring a iv pole to ward 3,leased,0.0111
+17,Please bring a infusion pump to ward 2B,leased,0.0151
+18,Please bring a infusion pump to ward 2C,leased,0.0102
+19,Please bring a infusion pump to ward 3A,needs_clarification,0.0076
+20,Please bring a infusion pump to ward 3,leased,0.0108
+21,Please bring a wheelchair to ward 2B,leased,0.0109
+22,Please bring a wheelchair to ward 2C,queued,0.0039
+23,Please bring a wheelchair to ward 3A,leased,0.0153
+24,Please bring a wheelchair to ward 3,queued,0.0036
+25,Please bring a blanket to ward 2B,leased,0.0142
+26,Please bring a blanket to ward 2C,leased,0.0127
+27,Please bring a blanket to ward 3A,leased,0.0179
+28,Please bring a blanket to ward 3,leased,0.0108
+29,Please bring a monitor to ward 2B,queued,0.0039
+30,Please bring a monitor to ward 2C,queued,0.0043
+31,Please bring a monitor to ward 3A,queued,0.0076
+32,Please bring a monitor to ward 3,queued,0.004
+33,Please bring a iv pole to ward 2B,leased,0.0111
+34,Please bring a iv pole to ward 2C,leased,0.0118
+35,Please bring a iv pole to ward 3A,leased,0.0158
+36,Please bring a iv pole to ward 3,leased,0.0122
+37,Please bring a infusion pump to ward 2B,leased,0.0161
+38,Please bring a infusion pump to ward 2C,queued,0.0047
+39,Please bring a infusion pump to ward 3A,needs_clarification,0.009
+40,Please bring a infusion pump to ward 3,leased,0.0114
+41,Please bring a wheelchair to ward 2B,queued,0.0055
+42,Please bring a wheelchair to ward 2C,queued,0.0046
+43,Please bring a wheelchair to ward 3A,queued,0.0091
+44,Please bring a wheelchair to ward 3,queued,0.0038
+45,Please bring a blanket to ward 2B,leased,0.0107
+46,Please bring a blanket to ward 2C,leased,0.0169
+47,Please bring a blanket to ward 3A,leased,0.0192
+48,Please bring a blanket to ward 3,leased,0.0129
+49,Please bring a monitor to ward 2B,queued,0.0058
+50,Please bring a monitor to ward 2C,queued,0.0042

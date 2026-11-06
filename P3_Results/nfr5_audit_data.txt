@@ -1,0 +1,3 @@
+RESULT: PASS
+
+exit code: 0

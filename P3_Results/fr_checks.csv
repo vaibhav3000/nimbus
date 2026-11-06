@@ -1,0 +1,6 @@
+requirement,check,result,pass
+FR-15,"of the leases issued for 60 requests (urgent and routine, 3 wards), how many fail the lease schema",0 of 50,1
+FR-15,"model proposes a non-existent robot every time: checker vetoes, lease is then issued by the deterministic assigner after 2 failed proposals","outcome=leased, model proposals vetoed=2, lease proposed_by=classical, lease valid=True",1
+FR-14,20 trials: urgent request queued AFTER a routine one gets the freed robot first,20 of 20,1
+FR-16,blocked zone -> re-plan -> valid lease v2: cloud processing time (stand-in model; excludes model and WAN latency),"12 of 12 re-plans gave a valid v2 lease; p95 0.017s, max 0.017s",1
+FR-22,"operator cancel -> stop lease visible to the edge in the outbox (12 trials, cloud side only)",p95 0.016s; stop lease published in 12 of 12,1

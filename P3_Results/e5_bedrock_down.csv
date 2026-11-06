@@ -1,0 +1,23 @@
+t_s,phase,request,outcome,lease_valid,proposed_by,model_calls_for_this_request,user_told_reduced_autonomy
+0,before outage,"Please bring a blanket to ward 2C, routine.",leased,1,classical,1,0
+20,before outage,"Please bring a iv pole to ward 2C, routine.",leased,1,classical,1,0
+40,before outage,"Please bring a iv pole to ward 2B, routine.",leased,1,classical,1,0
+60,before outage,"Please bring a blanket to ward 3, routine.",leased,1,llm,2,0
+80,before outage,"Please bring a blanket to ward 2B, routine.",leased,1,classical,1,0
+135,during outage (model down),"Please bring a blanket to ward 2C, routine.",leased,1,classical,0,1
+190,during outage (model down),"Please bring a iv pole to ward 2C, routine.",leased,1,classical,0,1
+245,during outage (model down),"Please bring a iv pole to ward 2B, routine.",leased,1,classical,0,1
+300,during outage (model down),"Please bring a blanket to ward 3, routine.",leased,1,classical,0,1
+355,during outage (model down),"Please bring a blanket to ward 2B, routine.",leased,1,classical,0,1
+410,during outage (model down),"Please bring a blanket to ward 2C, routine.",leased,1,classical,0,1
+465,during outage (model down),"Please bring a iv pole to ward 2C, routine.",leased,1,classical,0,1
+520,during outage (model down),"Please bring a iv pole to ward 2B, routine.",leased,1,classical,0,1
+575,during outage (model down),"Please bring a blanket to ward 3, routine.",leased,1,classical,0,1
+630,during outage (model down),"Please bring a blanket to ward 2B, routine.",leased,1,classical,0,1
+640,after outage (breaker cool-down),"Please bring a blanket to ward 2C, routine.",leased,1,classical,0,1
+660,after outage (breaker cool-down),"Please bring a iv pole to ward 2C, routine.",queued,0,,0,1
+680,after outage (breaker cool-down),"Please bring a iv pole to ward 2B, routine.",leased,1,classical,0,1
+740,model back,"Please bring a blanket to ward 3, routine.",leased,1,llm,2,0
+760,model back,"Please bring a blanket to ward 2B, routine.",leased,1,classical,1,0
+780,model back,"Please bring a blanket to ward 2C, routine.",leased,1,classical,1,0
+800,model back,"Please bring a iv pole to ward 2C, routine.",queued,0,,1,0

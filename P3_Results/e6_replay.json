@@ -1,0 +1,57 @@
+{
+ "method": "state rebuilt only from GET /tasks/{id}/timeline rows, compared with GET /tasks/{id}",
+ "tasks": [
+  {
+   "task_id": "task-000001",
+   "request": "Need an infusion pump at 2B-12, urgent",
+   "rows": 8,
+   "who_decided": [
+    "cloud",
+    "edge",
+    "requester",
+    "rule"
+   ],
+   "timestamps_in_order": true,
+   "replayed_status": "completed",
+   "actual_status": "completed",
+   "replayed_lease_version": 1,
+   "actual_lease_version": 1,
+   "status_matches": true,
+   "every_row_has_who_inputs_output_version": true
+  },
+  {
+   "task_id": "task-000002",
+   "request": "Please bring a wheelchair to ward 2B",
+   "rows": 5,
+   "who_decided": [
+    "cloud",
+    "requester",
+    "rule"
+   ],
+   "timestamps_in_order": true,
+   "replayed_status": "leased",
+   "actual_status": "leased",
+   "replayed_lease_version": 1,
+   "actual_lease_version": 1,
+   "status_matches": true,
+   "every_row_has_who_inputs_output_version": true
+  },
+  {
+   "task_id": "task-000003",
+   "request": "Please bring a blanket to ward 2C",
+   "rows": 6,
+   "who_decided": [
+    "cloud",
+    "requester",
+    "rule"
+   ],
+   "timestamps_in_order": true,
+   "replayed_status": "cancelled",
+   "actual_status": "cancelled",
+   "replayed_lease_version": 1,
+   "actual_lease_version": 2,
+   "status_matches": true,
+   "every_row_has_who_inputs_output_version": true
+  }
+ ]
+}

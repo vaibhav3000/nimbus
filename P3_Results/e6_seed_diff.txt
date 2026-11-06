@@ -1,0 +1,11 @@
+seed 7: exit 0
+run A: 24 rows, 41666a2732dd8b14   run B: 24 rows, 41666a2732dd8b14
+IDENTICAL
+
+seed 11: exit 0
+run A: 13 rows, 7278256a93b888c2   run B: 13 rows, 7278256a93b888c2
+IDENTICAL
+
+seed 23: exit 0
+run A: 14 rows, 787a7398a0f45709   run B: 14 rows, 787a7398a0f45709
+IDENTICAL

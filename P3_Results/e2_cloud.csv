@@ -1,0 +1,11 @@
+config,model,labels,requirement,metric,value,target,n
+C1,stand-in,"DRAFT (template-written, not yet reviewed by a person)",FR-13,"field accuracy: item, destination, priority, deadline over 50 requests",1.0,>= 0.85,50
+C1,stand-in,"DRAFT (template-written, not yet reviewed by a person)",FR-13,clarification recall: vague requests that got a question,1.0,most vague ones asked,50
+C1,stand-in,"DRAFT (template-written, not yet reviewed by a person)",FR-13,clarification precision,1.0,-,50
+C1,stand-in,"DRAFT (template-written, not yet reviewed by a person)",FR-17,plain-language rules applied correctly,10/10,10 of 10,10
+C1,stand-in,"DRAFT (template-written, not yet reviewed by a person)",FR-19,context-dependent requests resolved correctly (habit/control/override),20/20,most resolved without asking,20
+C3,stand-in,"DRAFT (template-written, not yet reviewed by a person)",FR-13,"field accuracy: item, destination, priority, deadline over 50 requests",1.0,>= 0.85,50
+C3,stand-in,"DRAFT (template-written, not yet reviewed by a person)",FR-13,clarification recall: vague requests that got a question,1.0,most vague ones asked,50
+C3,stand-in,"DRAFT (template-written, not yet reviewed by a person)",FR-13,clarification precision,1.0,-,50
+C3,stand-in,"DRAFT (template-written, not yet reviewed by a person)",FR-17,plain-language rules applied correctly,10/10,10 of 10,10
+C3,stand-in,"DRAFT (template-written, not yet reviewed by a person)",FR-19,context-dependent requests resolved correctly (habit/control/override),20/20,most resolved without asking,20

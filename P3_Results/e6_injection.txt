@@ -1,0 +1,31 @@
+Local cloud, pack `hospital` (has an alternative route so a re-plan to v2 is possible); a heartbeat thread plays the edges.
+
+{
+ "repeat": {
+  "sent": 5,
+  "accepted": 1,
+  "acknowledged_as_duplicate": 4,
+  "times_acted_on": 1
+ },
+ "outdated": {
+  "replanned_to": 2,
+  "stale_escalation_status": 409,
+  "stale_checkin_status": 409,
+  "state_unchanged": true
+ },
+ "reorder": {
+  "final_states": [
+   {
+    "status": "completed",
+    "lease_version": 1
+   },
+   {
+    "status": "completed",
+    "lease_version": 1
+   }
+  ],
+  "order_independent": true
+ }
+}
+
+exit code: 0
