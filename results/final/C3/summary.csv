@@ -1,0 +1,9 @@
+memory,kind,cases,correct,rate,ci_low,ci_high,questions_asked,source
+on,habit,10,10,1.0,0.722,1.0,0,real_bedrock
+on,control,5,5,1.0,0.566,1.0,5,real_bedrock
+on,override,5,4,0.8,0.376,0.964,1,real_bedrock
+on,all,20,19,0.95,0.764,0.991,6,real_bedrock
+off,habit,10,0,0.0,0.0,0.278,10,real_bedrock
+off,control,5,5,1.0,0.566,1.0,5,real_bedrock
+off,override,5,4,0.8,0.376,0.964,1,real_bedrock
+off,all,20,9,0.45,0.258,0.658,16,real_bedrock
