@@ -159,7 +159,11 @@ class EdgeSLMEngine:
         # 1b. Deterministic rule: the robot itself is stuck / off the map. Waiting never fixes this, and a small
         #     model must not be allowed to wait three times on it (seen live: "departed the traversable costmap").
         ev_low = str(context.get("event_description", "")).lower()
-        if any(w in ev_low for w in ("departed the traversable costmap", "localization", "odometry is stale", "range contact lost", "range sensor", "sensor stale", "sensor unavailable")):
+        if context.get("failure_cause") == "LEFT_COSTMAP" or "departed the traversable costmap" in ev_low:
+            latency_ms = (time.time() - start_time) * 1000.0
+            return {"action": "ESCALATE_UNEXPECTED", "target_waypoint": None,
+                    "reason": "Robot left its verified map; it was stopped and must be re-localized before any retry."}, "RULE", latency_ms
+        if any(w in ev_low for w in ("localization", "odometry is stale", "range contact lost", "range sensor", "sensor stale", "sensor unavailable")):
             current = context.get("robot_id", "")
             failed = set(context.get("failed_robots", [])) | {current}
             idle = context.get("idle_robots") or [r for r in context.get("assigned_robots", []) if r not in failed]

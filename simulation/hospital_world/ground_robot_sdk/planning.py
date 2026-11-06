@@ -118,8 +118,11 @@ class AStarPlanner:
     def plan(self, start: Point, goal: Point, dynamic: set[Cell] | None = None) -> list[Point] | None:
         if not self.grid.contains_point(start) or not self.grid.contains_point(goal): return None
         start_cell=self._nearest_free(self.grid.world_to_cell(*start),dynamic)
-        goal_cell=self._nearest_free(self.grid.world_to_cell(*goal),dynamic)
-        if start_cell is None or goal_cell is None: return None
+        # Moving a blocked goal to the nearest free cell and then appending
+        # the original goal creates a final, unsafe segment into an occupied
+        # person/robot.  A blocked target is a no-path condition.
+        goal_cell=self.grid.world_to_cell(*goal)
+        if start_cell is None or self.grid.is_occupied(goal_cell,dynamic): return None
         queue:list[tuple[float,float,Cell]]=[(self._heuristic(start_cell,goal_cell),0.,start_cell)]
         costs={start_cell:0.}; parents:dict[Cell,Cell]={}; visited:set[Cell]=set()
         while queue:

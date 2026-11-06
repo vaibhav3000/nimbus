@@ -88,6 +88,7 @@ class EdgeSupervisor:
         cloud_url: str = "http://localhost:8000",
         db_path: str = "edge_local_store.db",
         slm_mode: str = "auto",
+        slm_model: str = "qwen2.5:1.5b",
         topology_file: Optional[str] = None,
         waypoints_file: Optional[str] = None,
         verbose: bool = True,
@@ -121,7 +122,7 @@ class EdgeSupervisor:
         if self.system_mode == "C3":
             slm_mode = "rules_only"
         self.store = EdgeLocalStore(db_path)
-        self.slm = EdgeSLMEngine(mode=slm_mode)
+        self.slm = EdgeSLMEngine(model_name=slm_model, mode=slm_mode)
         self.geofence = SpatialGeofenceValidator()
         self.parking_engine = SafeParkingEngine()
         self.artifact_packager = ArtifactPackager()
@@ -405,19 +406,19 @@ class EdgeSupervisor:
 
         # Fallback built-in topo-v0 hospital graph
         default_nodes = {
-            "lift_lobby": {"kind": "gate", "speed_cap": 1.0},
-            "north_hall": {"kind": "corridor", "speed_cap": 1.0},
-            "west_north_gate": {"kind": "gate", "speed_cap": 1.0},
-            "east_north_gate": {"kind": "gate", "speed_cap": 1.0},
-            "west_waiting_approach": {"kind": "zone", "speed_cap": 1.0},
-            "east_waiting_approach": {"kind": "zone", "speed_cap": 1.0},
-            "west_mid_hall": {"kind": "corridor", "speed_cap": 1.0},
-            "east_mid_hall": {"kind": "corridor", "speed_cap": 1.0},
-            "nurse_station_approach": {"kind": "zone", "speed_cap": 1.0},
-            "west_south_hall": {"kind": "corridor", "speed_cap": 1.0},
-            "east_south_hall": {"kind": "corridor", "speed_cap": 1.0},
-            "south_equipment_approach": {"kind": "zone", "speed_cap": 1.0},
-            "south_room_approach": {"kind": "zone", "speed_cap": 1.0},
+            "lift_lobby": {"kind": "gate", "speed_cap": 0.3},
+            "north_hall": {"kind": "corridor", "speed_cap": 0.5},
+            "west_north_gate": {"kind": "gate", "speed_cap": 0.3},
+            "east_north_gate": {"kind": "gate", "speed_cap": 0.3},
+            "west_waiting_approach": {"kind": "zone", "speed_cap": 0.3},
+            "east_waiting_approach": {"kind": "zone", "speed_cap": 0.3},
+            "west_mid_hall": {"kind": "corridor", "speed_cap": 0.5},
+            "east_mid_hall": {"kind": "corridor", "speed_cap": 0.5},
+            "nurse_station_approach": {"kind": "zone", "speed_cap": 0.3},
+            "west_south_hall": {"kind": "corridor", "speed_cap": 0.5},
+            "east_south_hall": {"kind": "corridor", "speed_cap": 0.5},
+            "south_equipment_approach": {"kind": "zone", "speed_cap": 0.3},
+            "south_room_approach": {"kind": "zone", "speed_cap": 0.3},
         }
         default_waypoints = {
             "lift_lobby": [0.0, 18.0],
@@ -1468,6 +1469,22 @@ class EdgeSupervisor:
                 )
                 self.robots[robot_id] = robot
 
+            if cmd == "go_to" and isinstance(params.get("to"), str) and not params.get("via"):
+                # Older deployed cloud templates did not include a topology
+                # route.  Resolve one locally, *inside the lease fence*,
+                # before persisting and dispatching the command.  This makes
+                # the command traceable and prevents a legacy lease from
+                # falling back to an unconstrained straight-line drive.
+                find_route = getattr(robot, "_find_route", None)
+                if callable(find_route):
+                    route = find_route(
+                        getattr(robot, "current_zone", ""),
+                        params["to"],
+                        allowed_zones=list(allowed_zones),
+                    )
+                    if route:
+                        params["via"] = route
+
             cmd_id = f"cmd-{lease_id}-step-{idx+1}"
 
             # FR-7 & FR-8: Check if sub-task was already executed by prior supervisor before failover
@@ -1638,6 +1655,7 @@ class EdgeSupervisor:
                     "assigned_robots": list(dict.fromkeys(lease.get("assigned_robots", []) + list(self.robots.keys()))),
                     "failed_robots": list(failed_robots),
                     "event_description": event_desc,
+                    "failure_cause": exec_report.get("failure_cause"),
                     "has_fault": exec_report.get("has_fault", False),
                     "wait_count": step_wait_counts.get(idx, 0),
                     "cluster_id": self.cluster_id,

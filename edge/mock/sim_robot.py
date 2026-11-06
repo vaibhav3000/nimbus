@@ -22,6 +22,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -50,6 +51,37 @@ def _find_simulation_dir() -> Optional[Path]:
         except Exception:
             continue
     return None
+
+
+def _load_static_human_obstacles() -> List[Tuple[float, float, float]]:
+    """Read fixed human props from the active Gazebo world.
+
+    This is intentionally limited to people, whose footprint is both
+    safety-critical and unambiguous from the SDF.  Wall mesh slicing and
+    furniture footprints require an offline geometry export; we do not
+    fabricate those boundaries from model names.
+    """
+    if not SIM_DIR:
+        return []
+    world = SIM_DIR / "hospital_six_racecars.sdf"
+    try:
+        root = ET.parse(world).getroot()
+    except (OSError, ET.ParseError):
+        return []
+    obstacles = []
+    for model in root.findall(".//model"):
+        name = (model.findtext("name") or model.get("name") or "").lower()
+        uri = (model.findtext("uri") or "").lower()
+        if not any(token in f"{name} {uri}" for token in ("scrubs", "visitor", "patient", "male", "female")):
+            continue
+        values = (model.findtext("pose") or "").split()
+        if len(values) < 2:
+            continue
+        try:
+            obstacles.append((float(values[0]), float(values[1]), 0.55))
+        except ValueError:
+            continue
+    return obstacles
 
 
 # Ensure simulation dir is in sys.path
@@ -337,7 +369,7 @@ class SimRobot:
         if sensor_timeout is None:
             sensor_timeout = float(os.environ.get("NIMBUS_SENSOR_TIMEOUT", "1.0"))
         self.goal_timeout = float(os.environ.get("NIMBUS_GOAL_TIMEOUT", "600"))
-        self.minimum_front_distance = float(os.environ.get("NIMBUS_MINIMUM_FRONT_DISTANCE", "0.20"))
+        self.minimum_front_distance = float(os.environ.get("NIMBUS_MINIMUM_FRONT_DISTANCE", "0.45"))
         self.robot_id = robot_id
         cfg = DEFAULT_ROBOT_DEPLOYMENT.get(robot_id, DEFAULT_ROBOT_DEPLOYMENT["R1"])
         self.sim_name = cfg["sim_name"]
@@ -390,6 +422,7 @@ class SimRobot:
         self.current_cmd_id = None
         self.history: List[Dict[str, Any]] = []
         self.injected_obstacles: Dict[str, Dict[str, Any]] = {}
+        self._static_human_obstacles = _load_static_human_obstacles() if self.execution_mode == "gazebo" else []
 
         # Load topology nodes & edges for corridor routing
         self.topology_nodes = {}
@@ -416,9 +449,10 @@ class SimRobot:
                 ("east_mid_hall", "nurse_station_approach", 4.92),
                 ("west_mid_hall", "west_south_hall", 11.0),
                 ("east_mid_hall", "east_south_hall", 11.0),
-                ("west_south_hall", "south_equipment_approach", 8.32),
-                ("east_south_hall", "south_equipment_approach", 8.32),
-                ("south_equipment_approach", "south_room_approach", 13.0),
+                ("west_south_hall", "west_south_hall_corner", 7.0),
+                ("west_south_hall_corner", "south_equipment_approach", 4.5),
+                ("east_south_hall", "east_south_hall_corner", 7.0),
+                ("east_south_hall_corner", "south_equipment_approach", 4.5),
             ]
 
         # Determine whether to use live Gazebo or MockAdapter
@@ -617,6 +651,16 @@ class SimRobot:
         c,s=math.cos(syaw),math.sin(syaw)
         return c*dx+s*dy,-s*dx+c*dy
 
+    def _peer_navigation_points(self, runtime: Any) -> List[Tuple[float, float]]:
+        """Return fresh Gazebo peer positions in this robot's odometry frame."""
+        getter=getattr(getattr(runtime, "adapter", None), "peer_world_poses", None)
+        if not callable(getter):
+            return []
+        try:
+            return [self._world_to_navigation((x,y)) for x,y in getter()]
+        except Exception:
+            return []
+
     def _configure_navigation_costmap(
         self,
         runtime: Any = None,
@@ -673,7 +717,20 @@ class SimRobot:
             point = local_waypoints.get(canonical_topology_location(zone))
             if point is not None:
                 costmap.paint_disk(point, .85, True)
-        runtime.navigation.configure_costmap(costmap)
+        # Static people are collision geometry in Gazebo but were absent from
+        # the historical topology-only costmap.  Stamp conservative
+        # footprints before planning so A* cannot select a path through them.
+        for x, y, radius in self._static_human_obstacles:
+            costmap.paint_disk(self._world_to_navigation((x, y)), radius, True)
+        # Other racecars are dynamic physical obstacles.  Seed their current
+        # footprints before the first A* plan; live range sensing remains the
+        # final reflex guard while driving.
+        for point in self._peer_navigation_points(runtime):
+            costmap.paint_disk(point, .85, True)
+        runtime.navigation.configure_costmap(
+            costmap,
+            obstacle_provider=lambda: self._peer_navigation_points(runtime),
+        )
 
     def _record_pose(self, pose: List[float], source: str, timestamp: Optional[float]) -> None:
         with self._pose_lock:
@@ -773,8 +830,10 @@ class SimRobot:
             adj.setdefault(u, []).append((v, float(w)))
             adj.setdefault(v, []).append((u, float(w)))
 
+        # A graph-disconnected lease must never silently become a direct
+        # point-to-point drive.  The caller treats this as a blocked route.
         if start_node not in adj or target_node not in adj:
-            return [target_node]
+            return []
 
         q = [(0.0, start_node, [start_node])]
         visited = set()
@@ -855,12 +914,26 @@ class SimRobot:
                 (bool(extra.get("arrival_verified")) and verification_source in {"odometry","ground_truth"})
                 or (bool(extra.get("has_photo")) and verification_source == "gazebo_camera")
             )
+            message_l = message.lower()
+            failure_cause = None
+            if status != "COMPLETED":
+                if "behind the robot" in message_l:
+                    failure_cause = "HEADING_BEHIND"
+                elif "departed the traversable costmap" in message_l:
+                    failure_cause = "LEFT_COSTMAP"
+                elif "no obstacle-free route" in message_l or "no route" in message_l:
+                    failure_cause = "NO_PATH"
+                elif "front obstacle" in message_l or "dynamic obstacle" in message_l:
+                    failure_cause = "OBSTACLE"
+                elif "stale" in message_l or "unavailable" in message_l:
+                    failure_cause = "SENSOR_OR_LOCALIZATION"
             return {
                 "robot_id":self.robot_id,"cmd_id":cmd_id,"status":status,
                 "zone":self.current_zone,"message":message,"timestamp":time.time(),
                 "execution_mode":self.execution_mode,"connection_state":self.refresh_readiness(),
                 "arrival_verified":bool(extra.pop("arrival_verified",False)),
                 "physical_verification":physical_verification,
+                "failure_cause":failure_cause,
                 "distance_travelled_m":round(self.measured_distance_m,3),**snapshot,**extra,
             }
 

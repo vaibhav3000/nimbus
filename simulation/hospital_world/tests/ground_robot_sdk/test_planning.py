@@ -26,6 +26,12 @@ def test_astar_routes_around_inflated_obstacle():
     assert all(not grid.is_occupied(grid.world_to_cell(x,y),dynamic) for x,y in path[1:-1])
 
 
+def test_astar_refuses_an_occupied_goal_instead_of_appending_a_unsafe_final_segment():
+    grid=OccupancyGrid(30,20,.2,-1.,-2.)
+    dynamic=grid.inflated_cells(((4.,0.),),.5)
+    assert AStarPlanner(grid).plan((0.,0.),(4.,0.),dynamic) is None
+
+
 def test_corridor_costmap_constrains_goals_to_validated_space():
     grid=OccupancyGrid.from_corridor_graph(
         {"start":(0.,0.),"corner":(2.,0.),"goal":(2.,2.)},
@@ -99,6 +105,33 @@ def test_navigation_returns_blocked_for_persistent_dynamic_obstacle():
         result=runtime.commands.status(task.command_id)
         assert result.status == CommandStatus.BLOCKED
         assert result.details["arrival_verified"] is False
+        assert adapter.last_command == Twist2D()
+    finally:
+        runtime.close()
+
+
+def test_navigation_stops_when_a_peer_robot_occupies_the_goal():
+    adapter=MockAdapter()
+    runtime=RobotRuntime(
+        adapter,
+        safety_config=SafetyConfig(True,.25),
+        navigation_config=NavigationConfig(
+            enable_path_planning=True,enable_dynamic_avoidance=True,
+            require_obstacle_feedback=True,obstacle_timeout=.3,
+            obstacle_wait_timeout=.05,control_period=.01,
+        ),
+    ).start()
+    runtime.navigation.configure_costmap(
+        OccupancyGrid(40,20,.1,-1.,-1.),
+        obstacle_provider=lambda: ((1.,0.),),
+    )
+    try:
+        now=time.time()
+        adapter.set_odometry(Odometry(Pose2D(),timestamp=now))
+        adapter.set_range_scan(RangeScan((2.,2.,2.),2.,2.,now,-.1,.1,.02,4.))
+        task=runtime.commands.goto(1.,0.,speed=.2)
+        result=runtime.commands.status(task.command_id)
+        assert result.status == CommandStatus.NO_PATH
         assert adapter.last_command == Twist2D()
     finally:
         runtime.close()

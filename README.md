@@ -18,6 +18,9 @@ Then open the deployed requester URL printed by the launcher (or set `NIMBUS_LOC
 `./run_all.sh` auto-selects real Gazebo when `ign` + ROS 2 are present, else the kinematic stand-in
 (same P1 map, same SDK navigation). Force one with `./run_all.sh gazebo` / `./run_all.sh kinematic`.
 Add `--not-quiet` to stream detailed edge-to-robot commands to `logs/edge_*.log`.
+For actual local edge-model inference (never the mock fallback), use
+`NIMBUS_LOCAL_CLOUD=1 ./run_all.sh kinematic --slm-mode ollama`; the launcher requires
+the selected Ollama model (default: `qwen2.5:1.5b`) before starting the edge supervisors.
 
 ## Real Gazebo (Docker image)
 ```bash

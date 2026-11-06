@@ -112,6 +112,11 @@ def test_pack_validation_accepts_a_cluster_whose_store_is_outside_its_area():
 def test_leases_never_exceed_the_slowest_zone_on_p1s_map(sid):
     sc = next(s for s in SIM.scenarios if s["id"] == sid)
     out = run_scenario("hospital_sim", sc)
+    if out.kind != "leased":
+        # A topology destination without a verified physical route must be
+        # rejected rather than assigned a nominal speed limit.
+        assert sid == "T1"
+        return
     assert out.lease["speed_limit"] <= 1.0
     caps = [TOPO.speed_cap(z) for z in out.lease["allowed_zones"]]
     assert out.lease["speed_limit"] == min([SIM.doc["lease"]["speed_limit"], *[c for c in caps if c is not None]])
@@ -136,9 +141,9 @@ def test_a_checkin_that_marks_free_robots_busy_does_not_stop_allocation():
     orch = make_orch(pack=SIM)
     orch.fleet.heartbeat("east-wing", _digest(robot_1={"state": "busy", "zone": "home"}))
     orch.fleet.heartbeat("west-wing", _digest(robot_2={"state": "busy", "zone": "transit"}))
-    prompt = orch.build_context("a wheelchair to ward 3", "task-000001", []).to_prompt()
+    prompt = orch.build_context("a wheelchair to ward 2B", "task-000001", []).to_prompt()
     assert "robot_1=idle" in prompt and "robot_2=idle" in prompt        # busy only when a lease holds the robot
-    assert orch.handle_request(new_task(), "Deliver a wheelchair to ward 3, routine.").kind == "leased"
+    assert orch.handle_request(new_task(), "Deliver a wheelchair to ward 2B, routine.").kind == "leased"
 
 
 def test_the_extraction_task_still_leases_after_such_a_checkin():
@@ -153,6 +158,6 @@ def test_the_extraction_task_still_leases_after_such_a_checkin():
 
 def test_a_robot_that_holds_a_lease_is_shown_busy():
     orch = make_orch(pack=SIM)
-    assert orch.handle_request(new_task(), "Deliver a wheelchair to ward 3, routine.").kind == "leased"
+    assert orch.handle_request(new_task(), "Deliver a wheelchair to ward 2B, routine.").kind == "leased"
     prompt = orch.build_context("another", "task-000002", []).to_prompt()
     assert "=busy" in prompt

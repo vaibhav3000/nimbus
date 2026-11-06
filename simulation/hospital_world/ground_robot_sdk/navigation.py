@@ -45,7 +45,9 @@ class NavigationConfig:
     enable_dynamic_avoidance: bool = True
     path_lookahead: float = 0.40
     replan_interval: float = 0.35
-    dynamic_obstacle_ttl: float = 2.0
+    # A static person or cart must not disappear from the route merely
+    # because it leaves the immediately-forward scan for a moment.
+    dynamic_obstacle_ttl: float = 12.0
     obstacle_wait_timeout: float = 3.0
     avoidance_distance: float = 1.50
     obstacle_inflation: float = 0.85
@@ -80,6 +82,7 @@ class NavigationController:
         self._target: Pose2D | None = None
         self._costmap: OccupancyGrid | None = None
         self._planner: AStarPlanner | None = None
+        self._external_obstacle_provider = None
         self._path: list[tuple[float,float]] = []
         self._path_index = 0
         self._dynamic_cells: dict[tuple[int,int],float] = {}
@@ -127,13 +130,19 @@ class NavigationController:
     def path(self) -> tuple[tuple[float,float], ...]:
         with self._lock: return tuple(self._path)
 
-    def configure_costmap(self, costmap: OccupancyGrid | None) -> None:
-        """Install a startup-local costmap without changing the command API."""
+    def configure_costmap(self, costmap: OccupancyGrid | None, obstacle_provider=None) -> None:
+        """Install a costmap and optional live world-frame obstacle provider.
+
+        The provider must return points in this controller's startup-local
+        frame.  It is used for peer robots whose poses are not represented by
+        the front range scan until they are directly ahead.
+        """
         with self._lock:
             if self._active and self._active.status == CommandStatus.RUNNING:
                 raise RuntimeError("cannot replace the costmap during active navigation")
             self._costmap=costmap.copy() if costmap is not None else None
             self._planner=AStarPlanner(self._costmap) if self._costmap is not None else None
+            self._external_obstacle_provider=obstacle_provider
             self._path=[]; self._path_index=0; self._dynamic_cells.clear()
 
     def goto(self, x: float, y: float, frame="world", speed: float | None = None) -> CommandResult:
@@ -166,9 +175,13 @@ class NavigationController:
                     return self._result("goto",CommandStatus.INVALID_DESTINATION,"goal is outside the configured navigation costmap")
                 if self._costmap.is_occupied(self._costmap.world_to_cell(target.x,target.y)):
                     return self._result("goto",CommandStatus.INVALID_DESTINATION,"goal lies outside the configured traversable corridors")
-                path=self._planner.plan((current.x,current.y),(target.x,target.y))
+                dynamic=self._active_dynamic_cells(time.monotonic())
+                peer_points=self._external_obstacle_points()
+                if peer_points:
+                    dynamic.update(self._costmap.inflated_cells(peer_points,self.config.obstacle_inflation))
+                path=self._planner.plan((current.x,current.y),(target.x,target.y),dynamic)
                 if not path:
-                    return self._result("goto",CommandStatus.NO_PATH,"A* found no traversable path to the goal")
+                    return self._result("goto",CommandStatus.NO_PATH,"A* found no traversable path to the goal (goal may be occupied)")
                 self._path=list(path); self._path_index=1 if len(path)>1 else 0
             else:
                 self._path=[(current.x,current.y),(target.x,target.y)]; self._path_index=1
@@ -282,6 +295,19 @@ class NavigationController:
             for cell in cells: self._dynamic_cells[cell]=deadline
             return changed
 
+    def _external_obstacle_points(self) -> tuple[tuple[float,float], ...]:
+        with self._lock:
+            provider=self._external_obstacle_provider
+        if not callable(provider):
+            return ()
+        try:
+            points=provider() or ()
+            return tuple((float(x),float(y)) for x,y in points if math.isfinite(float(x)) and math.isfinite(float(y)))
+        except Exception:
+            # Loss of optional peer-pose data must not be mistaken for a
+            # clear range scan; the mandatory range watchdog remains active.
+            return ()
+
     def _replan(self, pose: Pose2D, target: Pose2D, now: float, force: bool=False) -> bool:
         with self._lock:
             planner=self._planner
@@ -362,7 +388,9 @@ class NavigationController:
                     scan=self.sensors.get_range_scan()
                     avoidance=self._avoider.evaluate(scan,pose)
                     now=time.monotonic()
-                    changed=self._record_dynamic_obstacles(avoidance.obstacle_points,now) if self.config.enable_dynamic_avoidance else False
+                    peer_points=self._external_obstacle_points()
+                    obstacle_points=avoidance.obstacle_points + peer_points
+                    changed=self._record_dynamic_obstacles(obstacle_points,now) if self.config.enable_dynamic_avoidance else False
                     if changed:
                         with self._lock: self._avoidance_events+=1
                     route_available=True
@@ -428,11 +456,12 @@ class NavigationController:
                 if abs(heading_error) >= self.config.maximum_forward_heading_error:
                     self._fail_and_stop(command_id,"planned bearing is behind the robot; refusing an unsafe forward U-turn",CommandStatus.BLOCKED)
                     return
+                # Retain the short-range reflex while following an A* route:
+                # it helps an Ackermann vehicle negotiate a newly observed
+                # obstacle between replans.  Do not, however, let a noisy
+                # scan steer it to the *opposite* side of the planned bypass.
                 avoidance_bias=avoidance.steering_bias if avoidance else 0.
                 if self._planner and avoidance_bias*heading_error < 0:
-                    # The global path has already selected a collision-free
-                    # side. Do not let noisy five-ray asymmetry counter-steer
-                    # across that planned bypass.
                     avoidance_bias=0.
                 now = time.monotonic()
                 dt = self.config.control_period if previous_control_time is None else max(0.001, now - previous_control_time)

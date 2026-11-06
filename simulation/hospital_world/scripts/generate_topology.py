@@ -14,19 +14,21 @@ TOPOLOGY_DIR = ROOT / "topology"
 # These labels are constrained by observed models / floor geometry.  Descriptive
 # labels ending in "approach" are navigation waypoints, not asserted room names.
 NODES = {
-    "lift_lobby": {"kind": "gate", "area": "north elevator portal lobby", "wing": "shared", "speed_cap": 1.0, "exclusive": True, "reservation_id": "gate:lift_lobby"},
-    "north_hall": {"kind": "corridor", "area": "north central corridor", "wing": "shared", "speed_cap": 1.0},
-    "west_north_gate": {"kind": "gate", "area": "west north room-band doorway", "wing": "west", "speed_cap": 1.0, "exclusive": True, "reservation_id": "gate:west_north_gate"},
-    "east_north_gate": {"kind": "gate", "area": "east north room-band doorway", "wing": "east", "speed_cap": 1.0, "exclusive": True, "reservation_id": "gate:east_north_gate"},
-    "west_waiting_approach": {"kind": "zone", "area": "west waiting seating approach", "wing": "west", "speed_cap": 1.0},
-    "east_waiting_approach": {"kind": "zone", "area": "east waiting seating approach", "wing": "east", "speed_cap": 1.0},
-    "west_mid_hall": {"kind": "corridor", "area": "west central bypass", "wing": "west", "speed_cap": 1.0},
-    "east_mid_hall": {"kind": "corridor", "area": "east central bypass", "wing": "east", "speed_cap": 1.0},
-    "nurse_station_approach": {"kind": "zone", "area": "nurse-station approach", "wing": "shared", "speed_cap": 1.0},
-    "west_south_hall": {"kind": "corridor", "area": "west south corridor", "wing": "west", "speed_cap": 1.0},
-    "east_south_hall": {"kind": "corridor", "area": "east south corridor", "wing": "east", "speed_cap": 1.0},
-    "south_equipment_approach": {"kind": "zone", "area": "south equipment-room approach", "wing": "shared", "speed_cap": 1.0},
-    "south_room_approach": {"kind": "zone", "area": "south central room approach", "wing": "shared", "speed_cap": 1.0},
+    "lift_lobby": {"kind": "gate", "area": "north elevator portal lobby", "wing": "shared", "speed_cap": 0.3, "exclusive": True, "reservation_id": "gate:lift_lobby"},
+    "north_hall": {"kind": "corridor", "area": "north central corridor", "wing": "shared", "speed_cap": 0.5},
+    "west_north_gate": {"kind": "gate", "area": "west north room-band doorway", "wing": "west", "speed_cap": 0.3, "exclusive": True, "reservation_id": "gate:west_north_gate"},
+    "east_north_gate": {"kind": "gate", "area": "east north room-band doorway", "wing": "east", "speed_cap": 0.3, "exclusive": True, "reservation_id": "gate:east_north_gate"},
+    "west_waiting_approach": {"kind": "zone", "area": "west waiting seating approach", "wing": "west", "speed_cap": 0.3},
+    "east_waiting_approach": {"kind": "zone", "area": "east waiting seating approach", "wing": "east", "speed_cap": 0.3},
+    "west_mid_hall": {"kind": "corridor", "area": "west central bypass", "wing": "west", "speed_cap": 0.5},
+    "east_mid_hall": {"kind": "corridor", "area": "east central bypass", "wing": "east", "speed_cap": 0.5},
+    "nurse_station_approach": {"kind": "zone", "area": "nurse-station approach", "wing": "shared", "speed_cap": 0.3},
+    "west_south_hall": {"kind": "corridor", "area": "west south corridor", "wing": "west", "speed_cap": 0.5},
+    "east_south_hall": {"kind": "corridor", "area": "east south corridor", "wing": "east", "speed_cap": 0.5},
+    "south_equipment_approach": {"kind": "zone", "area": "south equipment-room approach", "wing": "shared", "speed_cap": 0.3},
+    "south_room_approach": {"kind": "zone", "area": "south central room approach", "wing": "shared", "speed_cap": 0.3},
+    "east_south_hall_corner": {"kind": "corridor", "area": "east south corner", "wing": "east", "speed_cap": 0.5},
+    "west_south_hall_corner": {"kind": "corridor", "area": "west south corner", "wing": "west", "speed_cap": 0.5},
 }
 
 # x, y world coordinates; all node positions are in accessible circulation area.
@@ -44,6 +46,8 @@ WAYPOINTS = {
     "east_south_hall": [4.5, -8.0],
     "south_equipment_approach": [0.0, -15.0],
     "south_room_approach": [0.0, -28.0],
+    "east_south_hall_corner": [4.5, -15.0],
+    "west_south_hall_corner": [-4.5, -15.0],
 }
 
 EDGE_PAIRS = (
@@ -59,14 +63,15 @@ EDGE_PAIRS = (
     ("east_mid_hall", "nurse_station_approach"),
     ("west_mid_hall", "west_south_hall"),
     ("east_mid_hall", "east_south_hall"),
-    ("west_south_hall", "south_equipment_approach"),
-    ("east_south_hall", "south_equipment_approach"),
-    ("south_equipment_approach", "south_room_approach"),
+    ("west_south_hall", "west_south_hall_corner"),
+    ("west_south_hall_corner", "south_equipment_approach"),
+    ("east_south_hall", "east_south_hall_corner"),
+    ("east_south_hall_corner", "south_equipment_approach"),
 )
 
 GROUPS = {
-    "east": ["east_north_gate", "east_waiting_approach", "east_mid_hall", "east_south_hall"],
-    "west": ["west_north_gate", "west_waiting_approach", "west_mid_hall", "west_south_hall"],
+    "east": ["east_north_gate", "east_waiting_approach", "east_mid_hall", "east_south_hall", "east_south_hall_corner"],
+    "west": ["west_north_gate", "west_waiting_approach", "west_mid_hall", "west_south_hall", "west_south_hall_corner"],
     "shared": ["lift_lobby", "north_hall", "nurse_station_approach", "south_equipment_approach", "south_room_approach"],
 }
 

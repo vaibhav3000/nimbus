@@ -66,15 +66,7 @@
    {
     "say": "Deliver a wheelchair to ward 3, routine.",
     "expect": {
-     "kind": "leased",
-     "lease_priority": "routine",
-     "deadline_minutes": 60,
-     "first_goto": "south_equipment_approach",
-     "last_goto": "south_room_approach",
-     "zones_include": [
-      "south_equipment_approach",
-      "south_room_approach"
-     ]
+     "kind": "rejected"
     }
    }
   ]

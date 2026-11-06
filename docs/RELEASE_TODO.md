@@ -228,35 +228,40 @@ Nothing here is optional and nothing here takes longer than ten minutes.
   *Acceptance:* a return-leg turn completes without an escalation, and no phantom zone appears on
   `/map`. *Violates:* FR-17, and blocks FR-21. **~1–2 h.**
 
-- [ ] **3.2 — Add a terminal state for a failed task.**
-  When `replan` and `reassign` both fail, `cloud/react.py:120-123` logs a row and notifies the
-  operator, then returns. There is no terminal transition — `server.py:36` has
-  `TERMINAL_STATUSES = ("completed", "cancelled", "rejected")` with no failure state — so the task
-  keeps its lease, its robot stays assigned, and reserved stock is never returned
-  (release happens only inside `orchestrator.py:947 cancel()`).
+- [x] **3.2 — ~~Add a terminal state for a failed task.~~ WITHDRAWN — the original finding was wrong.**
 
-  Combined with 3.1, one spurious escalation permanently consumes a robot and a pump, and the demo
-  becomes unrepeatable without wiping `data/`.
+  **Correction (2026-11-06).** Keeping the lease live and alerting the operator when no re-plan is
+  admissible is *designed* behaviour, not a missing transition. Three existing tests pin it:
 
-  - Add a `failed` outcome kind in `orchestrator_types.py`
-  - Handle it in `apply_outcome` (`server.py:136`): close the lease, release reservation and robot,
-    notify the requester
-  - Add `"failed"` to `TERMINAL_STATUSES`
-  - Reuse the body of `cancel()`
+  | Test | Asserts |
+  |---|---|
+  | `test_ms2_handover.py::test_both_gates_closed_gives_a_reason_and_alerts_the_operator_instead_of_looping` | `repo.current(task)["version"] == 1` — lease stays live |
+  | `test_ms2_react.py::test_no_route_left_alerts_the_operator` | `outcome.kind == "replan_failed"`, operator notified |
+  | `test_cloud_api.py::test_replan_with_no_route_is_409_and_keeps_v1` | operator `POST /replan` → 409, lease preserved |
 
-  *Acceptance:* after a failed re-plan, `GET /fleet` shows the robot idle and stock restored.
-  *Violates:* FR-16. **~1 h.**
+  The intended flow is: cloud cannot re-plan → **alert the operator** (PRD Table 2, UNEXPECTED
+  EVENT → "alert the user") → operator pauses or cancels on the console (FR-22) → `orch.cancel()`
+  releases the robot, the zones and the reserved item. Auto-terminating removes that decision from
+  the human, which is the wrong default for a hospital.
 
-- [ ] **3.3 — Authenticate the deployed read routes.**
-  `GET /fleet` and `GET /tasks` on the deployed endpoint return full fleet state, task specs, lease
-  contents and requester text to an anonymous caller. Auth exists (`server.py:267`) but is opt-in
-  via `NIMBUS_EDGE_TOKEN` and the deployment has not set it.
-  Data is synthetic, so this is a requirements miss, not an incident — but NFR-5 says
-  "authenticated access".
-  *Acceptance:* unauthenticated `GET /tasks` returns 401, **or** the exposure is stated explicitly
-  in the E6 IAM audit. **~20 min.**
+  `replan_failed` also serves two different callers, which the withdrawn fix conflated: an
+  operator's `POST /tasks/{id}/replan` is a *question* ("can you route around this?") and a "no"
+  must keep the robot working, while an escalation where replan *and* reassign both failed is the
+  plan dying under the robot. Any future change here must preserve both.
 
----
+  An attempt at this was written, committed in `3810807` before verification, backed out, and
+  replaced with `tests/test_failed_replan_lifecycle.py`, which pins the intended contract from the
+  `apply_outcome` side — the gap that let the bad change pass its own tests.
+
+- [ ] **3.2b — Decide whether operator-pending failures need a backstop.** *(the real, narrower gap)*
+  Nothing bounds how long a task sits waiting for an operator. If nobody watches the console, the
+  robot and the reserved item are held indefinitely: there is no timeout, and `replan_failed` is
+  not in `TERMINAL_STATUSES` — correctly so, per 3.2 above.
+
+  This is a **product decision, not a code inference**: auto-cancel after N minutes? An operator
+  SLA with a louder alert? Leave it unbounded because a human is always on console during a
+  demo? Whichever you choose, say so in the PRD rather than leaving it implicit.
+  *Owner:* team. **~15 min to decide, ~45 min to implement if a timeout is wanted.**
 
 ## Phase 4 — Earn the acceptance evidence
 

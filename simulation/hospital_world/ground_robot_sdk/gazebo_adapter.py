@@ -1,6 +1,6 @@
 """ROS 2 / Gazebo Fortress implementation of RobotAdapter."""
 from __future__ import annotations
-import math, os, signal, subprocess, threading
+import math, os, signal, subprocess, threading, time
 from .adapter import RobotAdapter
 from .models import CameraFrame, GroundTruthPose, Odometry, Pose2D, RangeScan, Twist2D
 from .namespaces import RobotIdentity
@@ -15,6 +15,19 @@ class GazeboAdapter(RobotAdapter):
         self.CMD_VEL=self.topics.cmd_vel; self.ODOM=self.topics.odom; self.SCAN=self.topics.range_scan; self.IMAGE=self.topics.camera_image; self.POSE=self.topics.pose
         self.processes=[]; self.bridge_processes={}; self.node=self.publisher=self.executor=self.thread=None; self.started=False; self._rclpy_registered=False; self._lock=threading.RLock()
         self.middleware_ready=False
+        self._peer_poses: dict[str, tuple[float, float, float]] = {}
+
+    def peer_world_poses(self, max_age_s: float = 1.0) -> tuple[tuple[float, float], ...]:
+        """Fresh world-frame positions of other Gazebo racecars.
+
+        This is deliberately exposed as geometry only: the navigation layer
+        uses it as an occupied footprint and never assigns authority to other
+        robots' tasks.
+        """
+        now=time.time()
+        with self._lock:
+            return tuple((x,y) for name,(x,y,stamp) in self._peer_poses.items()
+                         if name != self.identity.robot_name and now-stamp <= max_age_s)
     def start(self):
         import rclpy
         from geometry_msgs.msg import Twist
@@ -103,6 +116,20 @@ class GazeboAdapter(RobotAdapter):
         candidates=list(msg.transforms)
         def child_name(transform):
             return (transform.child_frame_id or "").lstrip("/")
+        # Cache only named racecar model poses for peer-occupancy avoidance.
+        # Never fall back to an arbitrary link for the robot's own ground
+        # truth: a missing exact model transform remains unavailable.
+        wall_now=time.time()
+        peers={}
+        for candidate in candidates:
+            name=child_name(candidate)
+            if not name.startswith("robot_"):
+                continue
+            p=candidate.transform.translation
+            if math.isfinite(float(p.x)) and math.isfinite(float(p.y)):
+                peers[name]=(float(p.x),float(p.y),wall_now)
+        with self._lock:
+            self._peer_poses=peers
         # Never fall back to an arbitrary link or another model.  A missing
         # exact model transform means ground truth is unavailable.
         preferred=[t for t in candidates if child_name(t) == self.identity.robot_name]

@@ -45,6 +45,8 @@ def main():
     parser.add_argument("--gazebo-validation",choices=["odometry","ground_truth"],default="odometry",help="Final-arrival validation source for the sim backend")
     parser.add_argument("--sim-mode", choices=["auto", "gazebo", "kinematic"], default="auto", help="sim backend only: gazebo (live ROS 2 + Gazebo, fails closed), kinematic (P1's SDK kinematic stand-in, no Gazebo), auto (gazebo if rclpy importable, else kinematic)")
     parser.add_argument("--system-mode", choices=["C1", "C2", "C3"], default="C1", help="System mode: C1 (Edge SLM), C2 (Cloud-Only Relay), C3 (Deterministic Rules)")
+    parser.add_argument("--slm-mode", choices=["auto", "ollama", "llama_cpp", "mock", "rules_only"], default=os.environ.get("NIMBUS_SLM_MODE", "auto"), help="Tactical decision engine. Use ollama for a real local model; auto may fall back to mock.")
+    parser.add_argument("--slm-model", default=os.environ.get("NIMBUS_SLM_MODEL", "qwen2.5:1.5b"), help="Model name for ollama/llama_cpp mode")
     parser.add_argument("--token", default=None, help="Nimbus edge authentication token (NFR-5)")
     parser.add_argument("--quiet", action="store_true", help="Suppress detailed per-step execution logs")
     parser.add_argument("--once", action="store_true", help="Poll once and exit")
@@ -58,7 +60,8 @@ def main():
         cluster_id=args.cluster,
         cloud_url=args.cloud_url,
         db_path=db_path,
-        slm_mode="auto",
+        slm_mode=args.slm_mode,
+        slm_model=args.slm_model,
         topology_file=args.topology,
         waypoints_file=args.waypoints,
         verbose=verbose_mode,
