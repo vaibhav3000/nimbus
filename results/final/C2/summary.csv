@@ -1,3 +1,0 @@
-part,n,correct,effect_checked,effect_correct,source,model,shown_on_map,shown_within_5_min,map_p50_s,map_p95_s,next_request_checked,next_request_avoids_zone
-A rules,10,10,7,7,real_bedrock,apac.amazon.nova-lite-v1:0,,,,,,
-B map,20,,,,real_bedrock,,20,20,0.021,0.057,20,20
