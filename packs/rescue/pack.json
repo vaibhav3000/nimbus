@@ -68,7 +68,7 @@
   },
   "task_templates": {
     "delivery": [
-      {"cmd": "go_to", "params": {"to": "{source}", "purpose": "load"}},
+      {"cmd": "go_to", "params": {"to": "{source}", "via": "{approach}", "purpose": "load"}},
       {"cmd": "go_to", "params": {"to": "{destination}", "via": "{route}"}},
       {"cmd": "report", "params": {}}
     ],

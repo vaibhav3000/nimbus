@@ -94,7 +94,7 @@
   },
   "task_templates": {
     "delivery": [
-      {"cmd": "go_to", "params": {"to": "{source}", "purpose": "pickup"}},
+      {"cmd": "go_to", "params": {"to": "{source}", "via": "{approach}", "purpose": "pickup"}},
       {"cmd": "wait", "params": {"seconds": 30, "reason": "load"}},
       {"cmd": "go_to", "params": {"to": "{destination}", "via": "{route}"}},
       {"cmd": "beep", "params": {}},

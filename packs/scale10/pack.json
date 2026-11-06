@@ -277,9 +277,10 @@
  "task_templates": {
   "delivery": [
    {
-    "cmd": "go_to",
-    "params": {
+     "cmd": "go_to",
+     "params": {
      "to": "{source}",
+     "via": "{approach}",
      "purpose": "pickup"
     }
    },

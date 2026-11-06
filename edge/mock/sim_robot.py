@@ -169,6 +169,10 @@ FALLBACK_TOPOLOGY_WAYPOINTS = {
     "nurse_station_approach": [0.0, 5.0],
     "west_south_hall": [-4.5, -8.0],
     "east_south_hall": [4.5, -8.0],
+    # Corners are graph nodes, not optional visual details: omitting them
+    # makes an East-only route collapse into an invalid diagonal to the store.
+    "west_south_hall_corner": [-4.5, -15.0],
+    "east_south_hall_corner": [4.5, -15.0],
     "south_equipment_approach": [0.0, -15.0],
     "south_room_approach": [0.0, -28.0],
     "central-supply": [0.0, 0.0],
@@ -613,14 +617,44 @@ class SimRobot:
         c,s=math.cos(syaw),math.sin(syaw)
         return c*dx+s*dy,-s*dx+c*dy
 
-    def _configure_navigation_costmap(self, runtime: Any = None) -> None:
+    def _configure_navigation_costmap(self, runtime: Any = None, allowed_zones: Optional[List[str]] = None) -> None:
         runtime=runtime or self.runtime
         if not runtime or not self.topology_edges: return
-        node_names={str(edge[0]) for edge in self.topology_edges}|{str(edge[1]) for edge in self.topology_edges}
+        allowed = None
+        if allowed_zones:
+            allowed = {canonical_topology_location(zone) for zone in allowed_zones}
+            # A robot may start on a shared approach node.  It is safe to
+            # leave that node only through an edge whose other endpoint is in
+            # the lease, never through an arbitrary wing.
+            allowed.add(canonical_topology_location(self.current_zone))
+        edges = [
+            edge for edge in self.topology_edges
+            if allowed is None or (str(edge[0]) in allowed and str(edge[1]) in allowed)
+        ]
+        if not edges:
+            return
+        node_names={str(edge[0]) for edge in edges}|{str(edge[1]) for edge in edges}
         local_waypoints={name:self._world_to_navigation(tuple(self.waypoints[name][:2])) for name in node_names if name in self.waypoints}
+        # R2 is physically spawned on the shared approach between named graph
+        # nodes.  Its fleet state correctly identifies the next usable node
+        # (``current_zone``), but a fenced graph otherwise has no cell that
+        # contains its measured pose.  Add one ephemeral connector only to
+        # that already-authorised node.  It makes the approach traversable
+        # without restoring unleased West-wing corridors to the costmap.
+        current_node = canonical_topology_location(self.current_zone)
+        if allowed is not None and current_node in allowed and current_node in local_waypoints:
+            with self._pose_lock:
+                current_pose = tuple(self.pose[:2])
+            virtual_node = "__current_robot_pose__"
+            local_waypoints[virtual_node] = self._world_to_navigation(current_pose)
+            endpoint = self.waypoints.get(current_node)
+            if endpoint:
+                edges.append((virtual_node, current_node, math.hypot(
+                    current_pose[0] - endpoint[0], current_pose[1] - endpoint[1]
+                )))
         if len(local_waypoints) < 2: return
         costmap=OccupancyGrid.from_corridor_graph(
-            local_waypoints,self.topology_edges,
+            local_waypoints,edges,
             CostmapConfig(resolution=.20,corridor_width=2.0,robot_radius=.28,margin=1.0,junction_radius=2.0),
         )
         runtime.navigation.configure_costmap(costmap)
@@ -672,7 +706,7 @@ class SimRobot:
     def get_status(self) -> Dict[str, Any]:
         return {"robot_id":self.robot_id,"current_cmd_id":self.current_cmd_id,"status":self.status,"zone":self.current_zone,"battery_pct":self.battery_pct,"connection_state":self.refresh_readiness(),"execution_mode":self.execution_mode,**self.pose_snapshot(),"timestamp":time.time()}
 
-    def _find_route(self, start_zone: str, target_zone: str) -> List[str]:
+    def _find_route(self, start_zone: str, target_zone: str, allowed_zones: Optional[List[str]] = None) -> List[str]:
         """Calculates collision-free topology corridor waypoints between two nodes."""
         lookup_start = canonical_topology_location(start_zone)
         lookup_target = canonical_topology_location(target_zone)
@@ -692,8 +726,19 @@ class SimRobot:
         if start_node == target_node or not self.topology_edges:
             return [target_node]
 
+        allowed = None
+        if allowed_zones:
+            allowed = {canonical_topology_location(zone) for zone in allowed_zones}
+            # The start is permitted only as the point from which the robot
+            # exits into the leased topology; no other unleased node is added.
+            allowed.add(start_node)
+            if target_node not in allowed:
+                return []
+
         adj: Dict[str, List[Tuple[str, float]]] = {}
         for u, v, w in self.topology_edges:
+            if allowed is not None and (u not in allowed or v not in allowed):
+                continue
             adj.setdefault(u, []).append((v, float(w)))
             adj.setdefault(v, []).append((u, float(w)))
 
@@ -841,6 +886,20 @@ class SimRobot:
             except (TypeError,ValueError):
                 return finish("INVALID_DESTINATION",f"Invalid destination coordinates for {target_name!r}")
 
+            allowed_zones = params.get("allowed_zones")
+            forbidden_zones = {canonical_topology_location(zone) for zone in params.get("forbidden_zones", [])}
+            if allowed_zones is not None and not isinstance(allowed_zones, list):
+                return finish("INVALID_DESTINATION", "allowed_zones must be a list when supplied")
+            allowed_nodes = ({canonical_topology_location(zone) for zone in allowed_zones}
+                             if allowed_zones else None)
+            if allowed_nodes is not None and canonical_topology_location(target_name) not in allowed_nodes:
+                return finish("INVALID_DESTINATION", f"Lease route target {target_name!r} is outside allowed_zones")
+
+            # Fence the SDK planner as well as the high-level route.  Without
+            # this, A* can choose an equally short West-wing corridor between
+            # two valid East-wing waypoints.
+            self._configure_navigation_costmap(allowed_zones=allowed_zones)
+
             # 2. Check injected obstacles for tactical autonomy testing
             blocked_zone = None
             if target_name in self.injected_obstacles:
@@ -876,7 +935,24 @@ class SimRobot:
             # 3. Expand corridor route using Dijkstra topology graph
             waypoints_to_visit = []
             if target_name:
-                route = self._find_route(self.current_zone, target_name)
+                supplied_via = params.get("via")
+                if supplied_via is not None and not isinstance(supplied_via, list):
+                    return finish("INVALID_DESTINATION", "Route 'via' must be a list")
+                if supplied_via:
+                    route = [canonical_topology_location(node) for node in supplied_via]
+                    start_node = canonical_topology_location(self.current_zone)
+                    if not route or route[0] != start_node:
+                        route.insert(0, start_node)
+                    target_node = canonical_topology_location(target_name)
+                    if route[-1] != target_node:
+                        route.append(target_node)
+                else:
+                    route = self._find_route(self.current_zone, target_name, allowed_zones=allowed_zones)
+                if not route:
+                    return finish("INVALID_DESTINATION", f"No route to {target_name!r} exists inside allowed_zones")
+                illegal = [node for node in route[1:] if (allowed_nodes is not None and node not in allowed_nodes) or node in forbidden_zones]
+                if illegal:
+                    return finish("INVALID_DESTINATION", f"Lease route leaves permitted zones via {illegal[0]!r}")
                 for wp_node in route[1:]:
                     wp_xy = None
                     if HAS_SDK:

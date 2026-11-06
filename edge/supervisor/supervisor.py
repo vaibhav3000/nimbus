@@ -1360,6 +1360,13 @@ class EdgeSupervisor:
                 if physical_node != requested_location_id:
                     params["location_id"] = requested_location_id
                     params["to"] = physical_node
+            # Canonicalise every route waypoint too.  The simulator receives
+            # physical topology node names only; otherwise it can fall back to
+            # its unconstrained shortest-path planner for an alias.
+            if isinstance(params.get("via"), list):
+                params["via"] = [canonical_topology_location(zone) for zone in params["via"]]
+            if isinstance(params.get("waypoints"), list):
+                params["waypoints"] = [canonical_topology_location(zone) for zone in params["waypoints"]]
 
             canonical_subtask = dict(subtask)
             canonical_subtask["params"] = params
@@ -1446,6 +1453,11 @@ class EdgeSupervisor:
                 # topology coordinates. SimRobot performs the sole conversion
                 # from this frame into the SDK's startup-local odom frame.
                 params.setdefault("target_frame", "gazebo/world")
+                # This is execution metadata, not a cloud-controlled
+                # expansion of authority.  SimRobot uses it to fence both its
+                # topology route and SDK costmap, including intermediate nodes.
+                params["allowed_zones"] = list(allowed_zones)
+                params["forbidden_zones"] = list(forbidden_zones)
 
             robot = self.robots.get(robot_id)
             if not robot:

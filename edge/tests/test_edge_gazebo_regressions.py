@@ -96,6 +96,28 @@ def test_unknown_destination_is_rejected_without_motion():
     finally: robot.close()
 
 
+def test_east_pickup_route_cannot_detour_through_west_wing():
+    """FR-5: the SDK costmap and topology route both honour lease zones."""
+    robot=SimRobot("R2",use_gazebo=False,sensor_timeout=.15)
+    allowed=["nurse_station_approach", "east_mid_hall", "east_south_hall",
+             "east_south_hall_corner", "south_equipment_approach"]
+    try:
+        assert robot._find_route("nurse_station_approach", "south_equipment_approach", allowed) == [
+            "nurse_station_approach", "east_mid_hall", "east_south_hall",
+            "east_south_hall_corner", "south_equipment_approach",
+        ]
+        before=list(robot.pose)
+        result=robot.execute_command({
+            "cmd_id":"west-detour", "action":"go_to",
+            "params":{"to":"south_equipment_approach", "allowed_zones":allowed,
+                      "via":["nurse_station_approach", "west_mid_hall", "south_equipment_approach"]},
+        })
+        assert result["status"] == "INVALID_DESTINATION"
+        assert "west_mid_hall" in result["message"]
+        assert robot.pose == before
+    finally: robot.close()
+
+
 def test_coordinate_outside_corridor_costmap_is_rejected():
     robot=SimRobot("R1",use_gazebo=False,sensor_timeout=.15)
     try:

@@ -34,6 +34,8 @@ def test_sc1_context_makes_the_model_ask_then_lease_urgent_to_east():
     lease = out.lease
     assert contracts.validate_document("lease", lease) == []
     assert (lease["cluster_id"], lease["priority"], lease["version"]) == ("east-wing", "urgent", 1)
+    assert isinstance(lease["task_sequence"][0]["params"]["via"], list)
+    assert set(lease["task_sequence"][0]["params"]["via"]) <= set(lease["allowed_zones"])
     assert lease["task_sequence"][2]["params"]["to"] == "2B-12"
     assert {"E3", "E4"} <= set(lease["allowed_zones"])  # in-lease detour exists
     assert out.spec["item"] == "infusion_pump_paediatric"
