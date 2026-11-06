@@ -252,7 +252,7 @@ They only use the HTTP API above.
 
 ## 8. AWS deployment: `infra/terraform/`
 
-`main.tf`, `p3.tf`, `variables.tf` and `outputs.tf` describe the following:
+`main.tf`, `cloud.tf`, `variables.tf` and `outputs.tf` describe the following:
 
 | Component | Used for |
 | --- | --- |
@@ -314,15 +314,15 @@ cd simulation/hospital_world && python3 -m unittest discover -s tests -v
 
 ## 11. Experiments
 
-`experiments/p3/` holds the cloud experiments C1 to C9; [experiments/p3/README.md](experiments/p3/README.md) lists
+`experiments/cloud/` holds the cloud experiments C1 to C9; [experiments/cloud/README.md](experiments/cloud/README.md) lists
 them with commands.
 
-The robot and edge experiments (R1 to R10, owners P1 and P2) and the network and infrastructure experiments (N1 to N10,
-owner P4) are to be added by their owners. They can reuse the same harness (`experiments/p3/lib.py`: local or
-deployed cloud, simulated edges, results folders) and the same results-folder layout, so `report.py` can collect them.
-Their result rows in the README are placeholders until then.
+The robot and edge experiments (R1 to R10) and the network and infrastructure experiments (N1 to N10) are still to
+be added. They can reuse `ResultDir` from `experiments/cloud/lib.py` so their folders have the same layout and
+`report.py` collects them. The format every results folder must follow is in
+[docs/RESULTS_GUIDE.md](docs/RESULTS_GUIDE.md). Their result rows in the README are placeholders until then.
 
-- **Harness:** `experiments/p3/lib.py`.
+- **Harness:** `experiments/cloud/lib.py`.
   - `start_local` starts `server.py` on a free port with an empty data folder.
   - `open_target` opens a deployed URL instead.
   - `Edges` simulates edge clusters that only act on the experiment's own tasks.
@@ -332,7 +332,7 @@ Their result rows in the README are placeholders until then.
   - every number comes from that run's raw records
   - every result says where it came from (`real_bedrock`, `mock_llm`, `measured`)
   - every task created on a shared deployment is cancelled at the end
-- **Summary table:** `python experiments/p3/report.py` rebuilds `results/final/P3_RESULTS.md`.
+- **Summary table:** `python experiments/cloud/report.py` rebuilds `results/final/RESULTS.md`.
 - **Older runners:** `scripts/` holds the earlier E1 to E7 runners, audits (`audit_iam.py`, `audit_data.py`) and
   tools: `trace.py` prints a task's full ladder of messages and model calls; `replay_check.py` reruns from a seed and
   diffs the logs.
@@ -367,4 +367,4 @@ Their result rows in the README are placeholders until then.
   C2 mode still forwards events as `UNEXPECTED_EVENT` instead of calling it per step.
 - **Deployed experiments.** The deployment is shared. Experiments default to a local cloud. C8 (load) needs the
   deployment, and refuses to start while real edges are connected. An interrupted C8 run on 6 Nov left queued test
-  tasks; `experiments/p3/cleanup_deployed_c8.py` cancels exactly those.
+  tasks; `experiments/cloud/cleanup_deployed_c8.py` cancels exactly those.

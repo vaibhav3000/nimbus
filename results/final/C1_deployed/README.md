@@ -5,7 +5,7 @@
 - **Measured:** bedrock: field accuracy 94.0% (95% CI 92.2% to 95.4%), clarification recall 72.6%, precision 92.4%, 300 request decisions
 - **Verdict:** PASS
 - **Source of numbers:** real_bedrock (deployed, model apac.amazon.nova-lite-v1:0)
-- **Command:** `python experiments/p3/c1_understanding.py`
+- **Command:** `python experiments/cloud/c1_understanding.py`
 - **Commit:** 81f0b93-dirty, run 2026-11-06T14:05:10Z to 2026-11-06T14:42:43Z
 
 ## Plots
@@ -19,8 +19,8 @@
 - This run is on the DEPLOYED cloud, i.e. the cloud code from before two fixes this experiment led to (commit after this run):
   the cloud now asks when the requester named no destination (the model had filled one in), and priority follows the
   requester's wording rather than a stated deadline. Re-scoring these same 300 recorded Bedrock answers with the two fixes
-  (scripts in experiments/p3/c1_whatif.py) gives field accuracy 96.3% (95% CI 94.8 to 97.4%), clarification recall 92.9%, precision 94.0% (whatif.json).
-  The live re-run on the fixed code is `python experiments/p3/c1_understanding.py --target local-bedrock` (results/final/C1).
+  (scripts in experiments/cloud/c1_whatif.py) gives field accuracy 96.3% (95% CI 94.8 to 97.4%), clarification recall 92.9%, precision 94.0% (whatif.json).
+  The live re-run on the fixed code is `python experiments/cloud/c1_understanding.py --target local-bedrock` (results/final/C1).
 - The paediatric-pump misses (req-17, para-43) are a deployment artifact: SOP-PAED-01 asks at allocation time, and with
   both clusters down during this run the requests were queued before reaching that check.
 

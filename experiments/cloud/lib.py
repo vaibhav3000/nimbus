@@ -1,4 +1,4 @@
-"""Shared harness for the P3 (cloud) experiments C1-C9.
+"""Shared harness for the cloud experiments C1-C9.
 
 Every experiment talks to the cloud over its public HTTP API, so the same code runs against
   * the deployed cloud (real Amazon Bedrock):   --target https://<api-id>.execute-api.ap-south-1.amazonaws.com
@@ -332,7 +332,7 @@ def git_commit() -> str:
 
 
 class ResultDir:
-    def __init__(self, exp_id: str, title: str, target: Target | None, argv: list[str] | None = None):
+    def __init__(self, exp_id: str, title: str, target: Target | None, argv: list[str] | None = None, prd: str | None = None):
         self.id, self.title = exp_id, title
         self.dir = RESULTS / exp_id
         (self.dir / "raw").mkdir(parents=True, exist_ok=True)
@@ -341,6 +341,8 @@ class ResultDir:
         self.env = {"experiment": exp_id, "title": title, "git_commit": git_commit(),
                     "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "host": platform.node(),
                     "python": platform.python_version(), "platform": platform.platform(), "command": self.command}
+        if prd:
+            self.env["prd"] = prd
         if target is not None:
             self.env.update(target.info())
         self._raw: dict[str, Path] = {}

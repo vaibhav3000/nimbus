@@ -15,7 +15,7 @@ Checks (FR-14): queue inversions = a routine task given a robot from the queue w
 cluster could serve was waiting (must be 0 for ours). Also reported: waiting time and deadline-miss ratio by class,
 and T8 (3 simultaneous requests, 2 robots).
 
-    python experiments/p3/c5_scheduling.py --seeds 10
+    python experiments/cloud/c5_scheduling.py --seeds 10
 """
 
 from __future__ import annotations

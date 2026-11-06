@@ -5,7 +5,7 @@ Only tasks that (a) lie in the interrupted C8 run's id range (task-000649 to tas
 asks before cancelling.
 Cancelling frees the robot and returns the reserved item (stock).
 
-    python experiments/p3/cleanup_deployed_c8.py
+    python experiments/cloud/cleanup_deployed_c8.py
 """
 
 from __future__ import annotations

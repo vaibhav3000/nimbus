@@ -5,7 +5,7 @@
 - **Measured:** rules applied correctly 10/10 (rule-based-stand-in); effect on deliveries correct 7/7; map changes shown within 5 min 21/21 (p95 0.03 s); next request to the same place avoided the closed zone 21/21
 - **Verdict:** PASS
 - **Source of numbers:** mock_llm (in-process, model n/a)
-- **Command:** `python experiments/p3/c2_rules_map.py --target local --events 21`
+- **Command:** `python experiments/cloud/c2_rules_map.py --target local --events 21`
 - **Commit:** 81f0b93-dirty, run 2026-11-06T14:50:22Z to 2026-11-06T14:55:49Z
 
 ## Plots

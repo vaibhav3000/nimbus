@@ -5,7 +5,7 @@
 - **Measured:** part A: 0/180 invalid proposals approved (Wilson 95% upper bound 2.1%), 180/180 vetoed citing the expected rule, 0/20 valid controls wrongly vetoed; part B: 0 invalid leases from 60 adversarial requests, fallback used 54/54 times it was required, at most 2 model proposals per request
 - **Verdict:** PASS
 - **Source of numbers:** measured (in-process cloud (pack hospital_sim6), model adversary (attacker))
-- **Command:** `python experiments/p3/c4_checker_attack.py`
+- **Command:** `python experiments/cloud/c4_checker_attack.py`
 - **Commit:** 81f0b93-dirty, run 2026-11-06T14:50:05Z to 2026-11-06T14:50:22Z
 
 ## Plots

@@ -5,7 +5,7 @@
 - **Measured:** decision p95 0.02 s, p50 0.02 s over 32 events; 18 new lease versions, 18/18 avoid the closed zone or failed robot; outcomes {'rerouted lease': 10, 'operator alerted (no route left)': 14, 'another robot took over': 8}
 - **Verdict:** PASS
 - **Source of numbers:** mock_llm (local-C1, model rule-based-stand-in)
-- **Command:** `python experiments/p3/c6_replan.py --target local`
+- **Command:** `python experiments/cloud/c6_replan.py --target local`
 - **Commit:** 81f0b93-dirty, run 2026-11-06T14:55:49Z to 2026-11-06T14:56:40Z
 
 ## Plots

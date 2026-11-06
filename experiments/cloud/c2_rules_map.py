@@ -8,12 +8,12 @@ Runs in-process so a restriction can be pre-declared; model = stand-in by defaul
 (needs AWS credentials).
 
 Part B, shared map: 20 scripted edge reports (a corridor blocked or a door closed on a live lease, via
-experiments/p3/scenarios.py) against a running cloud. Measured: time until /map.json shows the closure, and whether a
+experiments/cloud/scenarios.py) against a running cloud. Measured: time until /map.json shows the closure, and whether a
 fresh request to the same place gets a lease that avoids the zone (or waits rather than routing through it).
 
-    python experiments/p3/c2_rules_map.py --target local                      # part A stand-in, part B local
-    python experiments/p3/c2_rules_map.py --target deployed --skip-rules      # part B on the deployed cloud
-    python experiments/p3/c2_rules_map.py --llm bedrock --skip-map            # part A on real Bedrock (laptop)
+    python experiments/cloud/c2_rules_map.py --target local                      # part A stand-in, part B local
+    python experiments/cloud/c2_rules_map.py --target deployed --skip-rules      # part B on the deployed cloud
+    python experiments/cloud/c2_rules_map.py --llm bedrock --skip-map            # part A on real Bedrock (laptop)
 """
 
 from __future__ import annotations

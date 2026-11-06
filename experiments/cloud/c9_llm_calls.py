@@ -13,8 +13,8 @@ Counted per task from the cloud's own trace (/tasks/{id}/trace, kind=llm): calls
 react, step, result) and input/output tokens. Call COUNTS are protocol behaviour; token sizes are real only on a real
 model (with the stand-in they are estimates and labelled so).
 
-    python experiments/p3/c9_llm_calls.py --target local            # stand-in (counts real, tokens estimated)
-    python experiments/p3/c9_llm_calls.py --target local-bedrock    # real Bedrock tokens (needs AWS credentials)
+    python experiments/cloud/c9_llm_calls.py --target local            # stand-in (counts real, tokens estimated)
+    python experiments/cloud/c9_llm_calls.py --target local-bedrock    # real Bedrock tokens (needs AWS credentials)
 """
 
 from __future__ import annotations
@@ -192,7 +192,7 @@ def main(argv=None) -> int:
               measured=(f"calls per task C1 {c1:.2f}, C2 {c2:.2f}, C3 {per_task['all'].get('C3', 0):.2f}; C1/C2 = {ratio:.1%}"
                         if ratio is not None else "no data"),
               notes=["Call counts come from the cloud's trace of each task; the simulated edge only decides WHEN to call (per protocol), never what the model answers.",
-                     "C2's relay here is the cloud's real POST /relay/decide; the P2 edge does not call it yet, so this is the C2 protocol as specified, driven by the harness.",
+                     "C2's relay here is the cloud's real POST /relay/decide; the edge supervisor does not call it yet, so this is the C2 protocol as specified, driven by the harness.",
                      "Token counts are estimates unless the run used a real model (see tokens_estimated)."],
               plots=[name])
     return 0

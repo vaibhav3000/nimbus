@@ -5,7 +5,7 @@ grounding that the cloud now does after the model (cloud/orchestrator.py: a dest
 words, else ask; priority follows the requester's words; an unstated deadline is the priority's default) shows what the
 same answers would score today. Writes whatif.json next to the run.
 
-    python experiments/p3/c1_whatif.py results/final/C1_deployed
+    python experiments/cloud/c1_whatif.py results/final/C1_deployed
 """
 
 from __future__ import annotations

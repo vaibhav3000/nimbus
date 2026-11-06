@@ -1,13 +1,13 @@
 """C6 - Re-plan and hand-over latency (FR-16, T5).
 
 30 unexpected events on a good network (a blocked corridor, a closed door, a robot drive fault; 10 each), each on a
-live lease held by a simulated edge (experiments/p3/scenarios.py). For each: the cloud's decision time (POST
+live lease held by a simulated edge (experiments/cloud/scenarios.py). For each: the cloud's decision time (POST
 /escalations round trip, including the model call), the time until the edge sees the new lease version, which action
 the cloud took, and whether the new plan avoids the closed zone or the failed robot. The model's share of the decision
 time comes from the task's trace.
 
-    python experiments/p3/c6_replan.py --target deployed      # real Bedrock (run when nothing else uses the deployment)
-    python experiments/p3/c6_replan.py --target local         # stand-in model
+    python experiments/cloud/c6_replan.py --target deployed      # real Bedrock (run when nothing else uses the deployment)
+    python experiments/cloud/c6_replan.py --target local         # stand-in model
 """
 
 from __future__ import annotations

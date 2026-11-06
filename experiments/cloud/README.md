@@ -1,10 +1,10 @@
-# P3 (cloud) experiments C1 to C9
+# Cloud experiments C1 to C9
 
 Every experiment drives the cloud through its public HTTP API (or, where state must be set up directly, the real cloud
 code in-process) and writes `results/final/<ID>/` with `raw/` (one line per trial), `summary.csv`, `plots/`, `env.json`
 and a `README.md` with the claim, the PRD pass bar, the measured value and PASS/FAIL. Nothing is hard-coded: every
-number is computed from the raw records of that run. `python experiments/p3/report.py` rebuilds
-`results/final/P3_RESULTS.md` from all folders.
+number is computed from the raw records of that run. `python experiments/cloud/report.py` rebuilds
+`results/final/RESULTS.md` from all folders.
 
 ## Where the cloud runs (`--target`)
 
@@ -35,43 +35,43 @@ number is computed from the raw records of that run. `python experiments/p3/repo
 ## Run everything
 
 ```bash
-python experiments/p3/c4_checker_attack.py
+python experiments/cloud/c4_checker_attack.py
 ```
 
 ```bash
-python experiments/p3/c5_scheduling.py --seeds 10 --loads 0.3 0.5 0.7 0.9 1.1 1.3
+python experiments/cloud/c5_scheduling.py --seeds 10 --loads 0.3 0.5 0.7 0.9 1.1 1.3
 ```
 
 ```bash
-python experiments/p3/c1_understanding.py --target local-bedrock
+python experiments/cloud/c1_understanding.py --target local-bedrock
 ```
 
 ```bash
-python experiments/p3/c2_rules_map.py --target local-bedrock --llm bedrock
+python experiments/cloud/c2_rules_map.py --target local-bedrock --llm bedrock
 ```
 
 ```bash
-python experiments/p3/c3_memory.py --target local-bedrock
+python experiments/cloud/c3_memory.py --target local-bedrock
 ```
 
 ```bash
-python experiments/p3/c6_replan.py --target local-bedrock
+python experiments/cloud/c6_replan.py --target local-bedrock
 ```
 
 ```bash
-python experiments/p3/c7_bedrock_outage.py --target local-bedrock
+python experiments/cloud/c7_bedrock_outage.py --target local-bedrock
 ```
 
 ```bash
-python experiments/p3/c9_llm_calls.py --target local-bedrock --repeats 5
+python experiments/cloud/c9_llm_calls.py --target local-bedrock --repeats 5
 ```
 
 ```bash
-python experiments/p3/c8_load.py --target deployed
+python experiments/cloud/c8_load.py --target deployed
 ```
 
 ```bash
-python experiments/p3/report.py
+python experiments/cloud/report.py
 ```
 
 C8 refuses to start while real edges are connected to the deployment (their robots would receive the load test's

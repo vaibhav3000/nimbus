@@ -5,7 +5,7 @@
 - **Measured:** standin: field accuracy 98.6% (95% CI 96.5% to 99.5%), clarification recall 100.0%, precision 100.0%, 100 request decisions
 - **Verdict:** PASS
 - **Source of numbers:** mock_llm (standin) / measured (rules) (local, model rule-based-stand-in)
-- **Command:** `python experiments/p3/c1_understanding.py --decider standin --decider rules`
+- **Command:** `python experiments/cloud/c1_understanding.py --decider standin --decider rules`
 - **Commit:** cee7c04-dirty, run 2026-11-06T15:47:39Z to 2026-11-06T15:47:41Z
 
 ## Plots

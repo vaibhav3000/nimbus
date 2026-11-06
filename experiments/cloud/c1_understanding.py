@@ -18,8 +18,8 @@ a vague one is right if the cloud asked. field_accuracy = right fields / labelle
 NOT wrongly turned into a question (those count every field wrong). Clarification recall = vague requests asked /
 vague requests; precision = vague requests asked / all questions asked.
 
-    python experiments/p3/c1_understanding.py                          # all deciders that need no AWS keys
-    python experiments/p3/c1_understanding.py --decider bedrock2 --model apac.anthropic.claude-3-haiku-20240307-v1:0
+    python experiments/cloud/c1_understanding.py                          # all deciders that need no AWS keys
+    python experiments/cloud/c1_understanding.py --decider bedrock2 --model apac.anthropic.claude-3-haiku-20240307-v1:0
 """
 
 from __future__ import annotations

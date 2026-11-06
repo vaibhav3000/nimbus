@@ -32,7 +32,7 @@ def tables_from_env() -> dict:
 
 def ensure_tables(client, names: dict) -> None:
     """Create the tables the adapters need (dev/test only: Terraform owns them
-    in a real deployment, see infra/terraform/p3.tf)."""
+    in a real deployment, see infra/terraform/cloud.tf)."""
     spec = {
         names["state"]: ([("pk", "S")], None),
         names["leases"]: ([("lease_id", "S")], None),

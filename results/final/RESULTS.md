@@ -1,6 +1,6 @@
-# P3 (cloud) experiment results
+# Experiment results
 
-Built by `python experiments/p3/report.py` from each folder's README.md and env.json. Source: `real_bedrock` = Amazon Bedrock Nova Lite (deployed cloud or our own local server), `mock_llm` = the rule-based stand-in model (protocol and code behaviour, not model quality), `measured` = no model involved.
+Built by `python experiments/cloud/report.py` from each folder's README.md and env.json. Every row links to a folder with the raw records, summary, plots and environment. How to add a row: docs/RESULTS_GUIDE.md. Source: `real_bedrock` = Amazon Bedrock Nova Lite (deployed cloud or our own local server), `mock_llm` = the rule-based stand-in model (protocol and code behaviour, not model quality), `measured` = no model involved (or a physical/simulated measurement).
 
 | Run | PRD | Verdict | Measured | Source | Target | Commit |
 | --- | --- | --- | --- | --- | --- | --- |

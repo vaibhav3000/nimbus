@@ -5,7 +5,7 @@
 - **Measured:** memory on: 20/20 cases right, habit cases resolved without asking 10/10; memory off: the same habit requests asked 10/10 times (questions saved by memory)
 - **Verdict:** PASS
 - **Source of numbers:** mock_llm (local, model rule-based-stand-in)
-- **Command:** `python experiments/p3/c3_memory.py --target local`
+- **Command:** `python experiments/cloud/c3_memory.py --target local`
 - **Commit:** 81f0b93-dirty, run 2026-11-06T14:50:40Z to 2026-11-06T14:51:48Z
 
 ## Plots

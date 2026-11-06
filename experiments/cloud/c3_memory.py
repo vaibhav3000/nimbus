@@ -9,8 +9,8 @@ Right = the labelled outcome: habit cases resolved WITHOUT a question to the usu
 history) still ask; an explicit "standard" pump is honoured.
 
 Memory resets are only done on a local cloud (never on the shared deployment).
-    python experiments/p3/c3_memory.py                    # stand-in model
-    python experiments/p3/c3_memory.py --target local-bedrock   # real Bedrock (needs AWS credentials)
+    python experiments/cloud/c3_memory.py                    # stand-in model
+    python experiments/cloud/c3_memory.py --target local-bedrock   # real Bedrock (needs AWS credentials)
 """
 
 from __future__ import annotations

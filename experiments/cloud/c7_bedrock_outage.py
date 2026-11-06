@@ -7,8 +7,8 @@ Measured per request: request-to-decision time, outcome (leased / queued / asked
 (trace llm events) or the rules did, the user-facing notice, and the breaker state (/llm-status) sampled each second.
 Also: tasks leased BEFORE the outage that complete DURING it (leased work continues).
 
-    python experiments/p3/c7_bedrock_outage.py --target local                  # stand-in model behind the same breaker
-    NIMBUS_ADMIN_TOKEN=... python experiments/p3/c7_bedrock_outage.py --target deployed   # real Bedrock (needs the admin token)
+    python experiments/cloud/c7_bedrock_outage.py --target local                  # stand-in model behind the same breaker
+    NIMBUS_ADMIN_TOKEN=... python experiments/cloud/c7_bedrock_outage.py --target deployed   # real Bedrock (needs the admin token)
 """
 
 from __future__ import annotations

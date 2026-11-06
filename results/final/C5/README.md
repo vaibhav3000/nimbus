@@ -5,7 +5,7 @@
 - **Measured:** queue inversions: ours 0, first-come-first-served 25009 over 113518 tasks (10 seeds x 3 fleet sizes x 6 loads x 2 h); at load 1.3 with 4 robots urgent miss ratio ours 0.0 vs fifo 0.774, routine 0.053 vs 0.023; T8: urgent served next = True
 - **Verdict:** PASS
 - **Source of numbers:** measured (in-process cloud on a simulated clock (pack hospital_sim6), model rule-based-stand-in (intent only))
-- **Command:** `python experiments/p3/c5_scheduling.py --seeds 10 --loads 0.3 0.5 0.7 0.9 1.1 1.3`
+- **Command:** `python experiments/cloud/c5_scheduling.py --seeds 10 --loads 0.3 0.5 0.7 0.9 1.1 1.3`
 - **Commit:** 81f0b93-dirty, run 2026-11-06T14:18:05Z to 2026-11-06T14:50:54Z
 
 ## Plots

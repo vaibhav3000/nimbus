@@ -15,7 +15,7 @@ R(N) = max(S, N S / c) is fitted for c (effective parallel servers); for the ope
 mean response with that S and c is drawn over the measured points.
 
 This needs the deployed infrastructure (API Gateway, the container service, Bedrock):
-    python experiments/p3/c8_load.py --target deployed
+    python experiments/cloud/c8_load.py --target deployed
 """
 
 from __future__ import annotations

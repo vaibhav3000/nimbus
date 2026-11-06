@@ -5,7 +5,7 @@
 - **Measured:** 32 requests during the 600 s outage: 9 leased, 23 queued for a robot, 0 answered by the model, 32 carried the reduced-autonomy notice; 14/14 tasks leased before the outage completed; breaker/fault seen at 300.86 s, normal again at 916.99 s (outage 300 to 900 s)
 - **Verdict:** PASS
 - **Source of numbers:** mock_llm (local-C1, model rule-based-stand-in)
-- **Command:** `python experiments/p3/c7_bedrock_outage.py --target local`
+- **Command:** `python experiments/cloud/c7_bedrock_outage.py --target local`
 - **Commit:** 81f0b93-dirty, run 2026-11-06T14:48:37Z to 2026-11-06T15:09:23Z
 
 ## Plots

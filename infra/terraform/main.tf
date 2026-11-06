@@ -161,7 +161,7 @@ resource "aws_ecs_service" "app" {
   network_configuration {
     subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
     security_groups  = [aws_security_group.app.id]
-    assign_public_ip = var.egress_mode == "public_ip" # see p3.tf: private subnets had no route out
+    assign_public_ip = var.egress_mode == "public_ip" # see cloud.tf: private subnets had no route out
   }
 }
 

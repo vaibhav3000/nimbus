@@ -17,7 +17,8 @@ robots, the web apps, the AWS deployment, and the experiments that measure all o
 - Plan and requirements: [PRD.md](PRD.md)
 - How the code is organised (for developers): [dev.md](dev.md)
 - Message formats between cloud and edge: [docs/EDGE_CLOUD_PROTOCOL.md](docs/EDGE_CLOUD_PROTOCOL.md)
-- Measured results: [results/final/P3_RESULTS.md](results/final/P3_RESULTS.md) (cloud experiments), `P2_Results/` (edge), `results/` (shared)
+- Measured results: [results/final/RESULTS.md](results/final/RESULTS.md) (one table for every final experiment)
+- How to add your experiment's results: [docs/RESULTS_GUIDE.md](docs/RESULTS_GUIDE.md)
 
 ---
 
@@ -254,11 +255,11 @@ was disconnected in the robot map. See [dev.md](dev.md#known-issues).
 The plan (PRD) defines requirements (FR-1 to FR-22, NFR-1 to NFR-7), task scenarios (T1 to T8) and experiments
 (E1 to E7). The final experiments are split into three groups of about equal effort:
 
-| Group | Owner | Area | Folder for code | Folder for results |
+| Group | Area | What it covers | Code | Results |
 | --- | --- | --- | --- | --- |
-| C1 to C9 | P3 (cloud) | understanding, rules, memory, checker, scheduling, re-planning, model outage, load, model calls | `experiments/p3/` | `results/final/C*` |
-| R1 to R10 | P1 + P2 (robot and edge) | safety stop, navigation, map, edge model, edge decisions, lease limits, parking, takeover, store-and-forward, message format | to be added | to be added |
-| N1 to N10 | P4 (network and infrastructure) | network traces, outage model, trace replay, duplicate messages, selective sharing, replay, security audit, scale, cost, apps | to be added | to be added |
+| C1 to C9 | Cloud | understanding, rules, memory, checker, scheduling, re-planning, model outage, load, model calls | `experiments/cloud/` | `results/final/C*` |
+| R1 to R10 | Robot and edge | safety stop, navigation, map, edge model, edge decisions, lease limits, parking, takeover, store-and-forward, message format | `experiments/robot_edge/` (to be added) | `results/final/R*` (to be added) |
+| N1 to N10 | Network and infrastructure | network traces, outage model, trace replay, duplicate messages, selective sharing, replay, security audit, scale, cost, apps | `experiments/network_infra/` (to be added) | `results/final/N*` (to be added) |
 
 Every experiment writes a folder in `results/final/` containing:
 
@@ -268,9 +269,9 @@ Every experiment writes a folder in `results/final/` containing:
 - the environment it ran in
 - a README with the claim, the plan's pass bar, the measured value and PASS or FAIL
 
-### Cloud experiments (P3), measured
+### Cloud experiments, measured
 
-The full table is [results/final/P3_RESULTS.md](results/final/P3_RESULTS.md).
+The full table is [results/final/RESULTS.md](results/final/RESULTS.md).
 
 | Experiment | What it showed |
 | --- | --- |
@@ -285,11 +286,11 @@ The full table is [results/final/P3_RESULTS.md](results/final/P3_RESULTS.md).
 | C9, model calls (NFR-4) | Nimbus (C1) makes 22% of the cloud model calls of the cloud-only design (C2): 1.16 against 5.16 calls per task over T1 to T5, T7 and T8. The plan's bar is 50%. |
 
 Several of these ran with the stand-in model, and each result says so (`source` column). The commands to rerun them
-on real Bedrock are in [experiments/p3/README.md](experiments/p3/README.md).
+on real Bedrock are in [experiments/cloud/README.md](experiments/cloud/README.md).
 
-### Robot and edge experiments (P1 + P2)
+### Robot and edge experiments
 
-To be filled by the owners: one row per experiment, with a link to its results folder.
+To be filled: one row per experiment, with a link to its results folder ([how](docs/RESULTS_GUIDE.md)).
 
 | Experiment | PRD | What it showed |
 | --- | --- | --- |
@@ -304,9 +305,9 @@ To be filled by the owners: one row per experiment, with a link to its results f
 | R9, store-and-forward and reconnection | FR-10, FR-12, NFR-2 | to be filled |
 | R10, escalation format and message sizes | FR-9 | to be filled |
 
-### Network and infrastructure experiments (P4)
+### Network and infrastructure experiments
 
-To be filled by the owner: one row per experiment, with a link to its results folder.
+To be filled: one row per experiment, with a link to its results folder ([how](docs/RESULTS_GUIDE.md)).
 
 | Experiment | PRD | What it showed |
 | --- | --- | --- |
@@ -340,10 +341,10 @@ simulation/hospital_world/                   Gazebo world, robots, robot SDK, to
 simulation/lite/                             Gazebo-less live viewer
 static/                                      requester app, operator console, map page
 infra/terraform/                             AWS deployment
-experiments/p3/                              cloud experiments C1 to C9 (harness, scripts, report)
+experiments/cloud/                              cloud experiments C1 to C9 (harness, scripts, report)
 scripts/                                     demo, older experiment runners (E1 to E7), audits, tools
 evaluation/                                  labelled data sets (synthetic) and the dataset manifest
-results/  P2_Results/  P3_Results/           measured results
+results/                                     measured results (results/final/ = the final experiments)
 tests/                                       cloud and shared tests (edge tests are in edge/tests)
 docs/                                        protocol, PRD versions, figures
 archive/                                     files no longer needed to run (kept for reference)
@@ -352,11 +353,5 @@ archive/                                     files no longer needed to run (kept
 ## 9. Team
 
 Team Nimbus, DS252 Introduction to Cloud Computing (Aug to Nov 2026), IISc: Kautuk Astu, M Vaibhav, Garrepally
-Akshaya and C Veera Sai Charan Teja. The plan splits the work into four roles:
-
-- P1: simulation and safety
-- P2: edge tier
-- P3: cloud orchestration
-- P4: infrastructure and logging
-
-Who changed what in the integration pass is in [CHANGES_BY_PERSON.md](CHANGES_BY_PERSON.md).
+Akshaya and C Veera Sai Charan Teja. The work covers four areas: simulation and safety, the edge tier, cloud
+orchestration, and infrastructure and logging.

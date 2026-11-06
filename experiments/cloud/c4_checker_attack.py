@@ -14,7 +14,7 @@ and was free, cluster healthy, no forbidden zone in allowed_zones, lease passes 
 the rule-based fallback took over after two failed proposals (FR-15).
 
 Runs in-process (no network, no real model is needed: the model here is the attacker).
-    python experiments/p3/c4_checker_attack.py --seed 1
+    python experiments/cloud/c4_checker_attack.py --seed 1
 """
 
 from __future__ import annotations
