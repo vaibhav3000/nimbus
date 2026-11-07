@@ -1,0 +1,2 @@
+{"case": "R9-A", "event": "outage_started", "timestamp": 1794061057.9284618, "outbox_depth": 1}
+{"case": "R9-B", "event": "edge_process_terminated", "timestamp": 1794061659.6468725, "pid": 1323304, "outbox_depth": 1}

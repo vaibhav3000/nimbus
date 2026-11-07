@@ -2,11 +2,11 @@
 
 - **Claim:** Kinematic R7 records WAN outbox replay and expiry parking.
 - **PRD pass bar:** No unsafe park, no post-expiry task motion, buffered WAN events delivered.
-- **Measured:** 0/30 trials passed; inspect parking.csv and raw pose/event logs.
+- **Measured:** 17/30 trials passed; inspect parking.csv and raw pose/event logs.
 - **Verdict:** FAIL
 - **Source of numbers:** measured (in-process, model SimRobot kinematic)
 - **Command:** `python experiments/robot_edge/r7_safe_parking.py --scenario all --seed 42 --out results/final/R7`
-- **Commit:** c607884-dirty, run 2026-11-07T13:53:58Z to 2026-11-07T13:54:41Z
+- **Commit:** 52730e6, run 2026-11-07T14:05:22Z to 2026-11-07T14:14:21Z
 
 ## Notes
 

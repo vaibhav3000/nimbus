@@ -20,6 +20,17 @@
 #   no tc/ping). This is OUTAGE-ONLY by design: a healthy run produces no config
 #   contrast (everyone just completes), so it is not run.
 #
+#   WHY A LOCAL CLOUD, NOT THE DEPLOYED ENDPOINT (unlike T1/T8):
+#   T2's whole mechanism is a precisely-timed WAN cut -- the outage is created by
+#   SIGSTOP-ing the cloud PROCESS the instant the lease is granted and resuming it
+#   at mission end. A managed AWS deployment (API Gateway + Fargate) cannot be
+#   paused and its cloud<->edge link cannot be severed at a chosen instant, so T2
+#   must own a local cloud. It also needs a short-lease compressed-timing pack so
+#   C2's offline stall terminates in seconds, which the fixed deployed cloud will
+#   not provide. See the "Why T2 uses a local cloud" section of the generated
+#   results/final/T2/README.md and env.json for the full reasoning. T1 and T8 have
+#   no outage, so they DO use the deployed C1/C2 endpoints.
+#
 # Usage:
 #   ./T2.sh                         # C1 C2 C3, one seed
 #   T2_MODES="C1 C2" T2_SEEDS="1 2" ./T2.sh

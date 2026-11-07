@@ -2,10 +2,10 @@
   "east-wing": {
     "blanket": 20,
     "infusion_pump": 3,
-    "infusion_pump_paediatric": 1,
+    "infusion_pump_paediatric": 2,
     "iv_pole": 5,
     "monitor": 2,
-    "pediatric_infusion_pump": 1,
+    "pediatric_infusion_pump": 2,
     "wheelchair": 4
   },
   "west-wing": {
