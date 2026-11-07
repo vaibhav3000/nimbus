@@ -43,3 +43,5 @@ results/tmp/
 logs/
 data_standin/
 logs_standin/
+
+temp.sh

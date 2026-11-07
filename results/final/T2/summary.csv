@@ -1,2 +1,4 @@
-actor,asset,start_xy,end_xy,yaw_rad,speed_mps,duration_s,minimum_static_clearance_m,minimum_robot_centerline_clearance_m,sdf_valid,seed,world,mission_outcome
-t2_east_corridor_pedestrian,/usr/share/gazebo-11/media/models/walk.dae,"[4.0, -13.0]","[4.0, 13.0]",1.5707963267948966,0.6,43.333333333333336,0.5,0.5,True,1,results/final/T2/raw/t2_background_traffic.sdf,NOT_RUN
+mode,profile,seed,started_utc,netem_applied,success,parked,failed,final_status,outcome,task_id,request_to_lease_s,completion_time_s,time_to_fail_s,deadline_s,deadline_met,failure_reason,rtt_ms_mean,probes,loss_pct,bg_throughput_mbps,bg_requests,bg_bytes,outage_duration_s,recovery_time_s,cloud_llm_calls
+C1,outage,1,2026-11-07T14:02:52Z,False,True,False,False,COMPLETED,delivered,task-000001,0.02,12.648,,720,True,,1.53,5,60.0,0.02,48,35168,12.63,,1
+C2,outage,1,2026-11-07T14:03:07Z,False,False,False,True,ESCALATED_UNEXPECTED,"HALTED (no local brain; escalated to operator, but WAN down -> escalation stuck in offline outbox) - delivery FAILED",task-000001,0.02,,13.937,720,False,C2 relay: cloud unreachable; a cloud-only relay cannot decide locally.,1.62,6,50.0,0.02,52,39604,13.92,0.95,1
+C3,outage,1,2026-11-07T14:03:24Z,False,True,False,False,COMPLETED,delivered,task-000001,0.019,12.967,,720,True,,1.52,6,50.0,0.022,52,39604,12.95,0.94,0
