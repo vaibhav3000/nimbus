@@ -45,3 +45,5 @@ data_standin/
 logs_standin/
 
 temp.sh
+*.tfstate
+*.tfstate.*

@@ -22,6 +22,25 @@ class MockRepo:
     def live_leases(self):
         return self._leases
 
+def independent_ground_truth(zone: str, leases: list[dict], pack: Pack) -> set[str]:
+    """Independent ground-truth produced independently from MapState.affected_clusters.
+
+    Directly inspects the raw topology node definitions and active lease manifests.
+    A cluster is ground-truth affected if:
+    1. The zone node's assigned area matches the cluster's assigned area in the pack.
+    2. An active task lease assigned to that cluster explicitly routes through the zone.
+    """
+    expected = set()
+    node_data = pack.topology_doc.get("nodes", {}).get(zone, {})
+    node_area = node_data.get("area")
+    for cid, c_area in pack.topology_doc.get("clusters", {}).items():
+        if node_area and (node_area == c_area or node_area in ("spine", "shared")):
+            expected.add(cid)
+    for l in leases:
+        if zone in l.get("allowed_zones", []):
+            expected.add(l["cluster_id"])
+    return expected
+
 def run_n5():
     out_dir = os.path.join("results", "final", "N5")
     plot_dir = os.path.join(out_dir, "plots")
@@ -73,18 +92,14 @@ def run_n5():
         for event_idx, zone in enumerate(scripted_zones):
             ev_type = event_types[event_idx % len(event_types)]
             
-            # Ground truth: which clusters have routes or active lease through this zone?
-            ground_truth_affected = mapstate.affected_clusters(zone, repo, now)
+            # Independent ground truth: derived directly from raw pack cluster areas and active leases
+            ground_truth_affected = independent_ground_truth(zone, live_leases, pack)
             
-            # Simulated selective sharing system decision (FR-11):
-            # Must tell all affected clusters (100% recall), occasionally tells an adjacent cluster on shared spine
-            informed_clusters = list(ground_truth_affected)
+            # System under test: MapState.affected_clusters
+            system_predicted_clusters = mapstate.affected_clusters(zone, repo, now)
             
-            # In 5% of spine boundary cases, conservative adjacency sharing informs the other cluster
-            if zone in ["north_hall", "south_equipment_approach"] and rng.uniform() < 0.08:
-                other = "west-wing" if "east-wing" in informed_clusters else "east-wing"
-                if other not in informed_clusters:
-                    informed_clusters.append(other)
+            # Selective sharing system decision (FR-11):
+            informed_clusters = list(system_predicted_clusters)
 
             operator_informed = True
             requester_informed = True if ev_type in ["corridor_blocked", "isolation_declared"] else False
@@ -117,7 +132,7 @@ def run_n5():
                     "outcome": outcome,
                     "operator_informed": operator_informed,
                     "requester_informed": requester_informed,
-                    "source": "measured"
+                    "source": "simulated"
                 })
 
         total_tp += seed_tp
@@ -139,7 +154,7 @@ def run_n5():
             "recall_pct": round(recall * 100.0, 2),
             "precision_pct": round(precision * 100.0, 2),
             "operator_notified_pct": 100.0,
-            "source": "measured"
+            "source": "simulated"
         })
 
     # Save e6_sharing.csv

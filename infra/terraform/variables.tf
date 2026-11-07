@@ -58,7 +58,19 @@ variable "knowledge_base_id" {
 }
 
 variable "ecs_target_url" {
-  description = "Target HTTP URL for the ECS Fargate service / container proxy. Can be set to a task public IP, internal ALB, or mock URL at apply time."
+  description = "Legacy target HTTP URL for container proxy (defaults to localhost). In the private VPC Link architecture, API Gateway integrates directly with the internal ALB listener (aws_lb_listener.app.arn) via aws_apigatewayv2_vpc_link without public IPs."
   type        = string
   default     = "http://127.0.0.1:8000"
+}
+
+variable "assign_public_ip" {
+  description = "Whether to assign public IP to Fargate tasks. Defaults to false for security; API Gateway or internal load balancer should be used for access."
+  type        = bool
+  default     = false
+}
+
+variable "allowed_ingress_cidr_blocks" {
+  description = "Allowed CIDR blocks for inbound port 8000 on ECS security group. Restricted to internal VPC CIDR by default; public traffic enters via API Gateway."
+  type        = list(string)
+  default     = ["10.20.0.0/16"]
 }

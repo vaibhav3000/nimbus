@@ -5,9 +5,15 @@ see); tests speak only HTTP plus the published schemas, never private helpers.
 """
 
 import os
+from pathlib import Path
+import sys
 import threading
 import uuid
 from urllib import request as urlreq
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import pytest
 
@@ -15,6 +21,12 @@ import server
 
 
 @pytest.fixture(autouse=True)
+def _default_auth_disabled_for_tests(monkeypatch):
+    """C1 / Addendum 1: tests default to NIMBUS_AUTH_DISABLED=1 unless explicitly testing auth."""
+    if "NIMBUS_AUTH_DISABLED" not in os.environ and "NIMBUS_TEST_AUTH_CHECK" not in os.environ:
+        monkeypatch.setenv("NIMBUS_AUTH_DISABLED", "1")
+
+
 def _no_background_ticker(monkeypatch):
     """Tests drive the ticker by hand (server.tick_once / orch.ticker.tick) so time stays under their control."""
     monkeypatch.setenv("NIMBUS_TICK_S", "0")

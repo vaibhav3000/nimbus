@@ -47,9 +47,18 @@ logger = logging.getLogger("nimbus.faults")
 
 @dataclass
 class FaultProfile:
-    """Configuration for simulated network degradation."""
+    """Configuration for simulated network degradation.
+
+    Semantics note (H10):
+    In user-space proxy mode, simulated packet loss operates at the TCP
+    connection level by aborting/closing the connection upfront. It does
+    NOT simulate kernel-level mid-stream IP packet drops; for true kernel IP
+    packet drops, use Linux tc/netem via `--tc-script`.
+    """
 
     name: str = "custom"
+    fault_id: str = ""
+    fault_class: str = "custom"
     latency_ms: float = 0.0
     jitter_ms: float = 0.0
     loss_rate: float = 0.0  # Fraction between 0.0 (0%) and 1.0 (100%)
@@ -57,6 +66,18 @@ class FaultProfile:
     trace_file: str | None = None
 
     def __post_init__(self) -> None:
+        import uuid
+        if not self.fault_id:
+            self.fault_id = "flt-" + uuid.uuid4().hex[:8]
+        if self.fault_class == "custom":
+            if self.disconnected:
+                self.fault_class = "partition"
+            elif self.loss_rate > 0:
+                self.fault_class = "connection_abort"
+            elif self.latency_ms > 0:
+                self.fault_class = "latency"
+            else:
+                self.fault_class = "healthy"
         if self.latency_ms < 0:
             raise ValueError(f"latency_ms must be non-negative, got {self.latency_ms}")
         if self.jitter_ms < 0:
@@ -65,12 +86,19 @@ class FaultProfile:
             raise ValueError(f"loss_rate must be between 0.0 and 1.0, got {self.loss_rate}")
 
     def compute_delay_sec(self) -> float:
-        """Calculate artificial delay in seconds including random jitter."""
+        """Calculate artificial delay in seconds including random jitter.
+
+        Clamps maximum delay to 10.0s and maximum jitter to 5.0s to prevent
+        unbounded or negative delay values.
+        """
         if self.latency_ms <= 0 and self.jitter_ms <= 0:
             return 0.0
-        jitter = random.uniform(-self.jitter_ms, self.jitter_ms) if self.jitter_ms > 0 else 0.0
-        delay_ms = max(0.0, self.latency_ms + jitter)
-        return max(0.0, delay_ms / 1000.0)
+        MAX_DELAY_MS = 10000.0  # 10s maximum clamp
+        MAX_JITTER_MS = 5000.0  # 5s maximum jitter clamp
+        bounded_jitter = min(max(0.0, self.jitter_ms), MAX_JITTER_MS)
+        jitter = random.uniform(-bounded_jitter, bounded_jitter) if bounded_jitter > 0 else 0.0
+        delay_ms = max(0.0, min(self.latency_ms + jitter, MAX_DELAY_MS))
+        return delay_ms / 1000.0
 
     def should_drop(self) -> bool:
         """Determine if a connection or packet chunk should be dropped."""
@@ -189,14 +217,18 @@ class FaultProxy:
         self.profile = profile or FaultProfile()
         self._lock = threading.RLock()
         self._running = False
+        self._stop_event = threading.Event()
         self._server_sock: socket.socket | None = None
         self._worker_thread: threading.Thread | None = None
         self._active_sockets: set[socket.socket] = set()
+        self.generation: int = 0
 
         # Telemetry metrics for experiment evaluation
+        # Note: packets_dropped reflects upfront connection aborts in proxy mode
         self.stats = {
             "connections_total": 0,
             "connections_rejected": 0,
+            "connections_aborted": 0,
             "packets_forwarded": 0,
             "packets_dropped": 0,
             "bytes_forwarded": 0,
@@ -212,14 +244,21 @@ class FaultProxy:
     def _sync_fault_status(self) -> None:
         """Write current profile to local data/fault_status.json and notify target if local server."""
         with self._lock:
+            self.generation += 1
+            gen = self.generation
             fwd = self.stats.get("packets_forwarded", 0)
             drop = self.stats.get("packets_dropped", 0)
             bytes_fwd = self.stats.get("bytes_forwarded", 0)
             conn_tot = self.stats.get("connections_total", 0)
             conn_rej = self.stats.get("connections_rejected", 0)
+            conn_abort = self.stats.get("connections_aborted", conn_rej)
             active = not (self.profile.name == "healthy" and not self.profile.disconnected and self.profile.loss_rate == 0 and self.profile.latency_ms == 0)
             state = {
                 "active": active,
+                "fault_id": getattr(self.profile, "fault_id", "flt-default"),
+                "fault_class": getattr(self.profile, "fault_class", "custom"),
+                "generation": gen,
+                "timestamp": time.time(),
                 "profile": self.profile.name,
                 "latency_ms": self.profile.latency_ms,
                 "jitter_ms": self.profile.jitter_ms,
@@ -227,6 +266,7 @@ class FaultProxy:
                 "disconnected": self.profile.disconnected,
                 "packets_forwarded": fwd,
                 "packets_dropped": drop,
+                "connections_aborted": conn_abort,
                 "bytes_forwarded": bytes_fwd,
                 "connections_total": conn_tot,
                 "connections_rejected": conn_rej,
@@ -244,10 +284,14 @@ class FaultProxy:
                 try:
                     import json
                     from urllib import request as urlreq
+                    headers = {"Content-Type": "application/json"}
+                    tok = os.environ.get("NIMBUS_ADMIN_TOKEN") or os.environ.get("NIMBUS_FAULT_TOKEN") or os.environ.get("NIMBUS_AUTH_TOKEN")
+                    if tok:
+                        headers["Authorization"] = f"Bearer {tok}"
                     req = urlreq.Request(
                         f"http://{self.target_host}:{self.target_port}/fault",
                         data=json.dumps(state).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers=headers,
                         method="POST",
                     )
                     with urlreq.urlopen(req, timeout=0.5):
@@ -275,10 +319,17 @@ class FaultProxy:
             try:
                 import json
                 from urllib import request as urlreq
+                headers = {"Content-Type": "application/json"}
+                tok = os.environ.get("NIMBUS_ADMIN_TOKEN") or os.environ.get("NIMBUS_FAULT_TOKEN") or os.environ.get("NIMBUS_AUTH_TOKEN")
+                if tok:
+                    headers["Authorization"] = f"Bearer {tok}"
+                with self._lock:
+                    self.generation += 1
+                    gen = self.generation
                 req = urlreq.Request(
                     f"http://{self.target_host}:{self.target_port}/fault",
-                    data=json.dumps({"active": False, "profile": "healthy"}).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
+                    data=json.dumps({"active": False, "profile": "healthy", "generation": gen}).encode("utf-8"),
+                    headers=headers,
                     method="POST",
                 )
                 with urlreq.urlopen(req, timeout=1.0):
@@ -292,9 +343,11 @@ class FaultProxy:
             if self._running:
                 return
             self._running = True
+            self._stop_event.clear()
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind((self.listen_host, self.listen_port))
+            self.listen_port = sock.getsockname()[1]
             sock.listen(128)
             sock.settimeout(0.5)
             self._server_sock = sock
@@ -343,6 +396,7 @@ class FaultProxy:
 
         with self._lock:
             self._running = False
+            self._stop_event.set()
             if self._server_sock:
                 _safe_close(self._server_sock)
                 self._server_sock = None
@@ -389,11 +443,14 @@ class FaultProxy:
         with self._lock:
             profile = self.profile
 
-        # Upfront packet-loss decision: draw once per connection (M3)
+        # Upfront connection-loss decision: draw once per connection (M3)
+        # Semantics Note: In proxy mode this is a connection abort, not a kernel IP packet drop.
+        # connections_aborted tracks socket terminations; packets_dropped is retained for telemetry contract compatibility.
         if profile.should_drop():
             with self._lock:
-                self.stats["packets_dropped"] += 1
+                self.stats["connections_aborted"] += 1
                 self.stats["connections_rejected"] += 1
+                self.stats["packets_dropped"] += 1
             self._maybe_sync_stats()
             _safe_close(client_sock)
             return
@@ -439,6 +496,7 @@ class FaultProxy:
     def _pipe(self, src: socket.socket, dst: socket.socket, direction: str) -> None:
         try:
             src.settimeout(1.0)
+            last_chunk_time = 0.0
             while self._running:
                 with self._lock:
                     profile = self.profile
@@ -455,10 +513,17 @@ class FaultProxy:
                 except OSError:
                     break
 
-                # Latency and jitter injection (guaranteed non-negative)
-                delay = max(0.0, profile.compute_delay_sec())
-                if delay > 0.0:
-                    time.sleep(delay)
+                # Per-chunk delay accumulation fix:
+                # Artificial delay is applied once at the start of a transfer burst
+                # (or when idle time between chunks exceeds 50ms), rather than sleeping
+                # on every individual 64KB chunk.
+                now = time.monotonic()
+                if last_chunk_time == 0.0 or (now - last_chunk_time) > 0.05:
+                    delay = max(0.0, profile.compute_delay_sec())
+                    if delay > 0.0:
+                        if self._stop_event.wait(delay):
+                            break
+                last_chunk_time = time.monotonic()
 
                 try:
                     dst.sendall(data)
@@ -673,7 +738,7 @@ def main(argv: list[str] | None = None) -> int:
         proxy.stop()
         print(
             f"Fault Proxy stopped.\nStats: {proxy.stats['packets_forwarded']} packets forwarded, "
-            f"{proxy.stats['packets_dropped']} packets dropped, "
+            f"{proxy.stats['connections_aborted']} connections aborted, "
             f"{proxy.stats['connections_total']} total connections ({proxy.stats['connections_rejected']} rejected)."
         )
 
