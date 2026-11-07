@@ -105,9 +105,18 @@ else
   CLOUD="${NIMBUS_CLOUD_URL:-$DEPLOYED_CLOUD_URL}"
   USE_LOCAL_CLOUD=0
 fi
+# C2/C3 need a cloud that runs that mode. The default deployed endpoint runs C1
+# and its mode cannot be changed from here, so refuse to point a C2/C3 edge at
+# it. A dedicated C2/C3 operator is fine: set NIMBUS_CLOUD_URL to its endpoint
+# (then the edge talks to a cloud actually running that mode), or
+# NIMBUS_LOCAL_CLOUD=1 for a local one.
 if [ "$SYSTEM_MODE" != "C1" ] && [ "$USE_LOCAL_CLOUD" != 1 ]; then
-  echo "!! $SYSTEM_MODE needs NIMBUS_LOCAL_CLOUD=1: the deployed cloud mode cannot be changed by this launcher" >&2
-  exit 2
+  if [ "$CLOUD" = "$DEPLOYED_CLOUD_URL" ]; then
+    echo "!! $SYSTEM_MODE cannot use the default deployed cloud: that endpoint runs C1 and its mode cannot be changed here." >&2
+    echo "   Use NIMBUS_LOCAL_CLOUD=1 for a local cloud, or NIMBUS_CLOUD_URL=<a $SYSTEM_MODE endpoint> for a dedicated operator." >&2
+    exit 2
+  fi
+  echo "== $SYSTEM_MODE against an explicitly set cloud: $CLOUD (make sure that endpoint runs $SYSTEM_MODE)"
 fi
 export NIMBUS_CLOUD_URL="$CLOUD"
 # The deployed two-cluster registry names its assigned vehicles robot_1 and

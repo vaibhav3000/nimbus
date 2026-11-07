@@ -15,8 +15,10 @@
 #   T1_TIMEOUT=1500 ./T1.sh gazebo      # longer per-config wait (seconds)
 #
 # Notes:
-#   * All three run on the LOCAL cloud (NIMBUS_LOCAL_CLOUD=1): C2/C3 require it,
-#     and it keeps the comparison on one identical stack.
+#   * Cloud endpoint is per-config (CLOUD_C1 / CLOUD_C2 / CLOUD_C3 below):
+#     C1 targets the deployed AWS cloud; C2/C3 a local cloud for now. A local
+#     (127.0.0.1/localhost) URL is launched with NIMBUS_LOCAL_CLOUD=1; a remote
+#     URL with NIMBUS_CLOUD_URL.
 #   * C1/C2 use the cloud LLM. For real Bedrock, export NIMBUS_LLM=bedrock (and
 #     AWS creds) before running; otherwise the deterministic stand-in is used
 #     and the mission still completes. C3 never calls a model.
@@ -30,7 +32,15 @@ SIM_MODE="${1:-gazebo}"                       # gazebo | kinematic | auto
 CONFIGS=(${T1_CONFIGS:-C1 C2 C3})
 TIMEOUT="${T1_TIMEOUT:-1200}"                 # seconds to wait for completion, per config
 PORT="${PORT:-8000}"
-CLOUD="http://127.0.0.1:${PORT}"
+# Per-configuration cloud endpoint (override via env). A bare host:port is fine;
+# http:// is added automatically.
+#   C1 -> the deployed AWS cloud (already running in C1 mode)
+#   C2 -> local cloud for now; repoint to a deployed C2 endpoint later
+#   C3 -> local cloud
+CLOUD_C1="${CLOUD_C1:-https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com}"
+CLOUD_C2="${CLOUD_C2:-127.0.0.1:8000}"
+CLOUD_C3="${CLOUD_C3:-127.0.0.1:8000}"
+CLOUD=""   # set per-config in run_config()
 REQUEST_TEXT="Need a pediatric infusion pump at 2B-12, urgent."
 LOGS="$ROOT/logs"
 EAST_LOG="$LOGS/edge_east-wing.log"
@@ -47,6 +57,10 @@ cleanup() { ./stop_all.sh >/dev/null 2>&1 || true; }
 trap cleanup EXIT INT TERM
 
 say() { printf '\n\033[1m[T1] %s\033[0m\n' "$*"; }
+
+# http(s):// URLs are kept as-is; a bare host:port gets an http:// prefix.
+normalize_url() { case "$1" in http://*|https://*) printf '%s' "$1" ;; *) printf 'http://%s' "$1" ;; esac; }
+is_local_url()  { case "$1" in *127.0.0.1*|*localhost*) return 0 ;; *) return 1 ;; esac; }
 
 post_json() { curl -fsS -X POST "$CLOUD$1" -H 'Content-Type: application/json' -d "$2" 2>/dev/null; }
 
@@ -104,15 +118,26 @@ wait_for_completion() {
 
 run_config() {
   local mode="$1"
-  say "===== Configuration $mode : starting clean ====="
+  case "$mode" in
+    C1) CLOUD="$(normalize_url "$CLOUD_C1")" ;;
+    C2) CLOUD="$(normalize_url "$CLOUD_C2")" ;;
+    C3) CLOUD="$(normalize_url "$CLOUD_C3")" ;;
+  esac
+  say "===== Configuration $mode : starting clean (cloud $CLOUD) ====="
   ./stop_all.sh >/dev/null 2>&1 || true
 
-  say "$mode: bringing the stack up ($SIM_MODE, local cloud)"
-  NIMBUS_LOCAL_CLOUD=1 ./run_all.sh "$SIM_MODE" --system-mode "$mode" || {
-    say "$mode: run_all.sh failed to start the stack"; return 1; }
+  if is_local_url "$CLOUD"; then
+    say "$mode: bringing the stack up ($SIM_MODE, local cloud $CLOUD)"
+    NIMBUS_LOCAL_CLOUD=1 ./run_all.sh "$SIM_MODE" --system-mode "$mode" || {
+      say "$mode: run_all.sh failed to start the stack"; return 1; }
+  else
+    say "$mode: bringing the stack up ($SIM_MODE, remote cloud $CLOUD)"
+    NIMBUS_CLOUD_URL="$CLOUD" ./run_all.sh "$SIM_MODE" --system-mode "$mode" || {
+      say "$mode: run_all.sh failed to start the stack"; return 1; }
+  fi
 
   if ! wait_cloud_up; then
-    say "$mode: local cloud never came up on $CLOUD"; return 1
+    say "$mode: cloud never came up on $CLOUD"; return 1
   fi
   # Report what is actually running (mode + LLM backend).
   curl -fs "$CLOUD/fleet" 2>/dev/null | python3 -c "import sys,json;d=json.load(sys.stdin);print(f\"[T1] running mode={d.get('mode')} llm={d.get('llm')} pack={d.get('pack')}\")" 2>/dev/null || true

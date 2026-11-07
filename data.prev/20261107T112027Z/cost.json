@@ -3,11 +3,11 @@
  "output_tokens": 0,
  "llm_calls": 0,
  "fargate_gbs": 0,
- "iot_messages": 2,
+ "iot_messages": 232,
  "dynamodb_ops": 0,
  "sqs_messages": 0,
  "s3_ops": 0,
- "data_transfer_bytes": 1284,
- "apigw_requests": 13,
+ "data_transfer_bytes": 33794,
+ "apigw_requests": 1871,
  "cloudwatch_metrics": 0
 }

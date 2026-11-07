@@ -1,0 +1,13 @@
+{
+ "input_tokens": 672,
+ "output_tokens": 69,
+ "llm_calls": 1,
+ "fargate_gbs": 25.002841306850314,
+ "iot_messages": 5,
+ "dynamodb_ops": 8,
+ "sqs_messages": 3,
+ "s3_ops": 0,
+ "data_transfer_bytes": 47962,
+ "apigw_requests": 31,
+ "cloudwatch_metrics": 0
+}
