@@ -2,11 +2,11 @@
 
 - **Claim:** Results persist in SQLite over cloud and edge outages and reconcile exactly once.
 - **PRD pass bar:** For each 600 s fault: one generated result retained/uploaded once; reconciliation <60 s; normal lease operation <120 s; no conflict.
-- **Measured:** R9-A: outage 2.062s, recovery 0.205s, effects 1; R9-B: outage 2.008s, recovery 0.123s, effects 1
-- **Verdict:** PASS (SMOKE ONLY; NOT 10-MINUTE ACCEPTANCE EVIDENCE)
+- **Measured:** R9-A: outage 600.375s, recovery 0.138s, effects 1; R9-B: outage 600.008s, recovery 0.122s, effects 1
+- **Verdict:** PASS
 - **Source of numbers:** measured (in-process, model n/a)
-- **Command:** `python experiments/robot_edge/r9_store_forward_reconnection.py --mode smoke`
-- **Commit:** 52730e6-dirty, run 2026-11-07T14:17:01Z to 2026-11-07T14:17:09Z
+- **Command:** `python experiments/robot_edge/r9_store_forward_reconnection.py --mode full`
+- **Commit:** 52730e6-dirty, run 2026-11-07T14:17:36Z to 2026-11-07T14:37:41Z
 
 ## Plots
 

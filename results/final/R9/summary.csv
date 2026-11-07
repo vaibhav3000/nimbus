@@ -1,3 +1,3 @@
 case,fault_type,outage_start_utc,outage_end_utc,actual_outage_seconds,outbox_depth_at_fault,outbox_depth_before_recovery,outbox_depth_after_recovery,result_generated,cloud_processing_effects,duplicate_processing_effects,cloud_delivery_attempts,duplicate_delivery_attempts,queued_direct,outbox_drained,reconnection_summary_posted,reconciliation_seconds,normal_operation_resume_seconds,leases_fetched,lease_checkin,lease_operations_resumed,active_leases_reported,conflicting_active_leases,pass,mode
-R9-A,network_outage,2026-11-07T14:17:02.477921Z,2026-11-07T14:17:04.540229Z,2.062,1,1,0,1,1,0,2,1,False,True,True,0.2022,0.2046,1,accepted,True,0,0,True,smoke
-R9-B,edge_node_outage,2026-11-07T14:17:05.947754Z,2026-11-07T14:17:07.956232Z,2.008,1,1,0,1,1,0,1,0,False,True,True,0.1203,0.1226,1,accepted,True,0,0,True,smoke
+R9-A,network_outage,2026-11-07T14:17:37.928462Z,2026-11-07T14:27:38.303670Z,600.375,1,1,0,1,1,0,1,0,False,True,True,0.1352,0.1383,1,accepted,True,0,0,True,full
+R9-B,edge_node_outage,2026-11-07T14:27:39.646873Z,2026-11-07T14:37:39.655261Z,600.008,1,1,0,1,1,0,1,0,False,True,True,0.1195,0.1221,1,accepted,True,0,0,True,full
