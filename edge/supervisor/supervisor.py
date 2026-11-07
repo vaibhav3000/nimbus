@@ -1064,18 +1064,59 @@ class EdgeSupervisor:
             return self._process_lease_impl(lease, simulated_now, verbose, allow_resumption)
         import threading
         stop = threading.Event()
+        expiry_done = threading.Event()
+        expiry_interrupt_lock = threading.Lock()
+        # The watchdog runs concurrently with a robot primitive.  Keep the
+        # terminal expiry outcome on the supervisor so the execution path can
+        # never turn an interrupted navigation into OUTPUT_READY/COMPLETED.
+        self._expiry_interrupt_result = None
         self._preempt = None
         self._answers = []
         task_id = self._extract_task_id(lease)
         version = lease.get("version", 1)
 
+        def _expiry_dt() -> Optional[datetime]:
+            try:
+                value = str(lease["expiry_ts"])
+                return datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
+            except (KeyError, TypeError, ValueError):
+                return None
+
+        def _interrupt_for_expiry() -> None:
+            """Stop and park exactly once, even if the watcher wakes twice."""
+            with expiry_interrupt_lock:
+                if self._expiry_interrupt_result is not None:
+                    return
+                # Set a sentinel before commanding the robot.  The mission
+                # thread observes it immediately after its in-flight command
+                # returns and cannot publish a completion result.
+                self._expiry_interrupt_result = {"status": "EXPIRY_INTERRUPTING"}
+            try:
+                parked = self.trigger_expiry_interrupt(
+                    reason="Lease expiry watchdog fired during active execution"
+                )
+                with expiry_interrupt_lock:
+                    self._expiry_interrupt_result = parked
+            finally:
+                expiry_done.set()
+
         def _watch() -> None:
             last_checkin = time.time()
-            while not stop.wait(2.0):
+            last_outbox_poll = 0.0
+            # Expiry is safety critical, so inspect it more often than cloud
+            # polling.  Cloud polling/check-ins retain their existing cadence.
+            while not stop.wait(0.10):
                 try:
-                    self._watch_outbox(lease, task_id, version)
-                    if time.time() - last_checkin >= 5.0:
-                        last_checkin = time.time()
+                    expires = _expiry_dt()
+                    if expires is not None and datetime.now(timezone.utc) >= expires:
+                        _interrupt_for_expiry()
+                        return
+                    now = time.time()
+                    if now - last_outbox_poll >= 2.0:
+                        last_outbox_poll = now
+                        self._watch_outbox(lease, task_id, version)
+                    if now - last_checkin >= 5.0:
+                        last_checkin = now
                         _ok, why, reply = self.send_checkin_to_cloud(lease)
                         new_exp = reply.get("renewed_until") if why == "renewed" else None
                         if new_exp and (self._parse_iso_ts(new_exp) or datetime.min.replace(tzinfo=timezone.utc)) > (self._parse_iso_ts(lease.get("expiry_ts")) or datetime.min.replace(tzinfo=timezone.utc)):
@@ -1088,7 +1129,22 @@ class EdgeSupervisor:
         t = threading.Thread(target=_watch, name=f"lease-watch-{lease.get('lease_id')}", daemon=True)
         t.start()
         try:
-            return self._process_lease_impl(lease, simulated_now, verbose, allow_resumption)
+            result = self._process_lease_impl(lease, simulated_now, verbose, allow_resumption)
+            with expiry_interrupt_lock:
+                expiry_result = self._expiry_interrupt_result
+            if expiry_result is not None:
+                # Do not allow a command that happened to return COMPLETED as
+                # the stop arrived to override the watchdog's safe outcome.
+                if expiry_result.get("status") == "EXPIRY_INTERRUPTING":
+                    # Do not return while the safe-park command is still
+                    # executing.  Its result is the terminal lease outcome.
+                    expiry_done.wait(timeout=30.0)
+                    with expiry_interrupt_lock:
+                        expiry_result = self._expiry_interrupt_result
+                if expiry_result.get("status") == "EXPIRED_PARKED":
+                    return {"status": "EXPIRED_PARKED", "reason": "Lease expired during active execution; parked safely",
+                            "parking": expiry_result, "executed_steps": result.get("executed_steps", [])}
+            return result
         finally:
             stop.set()
 
@@ -1432,6 +1488,9 @@ class EdgeSupervisor:
         while idx < len(task_sequence):
             subtask = task_sequence[idx]
             step_num = idx + 1
+            if getattr(self, "_expiry_interrupt_result", None) is not None:
+                return {"status": "EXPIRED_PARKED", "reason": "Lease expiry watchdog interrupted execution",
+                        "executed_steps": executed_steps}
             if self._preempt:
                 return self._supersede(lease, lease_id, version, executed_steps)
             now_dt = simulated_now or datetime.now(timezone.utc)
@@ -1642,6 +1701,9 @@ class EdgeSupervisor:
                 print(f"      |-- [Step {step_num}/{len(task_sequence)}] Sub-task: {cmd}{target_str} (Robot: {robot_id})")
 
             exec_report = self._execute_with_health_watchdog(robot, cmd_payload)
+            if getattr(self, "_expiry_interrupt_result", None) is not None:
+                return {"status": "EXPIRED_PARKED", "reason": "Lease expiry watchdog interrupted execution",
+                        "executed_steps": executed_steps}
             if self._preempt:      # a newer lease arrived while this step ran: the watcher stopped the robot
                 return self._supersede(lease, lease_id, version, executed_steps)
             exec_report.setdefault("action",cmd)
@@ -2068,6 +2130,9 @@ class EdgeSupervisor:
             idx += 1
 
         # 5. Mission Completed -> Generate Artifacts & Emit OUTPUT_READY (FR-9, Table 2)
+        if getattr(self, "_expiry_interrupt_result", None) is not None:
+            return {"status": "EXPIRED_PARKED", "reason": "Lease expiry watchdog interrupted execution",
+                    "executed_steps": executed_steps}
         if any(str(step.get("status","")).upper() != "COMPLETED" for step in executed_steps):
             self.store.update_lease_status(lease_id,version,"FAILED")
             self.active_lease=None

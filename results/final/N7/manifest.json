@@ -12,6 +12,11 @@
       "description": "50 staff requests, a quarter vague, template-generated"
     },
     {
+      "path": "evaluation/e2/requests_paraphrase.json",
+      "synthetic": true,
+      "description": "50 held-out paraphrased staff requests (15 vague) for C1, written by the team"
+    },
+    {
       "path": "evaluation/e2/rules.json",
       "synthetic": true,
       "description": "10 plain-language rule statements"

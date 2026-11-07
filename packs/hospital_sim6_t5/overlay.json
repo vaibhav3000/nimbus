@@ -1,0 +1,93 @@
+{
+  "note": "PROPOSED mapping of P1's Gazebo topology onto the planning vocabulary (stores, wards, areas). Aliases also come from P1's scenario_locations.json, which agrees with the ward and store assignments below; the kinds, labels, bed limits and paediatric flags are P3's reading and await P1's confirmation (P1 asserts no bed counts). P1's own 'groups' (navigation sections) are ignored; edge clusters are declared here. Speed caps and edge weights (metres) are P1's and are never overridden.",
+  "base": "simulation/hospital_world/topology/hospital_topology.json",
+  "locations": "simulation/hospital_world/topology/scenario_locations.json",
+  "version": "sim-v0",
+  "clusters": {
+    "east-wing": "east",
+    "west-wing": "west"
+  },
+  "nodes": {
+    "south_equipment_approach": {
+      "kind": "store",
+      "area": "shared",
+      "label": "equipment store"
+    },
+    "east_waiting_approach": {
+      "kind": "ward",
+      "area": "east",
+      "label": "ward 2B",
+      "aliases": [
+        "2B"
+      ],
+      "beds": 20,
+      "paediatric": true
+    },
+    "west_waiting_approach": {
+      "kind": "ward",
+      "area": "west",
+      "label": "ward 2C",
+      "aliases": [
+        "2C"
+      ],
+      "beds": 20
+    },
+    "south_room_approach": {
+      "kind": "ward",
+      "area": "shared",
+      "label": "ward 3",
+      "aliases": [
+        "ward-3",
+        "3"
+      ],
+      "beds": 30
+    },
+    "nurse_station_approach": {
+      "kind": "corridor",
+      "area": "shared"
+    },
+    "lift_lobby": {
+      "kind": "gate",
+      "area": "shared",
+      "exclusive": true
+    },
+    "west_north_gate": {
+      "kind": "gate",
+      "area": "west",
+      "exclusive": true
+    },
+    "east_north_gate": {
+      "kind": "gate",
+      "area": "east",
+      "exclusive": true
+    },
+    "north_hall": {
+      "kind": "corridor",
+      "area": "shared"
+    },
+    "west_mid_hall": {
+      "kind": "corridor",
+      "area": "west"
+    },
+    "west_south_hall": {
+      "kind": "corridor",
+      "area": "west"
+    },
+    "east_mid_hall": {
+      "kind": "corridor",
+      "area": "east"
+    },
+    "east_south_hall": {
+      "kind": "corridor",
+      "area": "east"
+    },
+    "east_south_hall_corner": {
+      "kind": "corridor",
+      "area": "east"
+    },
+    "west_south_hall_corner": {
+      "kind": "corridor",
+      "area": "west"
+    }
+  }
+}

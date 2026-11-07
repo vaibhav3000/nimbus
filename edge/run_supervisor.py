@@ -32,6 +32,11 @@ def main():
     import os
     parser.add_argument("--cluster", default="east-wing", help="Cluster ID (e.g., east-wing, west-wing)")
     parser.add_argument("--cloud-url", default=os.environ.get("NIMBUS_CLOUD_URL", "http://127.0.0.1:8000"), help="Cloud API endpoint URL")
+    parser.add_argument(
+        "--cloud-url",
+        default=os.environ.get("NIMBUS_CLOUD_URL", "http://127.0.0.1:8000"),
+        help="Cloud API endpoint URL (defaults to NIMBUS_CLOUD_URL or the deployed Nimbus cloud)",
+    )
     parser.add_argument("--db", default=None, help="Path to local SQLite DB (defaults to edge_<cluster>.db)")
     parser.add_argument("--interval", type=float, default=2.0, help="Outbox polling interval in seconds")
     parser.add_argument("--heartbeat-interval", type=float, default=15.0, help="Idle heartbeat interval in seconds")

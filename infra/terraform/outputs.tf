@@ -32,3 +32,13 @@ output "state_table" {
   description = "Lease/claim/dedupe state table (cloud/aws_dynamo.py)."
   value       = aws_dynamodb_table.state.name
 }
+
+output "alb_dns_name" {
+  description = "DNS name of internal ALB connecting VPC Link to ECS service."
+  value       = aws_lb.internal.dns_name
+}
+
+output "vpc_link_id" {
+  description = "ID of API Gateway v2 VPC link."
+  value       = aws_apigatewayv2_vpc_link.main.id
+}

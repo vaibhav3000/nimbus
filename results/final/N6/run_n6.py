@@ -25,16 +25,31 @@ def run_n6():
     replay_data = {}
 
     # 1. Run 10 seeded scenarios (seeds 1 to 10)
-    # Compare run A and run B for each to prove determinism
+    # Compare in-process run A and independent-process run B (with PYTHONHASHSEED=42) for each to prove determinism
+    import subprocess
     all_diffs = []
     for seed in range(1, 11):
-        # Run A
+        # Run A: in-process
         rows_a = scenario(seed)
         hash_a = digest(rows_a)
 
-        # Run B with different hash seed simulation
-        rows_b = scenario(seed)
-        hash_b = digest(rows_b)
+        # Run B: independent Python subprocess with distinct PYTHONHASHSEED
+        sub_code = (
+            f"import json; from scripts.replay_check import scenario, digest; "
+            f"rows = scenario({seed}); print(json.dumps({{'hash': digest(rows), 'rows': rows}}))"
+        )
+        env = os.environ.copy()
+        env["PYTHONHASHSEED"] = "42"
+        sub_proc = subprocess.run(
+            [sys.executable, "-c", sub_code],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        sub_res = json.loads(sub_proc.stdout)
+        rows_b = sub_res["rows"]
+        hash_b = sub_res["hash"]
 
         diff = compare(rows_a, rows_b)
         diff_len = len(diff)
@@ -55,8 +70,8 @@ def run_n6():
             "sha256_hash": hash_a,
             "deterministic": (hash_a == hash_b),
             "diff_lines": diff_len,
-            "replayed_successfully": True,
-            "source": "measured"
+            "replayed_successfully": (hash_a == hash_b and diff_len == 0),
+            "source": "simulated"
         })
 
     # Save e6_replay.json

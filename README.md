@@ -300,9 +300,9 @@ To be filled: one row per experiment, with a link to its results folder ([how](d
 | R4, edge model benchmark | E1, NFR-1, FR-3 | to be filled |
 | R5, edge handles locally or asks | FR-4 | to be filled |
 | R6, stay within the lease | FR-5 | [MockRobot supervisor result](results/final/R6/README.md): 60/60 invalid task commands were prevented before execution (20 forbidden-zone, 20 expired-lease, 20 stale-version); 0 unauthorized task executions. The 20 expiry cases executed only the authorised safe-park command. PASS; this is not physical Gazebo validation. |
-| R7, safe parking on expiry or link cut | FR-6 | to be filled |
+| R7, safe parking on expiry or link cut | FR-6 | [Kinematic result](results/final/R7/README.md): 30/30 seeded trials passed. All 20 WAN-cut trials delivered the buffered event after reconnection and completed the navigation; all 10 lease-expiry trials safely parked in `east_waiting_approach` in 1.477–2.335 s, with 0 post-expiry task-motion events. PASS; no Gazebo/physical validation. |
 | R8, edge node takeover | FR-7 | to be filled |
-| R9, store-and-forward and reconnection | FR-10, FR-12, NFR-2 | to be filled |
+| R9, store-and-forward and reconnection | FR-10, FR-12, NFR-2 | [Full 10-minute result](results/final/R9/README.md): both the cloud-edge network outage (600.375 s) and edge-node outage (600.008 s) retained and uploaded 1/1 SQLite-outbox result exactly once. Reconciliation was 0.135/0.120 s and lease-operation recovery 0.138/0.122 s; 0 conflicting active leases. PASS; local in-process/system-process validation, not Gazebo. |
 | R10, escalation format and message sizes | FR-9 | [Fixture-level result](results/final/R10/README.md): all 5 expected-valid envelopes were schema-valid and under 2 KB; all 5 malformed envelopes were rejected. PASS: `OUTPUT_READY` carries a result reference rather than embedded artifact bytes, so the 200 KB–2 MB artifact range is not a wire-envelope criterion. |
 
 ### Network and infrastructure experiments

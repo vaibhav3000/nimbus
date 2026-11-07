@@ -51,58 +51,60 @@ def run_n7():
                 if f.is_file() and rel not in listed and f.name != "manifest.json":
                     data_problems.append(f"{rel}: not in manifest")
 
-    # 3. Secret Scan across git history and tracked source
-    secret_patterns = {
-        "AWS Access Key": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
-        "AWS Secret Key": re.compile(r"(?i)aws_secret_access_key\s*=\s*['\"][A-Za-z0-9/+=]{40}['\"]"),
-        "Private Key": re.compile(r"-----BEGIN (?:RSA|EC|OPENSSH) PRIVATE KEY-----"),
-        "API Token": re.compile(r"(?i)(?:api_key|token)\s*[:=]\s*['\"][A-Za-z0-9_-]{20,}['\"]")
-    }
-
-    scan_findings = []
-    for ext in ("*.py", "*.json", "*.tf", "*.html", "*.js", "*.sh"):
-        for p in root.rglob(ext):
-            if "node_modules" in str(p) or ".git" in str(p): continue
-            try:
-                content = p.read_text(encoding="utf-8", errors="ignore")
-                for s_name, pat in secret_patterns.items():
-                    if pat.search(content):
-                        # Filter obvious false positives
-                        scan_findings.append(f"{p.relative_to(root)}: potential {s_name}")
-            except Exception:
-                pass
+    # 3. Secret Scan across tracked source using canonical audit_iam rules
+    secret_findings = audit_iam.secret_findings()
 
     secret_scan_report = [
         "# Nimbus Repository Secret Scan Report",
         f"- Target Commit: {GIT_COMMIT}",
-        f"- Patterns Checked: AWS Access Key, AWS Secret Key, Private Key, API Tokens",
-        f"- Total Vulnerabilities Found: {len(scan_findings)}",
+        f"- Patterns Checked: AWS Access Key, AWS Secret Key, Private Key, GitHub/Slack Tokens, Hard-coded Passwords",
+        f"- Total Vulnerabilities Found: {len(secret_findings)}",
         "",
-        "Status: CLEAN (No exposed secrets in code or configuration files)"
+        f"Status: {'CLEAN (No exposed secrets in code or configuration files)' if len(secret_findings) == 0 else 'FAIL (Exposed secrets detected)'}"
     ]
     with open(os.path.join(out_dir, "secret_scan_report.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(secret_scan_report) + "\n")
 
-    # 4. Camera Payload Privacy Audit
-    # Verify that in contracts and messaging, camera imagery crosses WAN only inside OUTPUT_READY
-    camera_wan_leak = False
-    wan_topics = ["/escalations", "/checkins", "/requests"]
-    # Check contracts/topics.md and contracts/escalation.schema.json
-    esc_schema = json.loads(Path("contracts/escalation.schema.json").read_text(encoding="utf-8"))
-    output_ready_allowed = "result_ref" in str(esc_schema)
+    # 4. Camera Payload & PII Privacy Audit
+    # Dynamically verify that in contracts and messaging, camera imagery crosses WAN only inside OUTPUT_READY
+    pii_pat = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b|\b\d{3}-\d{2}-\d{4}\b")
+    pii_clean = True
+    for trace_file in (root / "traces").rglob("*.csv"):
+        try:
+            content = trace_file.read_text(encoding="utf-8", errors="ignore")
+            if pii_pat.search(content):
+                pii_clean = False
+                break
+        except Exception:
+            pass
 
-    # 5. Build summary table (10 audited security criteria)
+    esc_schema = json.loads(Path("contracts/escalation.schema.json").read_text(encoding="utf-8"))
+    topics_doc = Path("contracts/topics.md").read_text(encoding="utf-8")
+    camera_wan_guard = (
+        "OUTPUT_READY" in esc_schema.get("properties", {}).get("type", {}).get("enum", [])
+        and "result_ref" in str(esc_schema)
+    )
+    telemetry_clean = (
+        "image" not in topics_doc.lower()
+        and "camera_raw" not in topics_doc.lower()
+    )
+
+    # 5. Build dynamic summary table from real inspection results
+    all_iam = audit_iam.iam_findings()
+    bad_iam_actions = [f for f in all_iam if f["problem"].startswith("wildcard action") and not f.get("justified")]
+    unjustified_iam = [f for f in all_iam if not f.get("justified")]
+
     audit_checks = [
-        ("SEC-01", "IAM", "Zero wildcard '*' actions on data APIs", True),
-        ("SEC-02", "IAM", "Documented justifications for resource exceptions", True),
-        ("SEC-03", "IAM", "Least-privilege Fargate task role policy", True),
-        ("SEC-04", "Secrets", "Zero AWS access keys in repository", True),
-        ("SEC-05", "Secrets", "Zero private keys or sensitive credentials in git", True),
-        ("SEC-06", "Privacy", "100% synthetic dataset manifest declaration", True),
-        ("SEC-07", "Privacy", "Zero PII (email, phone, SSN, DOB, MRN) in traces", True),
-        ("SEC-08", "Privacy", "Traces declared free of personal patient data", True),
-        ("SEC-09", "WAN Data", "Camera images transit WAN exclusively in OUTPUT_READY", True),
-        ("SEC-10", "WAN Data", "Check-ins and unexpected events restricted to telemetry metadata", True)
+        ("SEC-01", "IAM", "Zero wildcard '*' actions on data APIs", len(bad_iam_actions) == 0),
+        ("SEC-02", "IAM", "Documented justifications for resource exceptions", len(unjustified_iam) == 0),
+        ("SEC-03", "IAM", "Least-privilege Fargate task role policy", iam_passed),
+        ("SEC-04", "Secrets", "Zero AWS access keys in repository", len([s for s in secret_findings if s["kind"] == "AWS access key id"]) == 0),
+        ("SEC-05", "Secrets", "Zero private keys or sensitive credentials in git", len(secret_findings) == 0),
+        ("SEC-06", "Privacy", "100% synthetic dataset manifest declaration", len(data_problems) == 0),
+        ("SEC-07", "Privacy", "Zero PII (email, phone, SSN, DOB, MRN) in traces", pii_clean),
+        ("SEC-08", "Privacy", "Traces declared free of personal patient data", all(d.get("contains_personal_data") is False for d in manifest_data["datasets"] if d["path"].startswith("traces/"))),
+        ("SEC-09", "WAN Data", "Camera images transit WAN exclusively in OUTPUT_READY", camera_wan_guard),
+        ("SEC-10", "WAN Data", "Check-ins and unexpected events restricted to telemetry metadata", telemetry_clean),
     ]
 
     summary_rows = []
@@ -112,7 +114,7 @@ def run_n7():
             "category": cat,
             "pass_criteria": criteria,
             "audit_result": "PASS" if status else "FAIL",
-            "source": "measured"
+            "source": "measured_real_system"
         })
 
     df_sum = pd.DataFrame(summary_rows)

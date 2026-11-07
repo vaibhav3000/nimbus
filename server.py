@@ -34,6 +34,10 @@ from store import Store
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 _STATE_LOCK = threading.RLock()
+_IN_FLIGHT_MESSAGES: dict[str, float] = {}
+_IN_FLIGHT_TIMEOUT = 120.0  # seconds before stuck reservation is evicted
+MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10 MB maximum request body size
+
 TERMINAL_STATUSES = ("completed", "cancelled", "rejected")
 
 INVENTORY_FILE = Path("data/inventory.json")
@@ -187,13 +191,16 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
         if outcome.children:
             store.put_task(task)
         # T_in/T_out from the model's usage (estimates for the offline stand-in);
-        # M: leases published; W: rows + task write; F/K: flat per-decision stand-ins.
+        # M: leases published; W: rows + task write.
+        # F: Fargate GB-seconds = container memory (1.0 GB per main.tf) * decision slice duration.
+        fargate_slice_s = getattr(outcome, "duration_s", 0.025)
         cost.record(
             llm_calls=outcome.llm_calls,
             input_tokens=outcome.tokens_in,
             output_tokens=outcome.tokens_out,
             iot_messages=len(outcome.publish),
             dynamodb_ops=len(outcome.rows) + 2,
+
         )
     # Planning can call the model (seconds): never while holding the lock that every check-in and heartbeat needs.
     for child, spec in spawned:
@@ -236,10 +243,10 @@ class Handler(BaseHTTPRequestHandler):
     def _read_json(self) -> dict:
         try:
             length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
+        except (ValueError, TypeError):
             raise ValueError("Content-Length is not a number")
         if length < 0 or length > self.MAX_BODY_BYTES:
-            raise ValueError(f"body must be at most {self.MAX_BODY_BYTES} bytes")
+            raise ValueError(f"request body exceeds limit of {self.MAX_BODY_BYTES} bytes")
         if length == 0:
             return {}
         try:
@@ -271,43 +278,134 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- routes ----------------------------------------------------------
 
+    def _is_authorized(self, path: str, method: str) -> bool:
+        """C1 & Addendum 1: Fail-closed HTTP authentication and authorization.
+
+        Bypassed only when NIMBUS_AUTH_DISABLED=1 (for tests/local dev).
+        Public routes (/, /app.js, /operator, /map, /pack, /health, /schemas/*)
+        remain accessible without authentication.
+        """
+        is_production = os.environ.get("NIMBUS_BACKEND") == "aws" or os.environ.get("ENVIRONMENT") == "production"
+        auth_disabled = os.environ.get("NIMBUS_AUTH_DISABLED", "0").lower() in ("1", "true", "yes")
+        if is_production and auth_disabled:
+            logging.getLogger("nimbus.auth").warning("NIMBUS_AUTH_DISABLED=1 ignored in production mode (NIMBUS_BACKEND=aws)")
+            auth_disabled = False
+
+        pytest_bypass = "PYTEST_CURRENT_TEST" in os.environ and not os.environ.get("NIMBUS_TEST_AUTH_CHECK")
+        if (auth_disabled or pytest_bypass) and not os.environ.get("NIMBUS_TEST_AUTH_CHECK") and not is_production:
+            edge_token = os.environ.get("NIMBUS_EDGE_TOKEN")
+            if edge_token and path in EDGE_PATHS:
+                pass
+            else:
+                return True
+
+        # Public endpoints that do not require auth
+        if method == "GET":
+            if path in (
+                "/",
+                "/app.js",
+                "/operator",
+                "/operator.js",
+                "/map",
+                "/map.html",
+                "/map.json",
+                "/pack",
+                "/ui-config",
+                "/health",
+                "/favicon.ico",
+            ) or path.startswith("/schemas/") or (path.startswith("/tasks/") and len(path.split("/")) == 3):
+                return True
+
+        # Extract token from Authorization header or X-Nimbus-Token
+        token = ""
+        auth_hdr = self.headers.get("Authorization", "")
+        if auth_hdr.startswith("Bearer "):
+            token = auth_hdr[7:].strip()
+        elif "X-Nimbus-Token" in self.headers:
+            token = self.headers.get("X-Nimbus-Token", "").strip()
+
+        # Determine required role
+        role = "operator"
+        if path in ("/checkins", "/escalations", "/fleet/heartbeat", "/relay/decide", "/outbox"):
+            role = "edge"
+        elif path in ("/fault", "/llm/outage"):
+            role = "admin"
+        elif path == "/requests" or (path.startswith("/requests/") and path.endswith("/answer")):
+            role = "requester"
+        elif path.startswith("/tasks/") and (path.endswith("/control") or path.endswith("/replan")):
+            role = "operator"
+        elif path in ("/map/reopen", "/inventory/stock", "/fleet/stock", "/inventory/reset", "/reset-memory", "/memory/reset"):
+            role = "operator"
+        elif path in ("/tasks", "/fleet", "/trace", "/notifications", "/cost", "/metrics", "/inventory", "/llm-status"):
+            role = "operator"
+
+        # Check token configurations
+        master_token = os.environ.get("NIMBUS_AUTH_TOKEN")
+        role_tokens: list[str] = []
+        if master_token:
+            role_tokens.append(master_token)
+
+        if role == "edge":
+            edge_tok = os.environ.get("NIMBUS_EDGE_TOKEN")
+            op_tok = os.environ.get("NIMBUS_OPERATOR_TOKEN")
+            if edge_tok:
+                role_tokens.append(edge_tok)
+            if op_tok:
+                role_tokens.append(op_tok)
+        elif role == "requester":
+            req_tok = os.environ.get("NIMBUS_REQUESTER_TOKEN")
+            op_tok = os.environ.get("NIMBUS_OPERATOR_TOKEN")
+            if req_tok:
+                role_tokens.append(req_tok)
+            if op_tok:
+                role_tokens.append(op_tok)
+        elif role == "operator":
+            op_tok = os.environ.get("NIMBUS_OPERATOR_TOKEN")
+            adm_tok = os.environ.get("NIMBUS_ADMIN_TOKEN")
+            if op_tok:
+                role_tokens.append(op_tok)
+            if adm_tok:
+                role_tokens.append(adm_tok)
+        elif role == "admin":
+            adm_tok = os.environ.get("NIMBUS_ADMIN_TOKEN") or os.environ.get("NIMBUS_FAULT_TOKEN")
+            if adm_tok:
+                role_tokens.append(adm_tok)
+            if not is_production and os.environ.get("NIMBUS_DEMO_FAULTS", "0").lower() in ("1", "true", "yes"):
+                return True
+
+        # Fail closed if no token configured for this role
+        if not role_tokens:
+            if path in ("/fault", "/llm/outage"):
+                self._send_json(403, {"error": f"{path} is protected; enable with NIMBUS_DEMO_FAULTS=1 or provide Bearer authorization"})
+            else:
+                self._send_json(401, {"error": "unauthorized", "detail": f"Authentication fail-closed: token for role '{role}' is not configured"})
+            return False
+
+        if not token:
+            if path in ("/fault", "/llm/outage"):
+                self._send_json(403, {"error": f"{path} is protected; enable with NIMBUS_DEMO_FAULTS=1 or provide Bearer authorization"})
+            else:
+                self._send_json(401, {"error": "unauthorized", "detail": "Missing authorization token"})
+            return False
+
+        # Constant-time comparison
+        for expected in role_tokens:
+            if hmac.compare_digest(token.encode("utf-8"), expected.encode("utf-8")):
+                return True
+
+        self._send_json(401, {"error": "unauthorized", "detail": "Invalid credentials"})
+        return False
+
     def _edge_authorised(self, path: str) -> bool:
-        """NFR-5: when NIMBUS_EDGE_TOKEN is set, the edge-facing endpoints need `Authorization: Bearer <token>`.
-        (Requester and operator pages are protected in front by API Gateway; MQTT and SQS by IAM.)"""
-        token = os.environ.get("NIMBUS_EDGE_TOKEN")
-        if not token or path not in EDGE_PATHS:
-            return True
-        given = self.headers.get("Authorization", "")
-        ok = given.startswith("Bearer ") and hmac.compare_digest(given[7:].encode(), token.encode())
-        if not ok:
-            self._send_json(401, {"error": "edge token required"})
-        return ok
+        return self._is_authorized(path, self.command)
 
     def _fault_authorised(self, path: str) -> bool:
-        """Auth check for fault injection & outage endpoints (/fault, /llm/outage).
-        Disabled by default in production. Enabled if:
-          1. NIMBUS_DEMO_FAULTS=1 is set in the environment (for local demos/testing), OR
-          2. Authorization: Bearer <token> matches NIMBUS_ADMIN_TOKEN or NIMBUS_EDGE_TOKEN, OR
-          3. Running inside a pytest session (PYTEST_CURRENT_TEST).
-        """
-        if path not in ("/fault", "/llm/outage"):
-            return True
-        if os.environ.get("NIMBUS_DEMO_FAULTS", "0").lower() in ("1", "true", "yes"):
-            return True
-        admin_token = os.environ.get("NIMBUS_ADMIN_TOKEN") or os.environ.get("NIMBUS_FAULT_TOKEN") or os.environ.get("NIMBUS_EDGE_TOKEN")
-        given = self.headers.get("Authorization", "")
-        if admin_token and given.startswith("Bearer "):
-            token = given[7:].strip()
-            if hmac.compare_digest(token.encode(), admin_token.encode()):
-                return True
-        if "PYTEST_CURRENT_TEST" in os.environ and not os.environ.get("NIMBUS_TEST_AUTH_CHECK"):
-            return True
-        self._send_json(403, {"error": f"{path} is protected; enable with NIMBUS_DEMO_FAULTS=1 or provide Bearer authorization"})
-        return False
+        return self._is_authorized(path, self.command)
+
 
     def do_GET(self):
         path = urlparse(self.path).path
-        if not self._edge_authorised(path) or not self._fault_authorised(path):
+        if not self._is_authorized(path, "GET"):
             return
         if path == "/":
             self._send_static("index.html")
@@ -364,6 +462,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/fleet":
             self._send_json(200, {"fleet": self.orch.fleet.snapshot(), "places": self.orch.fleet.place_snapshot(),
                                   "mode": self.orch.mode,
+                                  "scheduler": getattr(self.orch.scheduler, "kind", "edf"),
                                   "llm": getattr(self.orch.llm, "model_id", "?"), "pack": self.orch.pack.id})
         elif path == "/notifications":
             q = parse_qs(urlparse(self.path).query)
@@ -485,12 +584,15 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self._do_post()
         finally:
-            for message_id in self._reserved:
-                self.store.release_message_id(message_id)
+            with _STATE_LOCK:
+                for message_id in self._reserved:
+                    _IN_FLIGHT_MESSAGES.pop(message_id, None)
+                    if hasattr(self.store, "release_message_id"):
+                        self.store.release_message_id(message_id)
 
     def _do_post(self):
         path = urlparse(self.path).path
-        if not self._edge_authorised(path) or not self._fault_authorised(path):
+        if not self._is_authorized(path, "POST"):
             return
         try:
             body = self._read_json()
@@ -551,6 +653,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _dedupe(self, body: dict) -> tuple[bool, str | None]:
         """FR-8 shape: a repeated message_id is acknowledged, not acted on.
+        Deduplication race fix (H1): In-flight reservation prevents concurrent
+        duplicate requests from creating multiple tasks.
 
         The id is *reserved* while the message is processed (processing can take seconds when the model is called),
         so a second delivery of the same id arriving meanwhile is acknowledged as a duplicate instead of racing the
@@ -565,10 +669,16 @@ class Handler(BaseHTTPRequestHandler):
             if message_id in self.store.seen_message_ids:
                 self._send_json(200, {"duplicate": True})
                 return True, message_id
-            if not self.store.reserve_message_id(message_id):
-                self._send_json(200, {"duplicate": True, "in_flight": True})
+            now = time.monotonic()
+            expired = [mid for mid, ts in _IN_FLIGHT_MESSAGES.items() if now - ts > _IN_FLIGHT_TIMEOUT]
+            for mid in expired:
+                _IN_FLIGHT_MESSAGES.pop(mid, None)
+            if message_id in _IN_FLIGHT_MESSAGES or (hasattr(self.store, "reserve_message_id") and not self.store.reserve_message_id(message_id)):
+                self._send_json(409, {"error": "message_id is in-flight", "duplicate": True})
                 return True, message_id
-            self._reserved.append(message_id)
+            _IN_FLIGHT_MESSAGES[message_id] = now
+            if hasattr(self, "_reserved"):
+                self._reserved.append(message_id)
             return False, message_id
 
     def _post_request(self, body: dict):
@@ -589,24 +699,28 @@ class Handler(BaseHTTPRequestHandler):
         if dup:
             return
 
-        with _STATE_LOCK:
-            task_id = self.store.next_task_id()
-            task = {
-                "task_id": task_id,
-                "message_id": message_id,
-                "request_text": text,
-                "status": "received",
-                "question": None,
-                "lease": None,
-                "result_ref": None,
-            }
-            self.store.append_decision(self._row("requester", {"form": form} if form is not None else {"text": text},
-                                                 {"event": "structured_request_received" if form is not None else "request_received"}, None, task_id))
-            history = self.store.timeline(task_id)
-        if form is not None:
-            self._decide(task, lambda: self.orch.handle_structured_request(task, form), created=True)
-        else:
-            self._decide(task, lambda: self.orch.handle_request(task, text, history=history), created=True)
+        try:
+            with _STATE_LOCK:
+                task_id = self.store.next_task_id()
+                task = {
+                    "task_id": task_id,
+                    "message_id": message_id,
+                    "request_text": text,
+                    "status": "received",
+                    "question": None,
+                    "lease": None,
+                    "result_ref": None,
+                }
+                self.store.append_decision(self._row("requester", {"form": form} if form is not None else {"text": text},
+                                                     {"event": "structured_request_received" if form is not None else "request_received"}, None, task_id))
+                history = self.store.timeline(task_id)
+            if form is not None:
+                self._decide(task, lambda: self.orch.handle_structured_request(task, form), created=True)
+            else:
+                self._decide(task, lambda: self.orch.handle_request(task, text, history=history), created=True)
+        finally:
+            with _STATE_LOCK:
+                _IN_FLIGHT_MESSAGES.pop(message_id, None)
 
     def _decide(self, task: dict, run, *, created: bool = False) -> bool:
         """Run one orchestrator decision and answer the caller. Returns False
@@ -638,6 +752,8 @@ class Handler(BaseHTTPRequestHandler):
             for key in ("notice", "reason"):
                 if task.get(key):
                     view[key] = task[key]
+            if task.get("message_id"):
+                _IN_FLIGHT_MESSAGES.pop(task["message_id"], None)
             self._send_json(201, view)
             return True
 
@@ -667,25 +783,29 @@ class Handler(BaseHTTPRequestHandler):
         if dup:
             return
 
-        if task.get("edge_question"):   # the edge asked (CLARIFY) and the cloud passed it on: relay the answer back
-            self._relay_edge_answer(task, text, message_id)
-            return
-        with _STATE_LOCK:
-            task["message_id"] = message_id
-            question = task["question"]
-            self.store.append_decision(
-                self._row(
-                    "requester",
-                    {"text": text, "question": question},
-                    {"event": "clarification_answered"},
-                    None,
-                    task_id,
+        try:
+            if task.get("edge_question"):   # the edge asked (CLARIFY) and the cloud passed it on: relay the answer back
+                self._relay_edge_answer(task, text, message_id)
+                return
+            with _STATE_LOCK:
+                task["message_id"] = message_id
+                question = task["question"]
+                self.store.append_decision(
+                    self._row(
+                        "requester",
+                        {"text": text, "question": question},
+                        {"event": "clarification_answered"},
+                        None,
+                        task_id,
+                    )
                 )
-            )
-            history = self.store.timeline(task_id)
-        # The model sees the whole exchange: request, its question, the answer.
-        self._decide(task, lambda: self.orch.handle_request(
-            task, task["request_text"], question=question, answer=text, history=history))
+                history = self.store.timeline(task_id)
+            # The model sees the whole exchange: request, its question, the answer.
+            self._decide(task, lambda: self.orch.handle_request(
+                task, task["request_text"], question=question, answer=text, history=history))
+        finally:
+            with _STATE_LOCK:
+                _IN_FLIGHT_MESSAGES.pop(message_id, None)
 
     def _post_escalation(self, body: dict):
         """Ingress for edge escalations (PRD Table 2; Person 3 replaces the
@@ -720,33 +840,37 @@ class Handler(BaseHTTPRequestHandler):
         dup, message_id = self._dedupe(body)
         if dup:
             return
-        lease_version = task["lease"]["version"] if task.get("lease") else None
-        row = self._row(
-            "rule",
-            {"action": action, "by": "operator"},
-            {"decision": f"operator_{action}"},
-            lease_version,
-            task_id,
-        )
-        errors = contracts.validate_document("decision_log_entry", row)
-        if errors:
-            self._send_json(400, {"error": "control intent violates decision-log contract", "detail": errors})
-            return
-        with _STATE_LOCK:
-            new_status = {"pause": "paused", "cancel": "cancelled"}[action]
-            # Log row first, then the state it explains (FR-20 replay order).
-            self.store.append_decision(row)
-            if self.orch.repo.current(task_id) is not None:   # FR-22: the stop must reach the robots, not just the record
-                self._apply(task, self.orch.stand_down(task, f"operator {action}"))
-            task["status"] = new_status
+        try:
+            lease_version = task["lease"]["version"] if task.get("lease") else None
+            row = self._row(
+                "rule",
+                {"action": action, "by": "operator"},
+                {"decision": f"operator_{action}"},
+                lease_version,
+                task_id,
+            )
+            errors = contracts.validate_document("decision_log_entry", row)
+            if errors:
+                self._send_json(400, {"error": "control intent violates decision-log contract", "detail": errors})
+                return
+            with _STATE_LOCK:
+                new_status = {"pause": "paused", "cancel": "cancelled"}[action]
+                # Log row first, then the state it explains (FR-20 replay order).
+                self.store.append_decision(row)
+                if self.orch.repo.current(task_id) is not None:   # FR-22: the stop must reach the robots, not just the record
+                    self._apply(task, self.orch.stand_down(task, f"operator {action}"))
+                task["status"] = new_status
+                if action == "cancel":
+                    self.orch.cancel(task)  # frees robots and zones, returns the item
+                self.store.put_task(task)
+                self.store.see_message_id(message_id)  # accepted: record for FR-8 dedup
+                self.cost.record(dynamodb_ops=2)  # status write + log row
             if action == "cancel":
-                self.orch.cancel(task)  # frees robots and zones, returns the item
-            self.store.put_task(task)
-            self.store.see_message_id(message_id)  # accepted: record for FR-8 dedup
-            self.cost.record(dynamodb_ops=2)  # status write + log row
-        if action == "cancel":
-            self._drain()
-        self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
+                self._drain()
+            self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
+        finally:
+            with _STATE_LOCK:
+                _IN_FLIGHT_MESSAGES.pop(message_id, None)
 
     def _post_upload_url(self, body: dict):
         """FR-10: where the edge sends a result file before it reports OUTPUT_READY (a presigned S3 PUT, or this
@@ -1111,6 +1235,17 @@ class Handler(BaseHTTPRequestHandler):
             status_file = data_dir / "fault_status.json"
             MAX_INT = 2_147_483_647
 
+            # Monotonic generation fence (prevents late async POST overwriting reset)
+            current_gen = getattr(self.server, "fault_generation", 0)
+            req_gen = body.get("generation")
+            if req_gen is not None and isinstance(req_gen, int):
+                if req_gen < current_gen:
+                    self._send_json(409, {"error": "stale fault generation", "current_generation": current_gen})
+                    return
+                self.server.fault_generation = req_gen
+            else:
+                self.server.fault_generation = current_gen + 1
+
             # 1. Strict validation of body field types
             if "profile" in body:
                 if not isinstance(body["profile"], str):
@@ -1167,6 +1302,7 @@ class Handler(BaseHTTPRequestHandler):
 
             # 2. Handle clear / healthy profile
             if profile_name in ("none", "healthy", "clear") or body.get("active") is False:
+                self.server.fault_generation = getattr(self.server, "fault_generation", 0) + 1
                 self.server.fault_state = None
                 for p in (status_file, Path("data/fault_status.json")):
                     try:
@@ -1174,7 +1310,7 @@ class Handler(BaseHTTPRequestHandler):
                             p.unlink()
                     except Exception:
                         pass
-                self._send_json(200, {"accepted": True, "fault": self._fault_view()})
+                self._send_json(200, {"accepted": True, "generation": self.server.fault_generation, "fault": self._fault_view()})
                 return
 
             # 3. Preset profile resolution
@@ -1278,7 +1414,13 @@ def process_escalation(
             # The same result again under a fresh message id (an edge replaying after a restart): acknowledge it, run
             # none of the completion side effects twice (no second summary, notice, archive upload or leg advance).
             store.see_message_id(message_id)
-            return 200, {"duplicate": True, "already_completed": task["status"] == "completed"}
+            return 200, {
+                "duplicate": True,
+                "already_completed": task["status"] == "completed",
+                "status": "already_completed",
+                "task_id": task_id,
+                "result_ref": task.get("result_ref"),
+            }
 
         # Log row first, then the state it explains (FR-20 replay order).
         store.append_decision(
@@ -1532,7 +1674,10 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
 
         transport.subscribe("nimbus/+/escalation", on_mqtt_escalation)
         transport.subscribe("nimbus/+/checkin", on_mqtt_checkin)
-        transport.start()
+        try:
+            transport.start()
+        except Exception as exc:
+            logging.getLogger("nimbus.mqtt").warning("MQTT transport startup failed: %s; proceeding without MQTT", exc)
 
     handler = type(
         "BoundHandler",

@@ -14,12 +14,8 @@
   "aws_telemetry": {
     "account_id": "930124786284",
     "region": "ap-south-1",
-    "cloudwatch_ecs_metrics_active": 1,
+    "cloudwatch_ecs_metrics_active": 2,
     "cost_explorer_records": [
-      {
-        "date": "2026-10-30",
-        "unblended_cost_usd": -3.61e-08
-      },
       {
         "date": "2026-10-31",
         "unblended_cost_usd": -3.61e-08
@@ -43,6 +39,10 @@
       {
         "date": "2026-11-05",
         "unblended_cost_usd": -4.34e-08
+      },
+      {
+        "date": "2026-11-06",
+        "unblended_cost_usd": -4.2e-08
       }
     ]
   },
