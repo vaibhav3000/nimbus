@@ -1,13 +1,7 @@
 run,robot,scenario,success,failure_reason
 1,R1,north_wall_plus_1m,false,expected_safe_stop; got_timeout: Navigation timeout: goal timed out (failed to reach target)
 1,R2,nurse_station_approach,true,safe_stop: Navigation blocked: robot departed the traversable costmap (failed to reach target)
-1,R3,nurse_station_approach,true,completed_safely
-1,R4,nurse_station_approach,false,sensor_unavailable: Navigation sensor_unavailable: front range data is stale or unavailable (failed to reach target)
+1,R3,nurse_station_approach,false,timeout: Navigation timeout: goal timed out (failed to reach target)
+1,R4,nurse_station_approach,true,safe_stop: Navigation blocked: planned bearing is behind the robot and no map-checked U-turn fits (failed to reach target)
 1,R5,forward_5m,false,invalid_destination: Navigation invalid_destination: goal lies outside the configured traversable corridors (failed to reach target)
 1,R6,forward_50m,false,invalid_destination: Navigation invalid_destination: goal is outside the configured navigation costmap (failed to reach target)
-2,R1,north_wall_plus_1m,false,expected_safe_stop; got_invalid_destination: Navigation invalid_destination: goal lies outside the configured traversable corridors (failed to reach target)
-2,R2,nurse_station_approach,true,safe_stop: Navigation blocked: robot departed the traversable costmap (failed to reach target)
-2,R3,nurse_station_approach,true,safe_stop: Navigation blocked: robot departed the traversable costmap (failed to reach target)
-2,R4,nurse_station_approach,false,sensor_unavailable: Navigation sensor_unavailable: front range data is stale or unavailable (failed to reach target)
-2,R5,forward_5m,false,invalid_destination: Navigation invalid_destination: goal lies outside the configured traversable corridors (failed to reach target)
-2,R6,forward_50m,false,invalid_destination: Navigation invalid_destination: goal is outside the configured navigation costmap (failed to reach target)

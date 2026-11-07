@@ -9,9 +9,11 @@ RESULTS="$RESULT_DIR/results.csv"
 RUNS=5
 TMP_DIR="$(mktemp -d -t nimbus-r1.XXXXXX)"
 GAZEBO_PID=""
+ACTIVE_PARTITION=""
 
 command -v ign >/dev/null || { echo "Gazebo Fortress (ign) is required." >&2; exit 127; }
 command -v python3 >/dev/null || { echo "python3 is required." >&2; exit 127; }
+command -v setsid >/dev/null || { echo "setsid is required for isolated Gazebo cleanup." >&2; exit 127; }
 [[ -f "$WORLD" ]] || { echo "Missing six-robot hospital world: $WORLD" >&2; exit 1; }
 
 # This test is strictly robot-local.  It neither starts nor contacts Nimbus
@@ -21,11 +23,61 @@ export NIMBUS_GOAL_TIMEOUT="${NIMBUS_GOAL_TIMEOUT:-90}"
 export IGN_GAZEBO_RESOURCE_PATH="$ROOT/simulation/hospital_world/models:$ROOT/simulation/hospital_world/models/robots:$ROOT/simulation/hospital_world/fuel_models${IGN_GAZEBO_RESOURCE_PATH:+:$IGN_GAZEBO_RESOURCE_PATH}"
 export GZ_SIM_RESOURCE_PATH="$IGN_GAZEBO_RESOURCE_PATH"
 
-cleanup() {
+partition_processes() {
+  # Bridges are spawned in their own sessions by GazeboAdapter, so they are
+  # not necessarily descendants of `ign gazebo`.  Restrict discovery to this
+  # run's unique partition and known simulation/bridge commands; never touch
+  # another Gazebo session.
+  local proc pid cmd
+  [[ -n "$ACTIVE_PARTITION" ]] || return 0
+  for proc in /proc/[0-9]*; do
+    pid="${proc##*/}"
+    [[ "$pid" != "$$" && "$pid" != "$PPID" && -r "$proc/environ" && -r "$proc/cmdline" ]] || continue
+    if ! tr '\0' '\n' <"$proc/environ" 2>/dev/null | grep -Fqx "IGN_PARTITION=$ACTIVE_PARTITION" \
+      && ! tr '\0' '\n' <"$proc/environ" 2>/dev/null | grep -Fqx "GZ_PARTITION=$ACTIVE_PARTITION"; then
+      continue
+    fi
+    cmd="$(tr '\0' ' ' <"$proc/cmdline" 2>/dev/null || true)"
+    case "$cmd" in
+      *"ign gazebo"*|*"ignition-gazebo"*|*"gz sim"*|*"ros_gz_bridge"*|*"ros_gz_image"*)
+        printf '%s\n' "$pid"
+        ;;
+    esac
+  done
+}
+
+stop_iteration() {
+  local pids=() deadline
+
+  # Stop the Gazebo process group first. `setsid` below makes this group
+  # exclusive to one R1 iteration, including any Gazebo descendants.
   if [[ -n "$GAZEBO_PID" ]] && kill -0 "$GAZEBO_PID" 2>/dev/null; then
-    kill "$GAZEBO_PID" 2>/dev/null || true
+    kill -TERM -- "-$GAZEBO_PID" 2>/dev/null || true
+    deadline=$((SECONDS + 8))
+    while kill -0 "$GAZEBO_PID" 2>/dev/null && (( SECONDS < deadline )); do sleep 1; done
+    kill -KILL -- "-$GAZEBO_PID" 2>/dev/null || true
     wait "$GAZEBO_PID" 2>/dev/null || true
   fi
+
+  # Then reap partition-scoped ROS-Gazebo bridges left after their SDK close.
+  mapfile -t pids < <(partition_processes)
+  if (( ${#pids[@]} )); then
+    echo "[R1] cleaning ${#pids[@]} residual Gazebo/bridge process(es) in $ACTIVE_PARTITION"
+    kill -TERM "${pids[@]}" 2>/dev/null || true
+    deadline=$((SECONDS + 8))
+    while (( SECONDS < deadline )); do
+      mapfile -t pids < <(partition_processes)
+      (( ${#pids[@]} == 0 )) && break
+      sleep 1
+    done
+    mapfile -t pids < <(partition_processes)
+    (( ${#pids[@]} == 0 )) || kill -KILL "${pids[@]}" 2>/dev/null || true
+  fi
+  GAZEBO_PID=""
+}
+
+cleanup() {
+  stop_iteration
   rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT INT TERM
@@ -52,10 +104,12 @@ printf 'run,robot,scenario,success,failure_reason\n' >"$RESULTS"
 for run in $(seq 1 "$RUNS"); do
   export IGN_PARTITION="nimbus_r1_${$}_${run}"
   export HOSPITAL_IGN_PARTITION="$IGN_PARTITION"
+  export GZ_PARTITION="$IGN_PARTITION"
+  ACTIVE_PARTITION="$IGN_PARTITION"
   unset DISPLAY
   GAZEBO_LOG="$TMP_DIR/gazebo-${run}.log"
   echo "[R1] run $run/$RUNS: starting isolated headless hospital world ($IGN_PARTITION)"
-  ign gazebo -r -s --headless-rendering "$WORLD" >"$GAZEBO_LOG" 2>&1 &
+  setsid ign gazebo -r -s --headless-rendering "$WORLD" >"$GAZEBO_LOG" 2>&1 &
   GAZEBO_PID=$!
 
   if ! wait_for_world; then
@@ -63,7 +117,7 @@ for run in $(seq 1 "$RUNS"); do
     for robot in R1 R2 R3 R4 R5 R6; do
       printf '%s,%s,world_startup,false,gazebo_topics_not_ready\n' "$run" "$robot" >>"$RESULTS"
     done
-    kill "$GAZEBO_PID" 2>/dev/null || true; wait "$GAZEBO_PID" 2>/dev/null || true; GAZEBO_PID=""
+    stop_iteration
     continue
   fi
 
@@ -140,9 +194,9 @@ with output.open("w", newline="") as handle:
     writer.writeheader(); writer.writerows(sorted(rows, key=lambda row: row["robot"]))
 PY
   tail -n +2 "$TMP_DIR/run-${run}.csv" >>"$RESULTS"
-  kill "$GAZEBO_PID" 2>/dev/null || true
-  wait "$GAZEBO_PID" 2>/dev/null || true
-  GAZEBO_PID=""
+  # Do not begin the next iteration until this world and its partition-scoped
+  # ROS-Gazebo bridges have exited.
+  stop_iteration
 done
 
 successes=$(awk -F, 'NR > 1 && $4 == "true" { count++ } END { print count + 0 }' "$RESULTS")

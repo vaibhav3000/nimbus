@@ -34,10 +34,25 @@ done
 
 MODES=(${T5_MODES:-C1 C2 C3})
 SEEDS=(${T5_SEEDS:-1})
+CLOUD_C1="${CLOUD_C1:-https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com}"
+CLOUD_C2="${CLOUD_C2:-https://xkczmnuqla.execute-api.ap-south-1.amazonaws.com}"
 
 say() { printf '\n\033[1m[T5] %s\033[0m\n' "$*"; }
 
 say "sweep: modes=[${MODES[*]}] seeds=[${SEEDS[*]}] (C1/C2 deployed, C3 local; real edge_sim)"
+
+# Reset FR-19 long-term memory (learned habits/closures/restrictions) on BOTH deployed
+# clouds up front, so persistent state can't bias allocation/reaction between runs and
+# the cross-wing hand-over is reproducible. (run_t5.py also resets per trial.)
+say "resetting long-term memory on deployed C1 and C2"
+for url in "$CLOUD_C1" "$CLOUD_C2"; do
+  if curl -fsS -m 25 -X POST "${url%/}/reset-memory" -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1; then
+    echo "  reset ok   : ${url%/}"
+  else
+    echo "  reset FAILED: ${url%/}  (continuing; run_t5.py resets again per trial)"
+  fi
+done
+
 say "clearing results/final/T5/ for a clean run"
 rm -rf "$ROOT/results/final/T5" 2>/dev/null || true
 mkdir -p "$ROOT/results/final/T5/raw"
