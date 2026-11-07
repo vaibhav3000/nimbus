@@ -38,7 +38,7 @@ PORT="${PORT:-8000}"
 #   C2 -> local cloud for now; repoint to a deployed C2 endpoint later
 #   C3 -> local cloud
 CLOUD_C1="${CLOUD_C1:-https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com}"
-CLOUD_C2="${CLOUD_C2:-127.0.0.1:8000}"
+CLOUD_C2="${CLOUD_C2:-https://xkczmnuqla.execute-api.ap-south-1.amazonaws.com}"
 CLOUD_C3="${CLOUD_C3:-127.0.0.1:8000}"
 CLOUD=""   # set per-config in run_config()
 REQUEST_TEXT="Need a pediatric infusion pump at 2B-12, urgent."
@@ -59,7 +59,8 @@ trap cleanup EXIT INT TERM
 say() { printf '\n\033[1m[T1] %s\033[0m\n' "$*"; }
 
 # http(s):// URLs are kept as-is; a bare host:port gets an http:// prefix.
-normalize_url() { case "$1" in http://*|https://*) printf '%s' "$1" ;; *) printf 'http://%s' "$1" ;; esac; }
+# Any trailing slash is trimmed so paths don't become "…//requests".
+normalize_url() { local u="$1"; case "$u" in http://*|https://*) ;; *) u="http://$u" ;; esac; printf '%s' "${u%/}"; }
 is_local_url()  { case "$1" in *127.0.0.1*|*localhost*) return 0 ;; *) return 1 ;; esac; }
 
 post_json() { curl -fsS -X POST "$CLOUD$1" -H 'Content-Type: application/json' -d "$2" 2>/dev/null; }
