@@ -21,7 +21,10 @@
 #   contrast (everyone just completes), so it is not run.
 #
 #   WHY A LOCAL CLOUD, NOT THE DEPLOYED ENDPOINT (unlike T1/T8):
-#   T2's whole mechanism is a precisely-timed WAN cut -- the outage is created by
+#   T2 is fundamentally a NETWORK-DISRUPTION SIMULATION -- its purpose is to cut and
+#   restore the cloud<->edge link on a controlled schedule, which cannot be applied to
+#   a managed AWS endpoint from this host. Its mechanism is a precisely-timed WAN cut
+#   -- the outage is created by
 #   SIGSTOP-ing the cloud PROCESS the instant the lease is granted and resuming it
 #   at mission end. A managed AWS deployment (API Gateway + Fargate) cannot be
 #   paused and its cloud<->edge link cannot be severed at a chosen instant, so T2

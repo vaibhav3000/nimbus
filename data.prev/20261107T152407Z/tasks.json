@@ -1,0 +1,428 @@
+{
+ "task-000001": {
+  "task_id": "task-000001",
+  "message_id": "t8-C3-1794061394-1225859-0",
+  "request_text": "C3 structured request",
+  "status": "completed",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000001-v1",
+   "version": 1,
+   "priority": "routine",
+   "deadline_ts": "2026-11-07T15:23:14Z",
+   "expiry_ts": "2026-11-07T15:26:14Z",
+   "allowed_zones": [
+    "south_equipment_approach",
+    "east_south_hall_corner",
+    "east_south_hall",
+    "east_mid_hall",
+    "east_waiting_approach"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 1.0,
+   "assigned_robots": [
+    "R3"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "south_equipment_approach",
+      "via": [
+       "east_waiting_approach",
+       "east_mid_hall",
+       "east_south_hall",
+       "east_south_hall_corner",
+       "south_equipment_approach"
+      ],
+      "purpose": "pickup"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "east_waiting_approach",
+      "via": [
+       "south_equipment_approach",
+       "east_south_hall_corner",
+       "east_south_hall",
+       "east_mid_hall",
+       "east_waiting_approach"
+      ]
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R3"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R3"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": "storage://results/task-000001/delivery-proof.jpg",
+  "notice": null,
+  "spec": {
+   "item": "wheelchair",
+   "destination": "east_waiting_approach",
+   "priority": "routine",
+   "deadline_minutes": 60,
+   "constraints": [],
+   "rationale": "C3 structured form",
+   "destination_anchor": "east_waiting_approach",
+   "requested_at": "2026-11-07T14:23:14Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "wheelchair"
+  },
+  "stock_released": false,
+  "stock_settled": true,
+  "summary": "Done: wheelchair to east_waiting_approach for task task-000001.",
+  "archive_ref": "file://logs/task-000001.json"
+ },
+ "task-000002": {
+  "task_id": "task-000002",
+  "message_id": "t8-C3-1794061394-1225859-1",
+  "request_text": "C3 structured request",
+  "status": "completed",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000002-v1",
+   "version": 1,
+   "priority": "routine",
+   "deadline_ts": "2026-11-07T15:23:14Z",
+   "expiry_ts": "2026-11-07T15:26:14Z",
+   "allowed_zones": [
+    "south_equipment_approach",
+    "east_south_hall_corner",
+    "east_south_hall",
+    "east_mid_hall",
+    "east_waiting_approach",
+    "north_hall",
+    "east_north_gate"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 1.0,
+   "assigned_robots": [
+    "R1"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "south_equipment_approach",
+      "via": [
+       "north_hall",
+       "east_north_gate",
+       "east_waiting_approach",
+       "east_mid_hall",
+       "east_south_hall",
+       "east_south_hall_corner",
+       "south_equipment_approach"
+      ],
+      "purpose": "pickup"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "east_waiting_approach",
+      "via": [
+       "south_equipment_approach",
+       "east_south_hall_corner",
+       "east_south_hall",
+       "east_mid_hall",
+       "east_waiting_approach"
+      ]
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R1"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R1"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R1"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": "storage://results/task-000002/delivery-proof.jpg",
+  "notice": null,
+  "spec": {
+   "item": "blanket",
+   "destination": "east_waiting_approach",
+   "priority": "routine",
+   "deadline_minutes": 60,
+   "constraints": [],
+   "rationale": "C3 structured form",
+   "destination_anchor": "east_waiting_approach",
+   "requested_at": "2026-11-07T14:23:14Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "blanket"
+  },
+  "stock_released": false,
+  "stock_settled": true,
+  "summary": "Done: blanket to east_waiting_approach for task task-000002.",
+  "archive_ref": "file://logs/task-000002.json"
+ },
+ "task-000003": {
+  "task_id": "task-000003",
+  "message_id": "t8-C3-1794061394-1225859-2",
+  "request_text": "C3 structured request",
+  "status": "leased",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000003-v2",
+   "version": 2,
+   "priority": "urgent",
+   "deadline_ts": "2026-11-07T14:35:14Z",
+   "expiry_ts": "2026-11-07T14:38:14Z",
+   "allowed_zones": [
+    "nurse_station_approach",
+    "east_mid_hall",
+    "east_waiting_approach"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 1.0,
+   "assigned_robots": [
+    "R3"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "nurse_station_approach",
+      "via": [
+       "east_waiting_approach",
+       "east_mid_hall",
+       "nurse_station_approach"
+      ],
+      "purpose": "pickup"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "east_waiting_approach",
+      "via": [
+       "nurse_station_approach",
+       "east_mid_hall",
+       "east_waiting_approach"
+      ]
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R3"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R3"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump_paediatric",
+   "destination": "east_waiting_approach",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "C3 structured form",
+   "requested_at": "2026-11-07T14:23:14Z",
+   "source": "nurse_station_approach",
+   "destination_anchor": "east_waiting_approach",
+   "leg": 2,
+   "legs": 2
+  },
+  "legs": [
+   {
+    "item": "infusion_pump_paediatric",
+    "destination": "nurse_station_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12,
+    "constraints": [],
+    "rationale": "C3 structured form",
+    "requested_at": "2026-11-07T14:23:14Z",
+    "destination_anchor": "nurse_station_approach",
+    "leg": 1,
+    "legs": 2,
+    "final_destination": "east_waiting_approach"
+   },
+   {
+    "item": "infusion_pump_paediatric",
+    "destination": "east_waiting_approach",
+    "priority": "urgent",
+    "deadline_minutes": 12,
+    "constraints": [],
+    "rationale": "C3 structured form",
+    "requested_at": "2026-11-07T14:23:14Z",
+    "source": "nurse_station_approach",
+    "destination_anchor": "east_waiting_approach",
+    "leg": 2,
+    "legs": 2
+   }
+  ],
+  "leg_index": 1,
+  "reason": null,
+  "reservation": {
+   "cluster": "west-wing",
+   "item": "infusion_pump_paediatric"
+  },
+  "stock_released": false,
+  "leg_results": [
+   "storage://results/task-000003/delivery-proof.jpg"
+  ]
+ },
+ "_seen_message_ids": [
+  "msg-ci-1794061394578-c56231",
+  "msg-ci-1794061394642-85f252",
+  "msg-ci-1794061400470-acdbb2",
+  "msg-ci-1794061400531-8bca83",
+  "msg-ci-1794061406483-5b3aec",
+  "msg-ci-1794061406545-153a3e",
+  "msg-ci-1794061412498-36b61f",
+  "msg-ci-1794061412559-e4c1c2",
+  "msg-ci-1794061416581-7fbae6",
+  "msg-ci-1794061418511-41e0bc",
+  "msg-ci-1794061418571-e928f6",
+  "msg-ci-1794061421845-8db8e0",
+  "msg-ci-1794061424525-d50f07",
+  "msg-ci-1794061424586-d2ca72",
+  "msg-ci-1794061429634-aa8c6b",
+  "msg-ci-1794061430539-2751b7",
+  "msg-ci-1794061430600-9504a9",
+  "msg-ci-1794061434930-e3f107",
+  "msg-ci-1794061436550-bdc82b",
+  "msg-ci-1794061436615-b13074",
+  "msg-ci-1794061442566-5281ad",
+  "msg-ci-1794061442629-2c5a32",
+  "msg-ci-1794061448581-07f69a",
+  "msg-ci-1794061448643-da0fc6",
+  "msg-ci-1794061454597-250f98",
+  "msg-ci-1794061454656-d3d821",
+  "msg-ci-1794061460611-bc1d20",
+  "msg-ci-1794061460670-166738",
+  "msg-ci-1794061466626-fd4d5a",
+  "msg-ci-1794061466684-f25704",
+  "msg-ci-1794061469114-026b0e",
+  "msg-ci-1794061472641-fc6b23",
+  "msg-ci-1794061472698-7a93e5",
+  "msg-ci-1794061476805-e00a9a",
+  "msg-ci-1794061478694-0f0c48",
+  "msg-ci-1794061479207-99c0c8",
+  "msg-ci-1794061479887-cc7e85",
+  "msg-ci-1794061484840-1cc25b",
+  "msg-ci-1794061490754-6095b7",
+  "msg-ci-1794061496768-4a58cb",
+  "msg-ci-1794061502782-57a117",
+  "msg-ci-1794061508796-3aae91",
+  "msg-ci-1794061514810-8cfc86",
+  "msg-ci-1794061520825-8c301e",
+  "msg-ci-1794061526840-a2413b",
+  "msg-ci-1794061532855-e04da9",
+  "msg-ci-1794061538350-57f09c",
+  "msg-ci-1794061538868-b11ccb",
+  "msg-ci-1794061543680-d1c0fe",
+  "msg-ci-1794061544883-218eda",
+  "msg-ci-1794061550897-a35667",
+  "msg-ci-1794061556911-667425",
+  "msg-ci-1794061562925-fb3c78",
+  "msg-ci-1794061568938-ce062e",
+  "msg-ci-1794061574952-df473a",
+  "msg-ci-1794061580966-951558",
+  "msg-ci-1794061586586-a29a08",
+  "msg-ci-1794061586981-148a9c",
+  "msg-out-1794061483320",
+  "msg-out-1794061484348",
+  "msg-out-1794061587649",
+  "t8-C3-1794061394-1225859-0",
+  "t8-C3-1794061394-1225859-1",
+  "t8-C3-1794061394-1225859-2"
+ ]
+}

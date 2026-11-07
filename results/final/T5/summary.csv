@@ -1,0 +1,4 @@
+mode,seed,closed_gate,park_zone,started_utc,success,first_wing,final_wing,handover,action,decided_by,outcome,replan_failed_before_handover,operator_notices,cloud_llm_calls,decision_latency_ms,request_to_lease_s,lease_version_final,escalation_http,replanned,deadline_s
+C1,1,east_south_hall_corner,south_equipment_approach,2026-11-07T15:05:25Z,True,east-wing,west-wing,True,replan,llm,HAND-OVER east-wing -> west-wing,True,1,2,32.6,0.017,2,201,True,720
+C2,1,east_south_hall_corner,south_equipment_approach,2026-11-07T15:05:26Z,True,east-wing,west-wing,True,replan,llm,HAND-OVER east-wing -> west-wing,True,1,2,58.1,0.019,2,201,True,720
+C3,1,east_south_hall_corner,south_equipment_approach,2026-11-07T15:05:28Z,True,east-wing,west-wing,True,replan,rules,HAND-OVER east-wing -> west-wing,True,1,0,32.4,0.02,2,201,True,720

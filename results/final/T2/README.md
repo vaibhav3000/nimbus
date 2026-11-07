@@ -1,6 +1,6 @@
 # T2: Urgent delivery under a sustained WAN outage
 
-- Trials: 3  |  generated 2026-11-07T14:15:15Z  |  commit 52730e6
+- Trials: 3  |  generated 2026-11-07T15:19:44Z  |  commit 81d3b18
 - Pack: `packs/hospital_sim6_t2` (compressed timing)  |  obstacle: `east_mid_hall`
 - tc available: False  |  ping available: False
 
@@ -14,7 +14,7 @@
 
 ## Why T2 uses a local cloud, not the deployed AWS endpoint
 
-T1 and T8 point C1/C2 at the deployed clouds (and requests show in the operator GUI). **T2 cannot**, because its entire mechanism is a precisely-timed WAN cut:
+T1 and T8 point C1/C2 at the deployed clouds (and requests show in the operator GUI). **T2 cannot**, because T2 is fundamentally a **network-disruption simulation** -- its purpose is to cut and restore the cloud<->edge link on a controlled schedule, which cannot be done to a managed AWS endpoint from this host. Concretely its mechanism is a precisely-timed WAN cut:
 
 1. The outage is created by **`SIGSTOP`-ing the cloud process** the instant the lease is ingested and `SIGCONT`-ing it at mission end. A managed service (API Gateway v2 + Fargate) cannot be paused, and its cloud<->edge link cannot be severed at a chosen millisecond and held. Owning the cloud process locally is the only way to cut it deterministically.
 2. The C1-vs-C2 contrast needs a **short lease** so C2's offline stall reaches a terminal state in ~15 s rather than ~15 min. T2 uses a compressed-timing pack (`packs/hospital_sim6_t2`: 1 min urgent deadline + 8 s grace); the deployed cloud is fixed to the production pack, which must not be mutated.

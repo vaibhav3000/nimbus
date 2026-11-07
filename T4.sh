@@ -14,9 +14,16 @@
 #     C3  local finite-state rules detour                                      -> also fast (classical)
 #
 #   The heavy lifting is in scripts/run_t4.py. Kinematic simulator throughout
-#   (real supervisor in-process, no Gazebo). Like T2, T4 owns a LOCAL cloud: the
-#   bad link is injected with an in-process FaultProxy, which a managed AWS endpoint
-#   cannot be. (T1/T8 have no impairment and use the deployed C1/C2 endpoints.)
+#   (real supervisor in-process, no Gazebo).
+#
+#   WHY T4 USES A LOCAL CLOUD (not the deployed C1/C2 endpoints, unlike T1/T8):
+#     1. The "blocked corridor with a detour INSIDE the lease zone" case needs a
+#        custom, test-scoped map/scenario (compressed-timing pack + a deterministic
+#        obstacle) that is NOT part of the actual deployed hospital map. The detour
+#        scenario requires map/scenario changes we must not make to the real map, so
+#        T4 runs locally.
+#     2. The bad link is injected with an in-process FaultProxy, which cannot be
+#        applied against a managed HTTPS endpoint from this host.
 #
 # Usage:
 #   ./T4.sh                              # C1 C2 C3 on the 'severe' bad link

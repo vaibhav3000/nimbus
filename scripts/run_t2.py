@@ -28,6 +28,10 @@ generated README so nothing is silently substituted):
   relay requests never silently go to a C1 endpoint.
 
   WHY T2 CANNOT USE THE DEPLOYED (AWS) ENDPOINT -- unlike T1 and T8, which do:
+    0. T2 is fundamentally a NETWORK-DISRUPTION SIMULATION: its whole purpose is to
+       cut and restore the cloud<->edge link on a controlled schedule.  That network
+       disruption cannot be applied to a managed AWS endpoint from this host (no tc/
+       iptables), so T2 simulates it against a local cloud it controls.
     1. The whole experiment IS a precisely-timed WAN cut.  T2 creates the outage
        by SIGSTOP-ing the cloud *process* the instant the lease is ingested and
        SIGCONT-ing it at mission end.  The deployed cloud is a managed service
@@ -467,8 +471,10 @@ def aggregate_and_plot() -> int:
            "pack": T2_PACK, "obstacle_zone": OBSTACLE_ZONE,
            "tc_available": bool(shutil.which("tc")), "ping_available": bool(shutil.which("ping")),
            "uses_deployed_endpoint": False,
-           "why_local_cloud": ("T2 cannot use the deployed AWS endpoint (unlike T1/T8). The experiment IS a "
-                    "precisely-timed WAN cut: the outage is created by SIGSTOP-ing the cloud PROCESS the instant "
+           "why_local_cloud": ("T2 cannot use the deployed AWS endpoint (unlike T1/T8). T2 is fundamentally a "
+                    "NETWORK-DISRUPTION SIMULATION -- its purpose is to cut and restore the cloud<->edge link on a "
+                    "controlled schedule, which cannot be applied to a managed AWS endpoint from this host. The "
+                    "experiment IS a precisely-timed WAN cut: the outage is created by SIGSTOP-ing the cloud PROCESS the instant "
                     "the lease is ingested and SIGCONT-ing it at mission end. A managed service (API Gateway + "
                     "Fargate) cannot be paused, and its cloud<->edge link cannot be severed at a chosen instant. "
                     "T2 also needs a short lease (compressed-timing pack) so C2's offline stall reaches a "
@@ -563,7 +569,9 @@ def _readme(trials: list, env: dict) -> None:
              "- A persistent corridor obstacle forces a tactical decision mid-route while the WAN is down.", "",
              "## Why T2 uses a local cloud, not the deployed AWS endpoint", "",
              "T1 and T8 point C1/C2 at the deployed clouds (and requests show in the operator GUI). **T2 cannot**, "
-             "because its entire mechanism is a precisely-timed WAN cut:", "",
+             "because T2 is fundamentally a **network-disruption simulation** -- its purpose is to cut and restore "
+             "the cloud<->edge link on a controlled schedule, which cannot be done to a managed AWS endpoint from "
+             "this host. Concretely its mechanism is a precisely-timed WAN cut:", "",
              "1. The outage is created by **`SIGSTOP`-ing the cloud process** the instant the lease is ingested and "
              "`SIGCONT`-ing it at mission end. A managed service (API Gateway v2 + Fargate) cannot be paused, and "
              "its cloud<->edge link cannot be severed at a chosen millisecond and held. Owning the cloud process "

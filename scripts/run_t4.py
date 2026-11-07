@@ -18,12 +18,20 @@ poor. The question T4 answers is who is fastest to resolve the obstacle:
 
 Method / honesty (documented in the generated README):
 * Cloud: a LOCAL cloud this script launches (server.py) in the requested mode.
-  The bad link is injected by routing the edge->cloud traffic through an in-process
-  FaultProxy (scripts/fault_harness.py) with a chosen degradation profile. This is
-  a real, pure-Python latency/jitter/loss proxy -- no tc/NET_ADMIN needed. (A
-  deployed AWS endpoint could not be degraded this way; see T2's README for why
-  the outage/impairment experiments own a local cloud. T1/T8 use the deployed C1/C2
-  endpoints because they have no injected impairment.)
+
+  WHY T4 USES A LOCAL CLOUD, NOT THE DEPLOYED (AWS) ENDPOINT:
+    1. The scenario needs a controlled corridor blockage WITH a guaranteed detour
+       INSIDE the lease zone -- a test-scoped map/scenario configuration (the
+       compressed-timing pack packs/hospital_sim6_t2 and a deterministically placed
+       obstacle) that is NOT part of the actual deployed hospital map. We must shape
+       the map/scenario so the "blocked corridor, in-lease detour" case appears
+       reliably; we cannot and must not reshape the deployed hospital map to do it.
+    2. The bad link itself is injected by routing edge->cloud traffic through an
+       in-process FaultProxy (scripts/fault_harness.py: pure-Python latency/jitter/
+       loss, no tc/NET_ADMIN) -- which cannot be applied against a managed HTTPS
+       endpoint from this host.
+  Both reasons are test-scoped to this experiment. T1/T8 need no map/scenario change
+  and no injected impairment, so they use the deployed C1/C2 endpoints.
 * Edge: the REAL edge supervisor (edge/supervisor/supervisor.py) driven in-process,
   kinematic mock-robot backend (like T2). The obstacle is injected on its route.
 * Timing is MEASURED: completion time (request->delivered) and the edge decision
@@ -301,14 +309,20 @@ def aggregate_and_plot() -> int:
            "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
            "git_commit": _git_commit(), "host": os.uname().nodename if hasattr(os, "uname") else "?",
            "pack": T4_PACK, "obstacle_zone": OBSTACLE_ZONE,
+           "uses_deployed_endpoint": False,
+           "why_local_cloud": ("T4 uses a LOCAL cloud, not the deployed endpoint, for two test-scoped reasons: "
+                    "(1) the 'blocked corridor with a detour INSIDE the lease zone' case needs a controlled "
+                    "map/scenario configuration (a compressed-timing pack and a deterministically placed obstacle) "
+                    "that is NOT part of the actual deployed hospital map -- the detour scenario requires custom "
+                    "map/scenario changes, so we run it locally rather than reshape the real hospital map; and "
+                    "(2) the bad link is injected with an in-process FaultProxy, which cannot be applied against a "
+                    "managed HTTPS endpoint from this host. T1/T8 need neither and use the deployed C1/C2 endpoints."),
            "note": ("Edge = the real supervisor (C1 SLM / C2 relay / C3 rules), kinematic mock robot, driven "
                     "in-process. A persistent corridor obstacle forces a tactical decision; a detour exists "
                     "inside the lease. The edge<->cloud link is degraded for the whole mission by an in-process "
                     "FaultProxy (latency+jitter+loss), not tc. C1 and C3 decide the detour LOCALLY (link not on "
                     "the decision path) and are fast; C2 must round-trip to the cloud per decision and stalls on "
-                    "the bad link. Completion time and decision latency are measured, not inferred. T4 owns a "
-                    "local cloud for the same reason as T2 (a managed AWS endpoint cannot be degraded like this); "
-                    "T1/T8 use the deployed C1/C2 endpoints."),
+                    "the bad link. Completion time and decision latency are measured, not inferred."),
            "trials": len(trials)}
     (OUT_DIR / "env.json").write_text(json.dumps(env, indent=1, default=str))
 
@@ -361,6 +375,17 @@ def _readme(trials: list, env: dict) -> None:
              "- **C2**: cloud-only relay pays one cloud round trip per blocked step over the bad link -> **stalls on "
              "the link** (slowest; escalates if the round trip can't resolve).",
              "- **C3**: local finite-state rules detour -> also fast (another classical-baseline point).", "",
+             "## Why T4 uses a local cloud, not the deployed AWS endpoint", "",
+             "T1 and T8 run C1/C2 against the deployed clouds. **T4 does not**, for two test-scoped reasons:", "",
+             "1. **The detour scenario needs custom map/scenario changes not in the real hospital map.** T4 requires a "
+             "blocked corridor that still has a valid detour *inside the lease zone*; staging that reliably uses a "
+             "test-scoped configuration (a compressed-timing pack and a deterministically placed obstacle) that is "
+             "not part of the actual deployed hospital map. We shape the scenario locally rather than reshape the "
+             "real hospital map.",
+             "2. **The bad link can't be injected against a managed endpoint.** The degradation is an in-process "
+             "FaultProxy (latency/jitter/loss), which cannot be applied to a managed HTTPS endpoint from this host "
+             "(no tc/NET_ADMIN).", "",
+             env.get("why_local_cloud", ""), "",
              env["note"], "", "## Plots", "",
              "![completion time](plots/completion_time.png)",
              "![decision latency](plots/decision_latency.png)", "",

@@ -32,10 +32,13 @@ def lease(trial: int, expiry_s: float) -> dict:
       "allowed_zones":ROUTE,"forbidden_zones":[],"speed_limit":1.0,"assigned_robots":["R1"],"cluster_id":"east-wing",
       "when_to_escalate":["robot_failed"],"task_sequence":[{"cmd":"go_to","robot":"R1","params":{"to":"south_equipment_approach","speed":1.0,"via":ROUTE}}]}
 
-def run_trial(kind: str, trial: int, rng: random.Random, root: Path) -> tuple[dict,list[dict]]:
+def run_trial(kind: str, trial: int, rng: random.Random, root: Path, run_id: str) -> tuple[dict,list[dict]]:
     Recorder.received=[]; server=ThreadingHTTPServer(("127.0.0.1",0),Recorder); threading.Thread(target=server.serve_forever,daemon=True).start()
     expiry_s=5.0 if kind=="B" else 120.0
-    sup=EdgeSupervisor(cluster_id="east-wing",cloud_url=f"http://127.0.0.1:{server.server_port}",db_path=str(root/f"trial-{kind}-{trial}.db"),
+    # Never reuse a prior run's lease-version state: it creates false
+    # DROPPED_STALE outcomes before the trial reaches the fault injection.
+    db_dir=root/"sqlite"/run_id; db_dir.mkdir(parents=True,exist_ok=True)
+    sup=EdgeSupervisor(cluster_id="east-wing",cloud_url=f"http://127.0.0.1:{server.server_port}",db_path=str(db_dir/f"trial-{kind}-{trial}.db"),
                        robot_backend="sim",sim_mode="kinematic",slm_mode="mock",verbose=False)
     robot=sup.robots["R1"]; events=[]; started=time.time(); fault_at=started+rng.uniform(.25,.75) if kind=="A" else started
     # SimRobot clamps command speed to topology waypoint caps.  Raise those
@@ -67,10 +70,13 @@ def run_trial(kind: str, trial: int, rng: random.Random, root: Path) -> tuple[di
         [t.cancel() for t in timers]; sup.stop_outbox_worker(); robot.close(); server.shutdown(); server.server_close()
     history=list(robot.history); parks=[h for h in history if h.get("params",{}).get("reason")=="lease_expiry_safe_park"]
     park=parks[-1] if parks else None; park_name=(park or {}).get("params",{}).get("to")
-    task_after_expiry=kind=="B" and any(h.get("action")=="go_to" and h.get("params",{}).get("to")=="south_equipment_approach" and h.get("end_time",0)>expiry for h in history)
+    # A delivery navigation cancelled by the expiry stop is not an
+    # unauthorised completion.  Count only a task navigation that actually
+    # completed after the lease authority ended.
+    task_after_expiry=kind=="B" and any(h.get("action")=="go_to" and h.get("params",{}).get("to")=="south_equipment_approach" and h.get("status")=="COMPLETED" and h.get("end_time",0)>expiry for h in history)
     safe=bool(park_name and sup.parking_engine.is_safe_for_parking(park_name))
     row={"scenario":"R7-"+kind,"trial":trial,"seed":rng.randrange(2**31),"status":result.get("status"),"final_x":robot.pose[0],"final_y":robot.pose[1],"parking_zone":park_name,"parking_safe":safe,"time_to_park_s":None if not park else round(park.get("end_time",time.time())-expiry,3),"unauthorized_post_expiry_motion":task_after_expiry,"buffered_delivered":kind!="A" or bool(Recorder.received),"pass":(kind=="A" and bool(Recorder.received)) or (kind=="B" and safe and not task_after_expiry)}
-    return row, events+[{"event":"pose","time":t,"x":x,"y":y,"yaw":yaw,"status":st} for x,y,yaw,t,st in robot.position_history]
+    return row, events+[{"event":"pose","time":t,"x":x,"y":y,"yaw":yaw,"status":st} for t,x,y,yaw,st in robot.position_history]
 
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--scenario",choices=["A","B","all"],default="all"); ap.add_argument("--trials-a",type=int,default=20); ap.add_argument("--trials-b",type=int,default=10); ap.add_argument("--seed",type=int,default=7); ap.add_argument("--out",default="results/final/R7"); a=ap.parse_args()
@@ -78,9 +84,10 @@ def main():
     rd=lib.ResultDir("R7","WAN disconnection and lease-expiry parking",None,["--scenario",a.scenario,"--seed",str(a.seed),"--out",a.out],prd="FR-6, FR-10"); rd.reset_raw(); rd.env.update({"source":"measured","model":"SimRobot kinematic"})
     rng=random.Random(a.seed); rows=[]
     plan=([("A",a.trials_a)] if a.scenario=="A" else [("B",a.trials_b)] if a.scenario=="B" else [("A",a.trials_a),("B",a.trials_b)])
+    run_id=f"run-{int(time.time()*1_000_000)}"
     for kind,count in plan:
       for trial in range(1,count+1):
-       row,events=run_trial(kind,trial,rng,rd.dir/"raw"); rows.append(row); rd.raw("events",{"scenario":row["scenario"],"trial":trial,"events":events})
+       row,events=run_trial(kind,trial,rng,rd.dir/"raw",run_id); rows.append(row); rd.raw("events",{"scenario":row["scenario"],"trial":trial,"events":events})
        with (rd.dir/"raw"/f"poses-{kind}-{trial:02d}.jsonl").open("w") as f:
         for e in events:
          if e["event"]=="pose": f.write(json.dumps(e)+"\n")
