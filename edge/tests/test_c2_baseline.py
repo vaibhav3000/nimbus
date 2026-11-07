@@ -5,8 +5,12 @@ Baseline C2 (Cloud-Only Relay) and C3 (Deterministic Rules) Modes vs C1 (Leased 
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import http.server
+import json
 import pytest
+import socket
 import sys
+import threading
 
 _current = Path(__file__).resolve().parent
 while _current.parent != _current:
@@ -43,87 +47,133 @@ def _make_sample_lease(lease_id="lease-c2-001", version=1, destination="2B-12"):
     }
 
 
-def test_c2_baseline_relays_obstacle_to_cloud(tmp_path):
-    """
-    In C2 (Cloud-Only Relay) baseline mode, any obstacle encountered in corridor
-    bypasses local SLM reasoning and immediately halts the robot, logging an
-    escalation to Cloud outbox (ESCALATED_CLOUD).
-    """
-    db_file = str(tmp_path / "test_c2_obs.db")
-    supervisor = EdgeSupervisor(cluster_id="east-wing", db_path=db_file, system_mode="C2")
+# --- a tiny mock cloud that answers POST /relay/decide (C2's per-step round trip) ------------
 
-    # Inject obstacle into corridor-2B
-    robot = supervisor.robots["R1"]
-    robot.inject_obstacle(
-        zone="corridor-2B",
-        obstacle_type="transient",
-        description="Delivery trolley parked in hallway",
-        clears_after_waits=1,
-    )
+class _RelayCloud(http.server.BaseHTTPRequestHandler):
+    """Answers /relay/decide with a scripted decision and records every call.
+    The class attribute `decision` is what /relay/decide returns; `calls`
+    collects the request bodies so a test can assert the round trip happened."""
 
-    lease = _make_sample_lease(lease_id="lease-c2-obs")
-    res = supervisor.process_lease(lease)
+    decision = {"action": "wait", "via_zones": [], "rationale": "mock: hold", "source": "llm", "lease_version": 1}
+    calls = []
+    paths = []
 
-    # In C2 mode, status must be ESCALATED_CLOUD instead of COMPLETED
-    assert res["status"] == "ESCALATED_CLOUD"
-    assert "C2 Cloud-Only Relay" in res["reason"]
-    assert res["blocked_zone"] == "corridor-2B"
+    def log_message(self, *a):
+        pass
 
-    # Verify decision log marks decided_by as RELAY
-    decisions = supervisor.store.get_decisions("lease-c2-obs")
-    assert len(decisions) >= 1
-    assert any(d["decided_by"] == "RELAY" for d in decisions)
+    def _json(self, code, body):
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(body).encode("utf-8"))
 
-    # Verify UNEXPECTED_EVENT escalation was placed in outbox for Cloud
-    pending_outbox = supervisor.store.get_pending_outbox()
-    assert len(pending_outbox) >= 1
-    assert any(o["message_type"] == "UNEXPECTED_EVENT" for o in pending_outbox)
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length).decode("utf-8") or "{}") if length else {}
+        _RelayCloud.paths.append(self.path)
+        if self.path == "/relay/decide":
+            _RelayCloud.calls.append(body)
+            self._json(201, {"duplicate": False, **_RelayCloud.decision})
+        else:
+            # check-ins, heartbeats, escalations: accept so the run can proceed
+            self._json(201, {"accepted": True, "duplicate": False})
+
+    def do_GET(self):
+        self._json(200, {"outbox": []})
 
 
-def test_c2_baseline_relays_hardware_fault_to_cloud(tmp_path):
-    """
-    In C2 mode, encountering a robot hardware fault bypasses SWAP_ROBOT local
-    reasoning and immediately forwards an escalation to Cloud.
-    """
-    db_file = str(tmp_path / "test_c2_fault.db")
-    supervisor = EdgeSupervisor(cluster_id="east-wing", db_path=db_file, system_mode="C2")
+@pytest.fixture
+def relay_cloud():
+    _RelayCloud.calls = []
+    _RelayCloud.paths = []
+    _RelayCloud.decision = {"action": "wait", "via_zones": [], "rationale": "mock: hold",
+                            "source": "llm", "lease_version": 1}
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _RelayCloud)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_port}"
+    srv.shutdown()
 
-    # Inject motor fault into primary robot R1
-    robot = supervisor.robots["R1"]
-    robot.set_fault("Motor drive stall in steering assembly")
 
-    lease = _make_sample_lease(lease_id="lease-c2-fault")
-    res = supervisor.process_lease(lease)
+def _dead_cloud_url():
+    """A URL whose port is closed, so a relay POST fails fast (cloud unreachable)."""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return f"http://127.0.0.1:{port}"
 
-    assert res["status"] == "ESCALATED_CLOUD"
-    assert "C2 Cloud-Only Relay" in res["reason"]
 
-    # Robot was commanded to halt
-    assert robot.status in ("FAILED", "IDLE")
+# --- C2 relays each non-reflex step to the cloud and does what it says ------------------------
+
+def test_c2_relays_blocked_step_to_cloud_and_waits(tmp_path, relay_cloud):
+    """C2 has no local brain: a blocked step triggers one round trip to the cloud,
+    which here answers 'wait'. The robot waits (the transient obstacle clears) and
+    the task completes -- driven entirely by the cloud's decision."""
+    _RelayCloud.decision = {"action": "wait", "via_zones": [], "rationale": "trolley will move",
+                            "source": "llm", "lease_version": 1}
+    db_file = str(tmp_path / "test_c2_wait.db")
+    sup = EdgeSupervisor(cluster_id="east-wing", db_path=db_file, system_mode="C2", cloud_url=relay_cloud)
+    sup.robots["R1"].inject_obstacle("corridor-2B", "transient", "Delivery trolley", clears_after_waits=1)
+
+    res = sup.process_lease(_make_sample_lease(lease_id="lease-taskc2wait-v1"))
+
+    assert res["status"] == "COMPLETED"                       # the cloud decided, the robot obeyed
+    assert any(c["step_index"] is not None for c in _RelayCloud.calls)   # the round trip happened
+    assert _RelayCloud.calls[0]["cluster_id"] == "east-wing"
+    assert _RelayCloud.calls[0]["blocked_zones"] == ["corridor-2B"]
+    decisions = sup.store.get_decisions("lease-taskc2wait-v1")
+    assert any(d["decided_by"] == "C2_RELAY" for d in decisions)
+
+
+def test_c2_relays_and_aborts_to_operator_when_cloud_says_abort(tmp_path, relay_cloud):
+    """When the cloud's relay answer is 'abort', the C2 edge hands the event off
+    (UNEXPECTED_EVENT) rather than resolving anything locally."""
+    _RelayCloud.decision = {"action": "abort", "via_zones": [], "rationale": "no route; operator",
+                            "source": "rules", "lease_version": 1}
+    db_file = str(tmp_path / "test_c2_abort.db")
+    sup = EdgeSupervisor(cluster_id="east-wing", db_path=db_file, system_mode="C2", cloud_url=relay_cloud)
+    sup.robots["R1"].inject_obstacle("corridor-2B", "transient", "Blocked", clears_after_waits=5)
+
+    res = sup.process_lease(_make_sample_lease(lease_id="lease-taskc2abort-v1"))
+
+    assert res["status"] == "ESCALATED_UNEXPECTED"
+    assert len(_RelayCloud.calls) >= 1                        # it asked the cloud first
+    assert "/escalations" in _RelayCloud.paths               # then handed the event off
+
+
+def test_c2_without_a_reachable_cloud_cannot_decide_and_hands_off(tmp_path):
+    """A thin relay has no local brain: with the cloud unreachable, C2 must halt
+    and escalate -- it must NOT wait the obstacle out the way C1's edge would, or
+    it would gain the local autonomy the baseline is defined not to have."""
+    db_file = str(tmp_path / "test_c2_off.db")
+    sup = EdgeSupervisor(cluster_id="east-wing", db_path=db_file, system_mode="C2", cloud_url=_dead_cloud_url())
+    sup.robots["R1"].inject_obstacle("corridor-2B", "transient", "Trolley", clears_after_waits=1)
+
+    res = sup.process_lease(_make_sample_lease(lease_id="lease-taskc2off-v1"))
+
+    assert res["status"] == "ESCALATED_UNEXPECTED"           # stalled on a bad link, by design
+    decisions = sup.store.get_decisions("lease-taskc2off-v1")
+    assert any(d["decided_by"] == "C2_RELAY_OFFLINE" for d in decisions)
+    pending = sup.store.get_pending_outbox()
+    assert any(o["message_type"] == "UNEXPECTED_EVENT" for o in pending)
 
 
 def test_c1_vs_c2_comparative_behavior(tmp_path):
-    """
-    Direct comparative test:
-    Under identical transient obstacle:
-    - C1 (Edge Autonomy) adapts locally via LOCAL_WAIT and completes without cloud intervention.
-    - C2 (Cloud Relay) halts and pushes escalation to Cloud.
-    """
-    # 1. Run under C1 (Our system)
+    """Direct comparison under an identical transient obstacle, both offline:
+    - C1 (edge autonomy) adapts locally via LOCAL_WAIT and completes with no cloud.
+    - C2 (cloud-only relay) has no local brain, so with no cloud it halts and
+      hands off. C2's recovery depends on the cloud; C1's does not."""
     db_c1 = str(tmp_path / "test_compare_c1.db")
     sup_c1 = EdgeSupervisor(cluster_id="east-wing", db_path=db_c1, system_mode="C1", slm_mode="mock")
     sup_c1.robots["R1"].inject_obstacle("corridor-2B", "transient", "Mobile trolley", clears_after_waits=1)
-
     res_c1 = sup_c1.process_lease(_make_sample_lease("lease-c1-cmp"))
-    assert res_c1["status"] == "COMPLETED"  # C1 resolves locally!
+    assert res_c1["status"] == "COMPLETED"                   # C1 resolves locally
 
-    # 2. Run under C2 (Cloud Relay Baseline)
     db_c2 = str(tmp_path / "test_compare_c2.db")
-    sup_c2 = EdgeSupervisor(cluster_id="east-wing", db_path=db_c2, system_mode="C2")
+    sup_c2 = EdgeSupervisor(cluster_id="east-wing", db_path=db_c2, system_mode="C2", cloud_url=_dead_cloud_url())
     sup_c2.robots["R1"].inject_obstacle("corridor-2B", "transient", "Mobile trolley", clears_after_waits=1)
-
-    res_c2 = sup_c2.process_lease(_make_sample_lease("lease-c2-cmp"))
-    assert res_c2["status"] == "ESCALATED_CLOUD"  # C2 is forced to halt & ask Cloud
+    res_c2 = sup_c2.process_lease(_make_sample_lease("lease-taskc2cmp-v1"))
+    assert res_c2["status"] == "ESCALATED_UNEXPECTED"        # C2 cannot act without the cloud
 
 
 def test_c3_rules_baseline_mode(tmp_path):

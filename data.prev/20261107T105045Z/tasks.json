@@ -1,0 +1,222 @@
+{
+ "task-000001": {
+  "task_id": "task-000001",
+  "message_id": "app-40bf7bq7he",
+  "request_text": "Need a pediatric infusion pump at 2B-12, urgent.",
+  "status": "completed",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000001-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-11-07T10:47:27Z",
+   "expiry_ts": "2026-11-07T10:50:27Z",
+   "allowed_zones": [
+    "south_equipment_approach",
+    "east_south_hall_corner",
+    "east_south_hall",
+    "east_mid_hall",
+    "east_waiting_approach"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 1.0,
+   "assigned_robots": [
+    "R3"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "south_equipment_approach",
+      "via": [
+       "east_waiting_approach",
+       "east_mid_hall",
+       "east_south_hall",
+       "east_south_hall_corner",
+       "south_equipment_approach"
+      ],
+      "purpose": "pickup"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "east_waiting_approach",
+      "via": [
+       "south_equipment_approach",
+       "east_south_hall_corner",
+       "east_south_hall",
+       "east_mid_hall",
+       "east_waiting_approach"
+      ]
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R3"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R3"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": "storage://results/task-000001/delivery-proof.jpg",
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump_paediatric",
+   "destination": "east_waiting_approach",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump_paediatric to east_waiting_approach (urgent); offline model stand-in",
+   "destination_anchor": "east_waiting_approach",
+   "requested_at": "2026-11-07T10:35:27Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "infusion_pump_paediatric"
+  },
+  "stock_released": false,
+  "stock_settled": true,
+  "summary": "Done: infusion_pump_paediatric to east_waiting_approach for task task-000001.",
+  "archive_ref": "file://logs/task-000001.json"
+ },
+ "_seen_message_ids": [
+  "app-40bf7bq7he",
+  "msg-ci-1794047731284-2d63fb",
+  "msg-ci-1794047734734-894418",
+  "msg-ci-1794047741051-79e98b",
+  "msg-ci-1794047747362-463186",
+  "msg-ci-1794047753756-a517ca",
+  "msg-ci-1794047760092-9fab2b",
+  "msg-ci-1794047766482-ac6356",
+  "msg-ci-1794047772850-e7e473",
+  "msg-ci-1794047779142-7f6974",
+  "msg-ci-1794047785488-2408f8",
+  "msg-ci-1794047791848-d4000b",
+  "msg-ci-1794047798198-afcfec",
+  "msg-ci-1794047804575-c6e312",
+  "msg-ci-1794047810917-082cfb",
+  "msg-ci-1794047817375-b97a60",
+  "msg-ci-1794047823629-10f420",
+  "msg-ci-1794047830034-be7bfe",
+  "msg-ci-1794047836456-1d10a4",
+  "msg-ci-1794047842790-c68ef9",
+  "msg-ci-1794047849091-c4f277",
+  "msg-ci-1794047855387-5990d6",
+  "msg-ci-1794047861742-97ff4a",
+  "msg-ci-1794047868079-d975ca",
+  "msg-ci-1794047874428-1937a2",
+  "msg-ci-1794047880759-b1256b",
+  "msg-ci-1794047887194-ca9ef9",
+  "msg-ci-1794047893537-fc430c",
+  "msg-ci-1794047899831-7ba4a3",
+  "msg-ci-1794047906113-8cce1e",
+  "msg-ci-1794047912589-ee21a1",
+  "msg-ci-1794047918942-e9d5e0",
+  "msg-ci-1794047925213-6d1767",
+  "msg-ci-1794047931553-b47873",
+  "msg-ci-1794047937955-27f94d",
+  "msg-ci-1794047944274-63537b",
+  "msg-ci-1794047950642-fd2f6a",
+  "msg-ci-1794047957030-c3be95",
+  "msg-ci-1794047963420-bd446e",
+  "msg-ci-1794047969812-2ad083",
+  "msg-ci-1794047976150-cb6779",
+  "msg-ci-1794047982546-b2f712",
+  "msg-ci-1794047988971-f10895",
+  "msg-ci-1794047995257-9897b3",
+  "msg-ci-1794047999412-fc63aa",
+  "msg-ci-1794048001666-210f92",
+  "msg-ci-1794048005243-9506ec",
+  "msg-ci-1794048008080-515144",
+  "msg-ci-1794048014312-92232f",
+  "msg-ci-1794048020627-c5b46c",
+  "msg-ci-1794048026919-9103f9",
+  "msg-ci-1794048033264-c478a5",
+  "msg-ci-1794048039574-cddffb",
+  "msg-ci-1794048045877-d7a54c",
+  "msg-ci-1794048052277-6243f0",
+  "msg-ci-1794048058676-67f0f4",
+  "msg-ci-1794048065041-4448a8",
+  "msg-ci-1794048071371-a7af69",
+  "msg-ci-1794048077689-f5ba6d",
+  "msg-ci-1794048084156-0cf390",
+  "msg-ci-1794048090488-df1f3f",
+  "msg-ci-1794048096875-e16301",
+  "msg-ci-1794048103332-c34f1c",
+  "msg-ci-1794048109535-a35d2d",
+  "msg-ci-1794048115807-aaf2bc",
+  "msg-ci-1794048122118-c72621",
+  "msg-ci-1794048128560-49c533",
+  "msg-ci-1794048134899-b77845",
+  "msg-ci-1794048141266-968185",
+  "msg-ci-1794048146312-01c148",
+  "msg-ci-1794048152630-714e94",
+  "msg-ci-1794048158943-05e6a9",
+  "msg-ci-1794048165379-9f7eca",
+  "msg-ci-1794048171781-4db1dd",
+  "msg-ci-1794048177989-7b379d",
+  "msg-ci-1794048184240-6f7d95",
+  "msg-ci-1794048190643-8d2825",
+  "msg-ci-1794048196964-77aac5",
+  "msg-ci-1794048203471-3606d8",
+  "msg-ci-1794048209840-8027ad",
+  "msg-ci-1794048216667-8a49eb",
+  "msg-ci-1794048223179-e107dc",
+  "msg-ci-1794048229603-cb2b1b",
+  "msg-ci-1794048235977-a86469",
+  "msg-ci-1794048242350-06c079",
+  "msg-ci-1794048248718-b88d7a",
+  "msg-ci-1794048255090-ba14ef",
+  "msg-ci-1794048261428-4f65a0",
+  "msg-ci-1794048267832-f9d51f",
+  "msg-ci-1794048274146-68a99c",
+  "msg-ci-1794048280499-88782f",
+  "msg-ci-1794048286821-0d245c",
+  "msg-ci-1794048293142-d646c1",
+  "msg-ci-1794048299558-13404d",
+  "msg-ci-1794048305872-575807",
+  "msg-ci-1794048312225-bec034",
+  "msg-ci-1794048318586-426151",
+  "msg-ci-1794048324897-65d17f",
+  "msg-ci-1794048331276-f2639b",
+  "msg-ci-1794048337769-ce8c67",
+  "msg-ci-1794048344043-b095cc",
+  "msg-ci-1794048350484-a0450e",
+  "msg-ci-1794048356797-f19fd3",
+  "msg-ci-1794048363162-5163b6",
+  "msg-ci-1794048369615-e0dfa7",
+  "msg-ci-1794048370709-2bfd54",
+  "msg-ci-1794048376027-92edc7",
+  "msg-out-1794048374618"
+ ]
+}

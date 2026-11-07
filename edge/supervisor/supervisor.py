@@ -804,6 +804,72 @@ class EdgeSupervisor:
         except Exception:
             return False, "offline", {}
 
+    def _relay_decide_to_cloud(self, *, lease_id: str, version: int, step_index: int,
+                               current_zone: str, target: Optional[str],
+                               blocked_zone: Optional[str], attempt: int) -> Optional[Dict[str, Any]]:
+        """C2 (cloud-only relay): ask the cloud what to do about a blocked step.
+
+        One model round trip through POST /relay/decide. Returns the cloud's
+        decision dict (action/via_zones/rationale/source, plus `_latency_ms`), or
+        None when the cloud cannot be reached -- a thin relay has no local brain,
+        so the caller then holds or hands the event off.
+        """
+        if not re.fullmatch(r"lease-(.+)-v\d+", str(lease_id)):
+            return None
+        body = {
+            "cluster_id": self.cluster_id,
+            "lease_id": lease_id,
+            "lease_version": version,
+            "step_index": step_index,
+            "zone": current_zone,
+            "target": target,
+            "blocked_zones": [blocked_zone] if blocked_zone else [],
+            "attempt": attempt,
+            "situation": f"blocked at {blocked_zone}" if blocked_zone else "blocked",
+            "message_id": f"msg-relay-{int(time.time()*1000)}-{uuid.uuid4().hex[:6]}",
+        }
+        data = json.dumps(body).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if getattr(self, "token", None):
+            headers["Authorization"] = f"Bearer {self.token}"
+        t0 = time.time()
+        try:
+            req = urllib.request.Request(f"{self.cloud_url}/relay/decide", data=data, headers=headers)
+            with urllib.request.urlopen(req, timeout=5.0) as resp:
+                if resp.status in (200, 201):
+                    out = json.loads(resp.read().decode("utf-8") or "{}")
+                    if "action" not in out:   # a duplicate reply carries no decision: treat as unreachable
+                        return None
+                    out["_latency_ms"] = (time.time() - t0) * 1000.0
+                    return out
+        except Exception:
+            return None
+        return None
+
+    @staticmethod
+    def _c2_decision_from_relay(relay: Dict[str, Any], current_zone: str,
+                                blocked_zone: Optional[str]) -> Dict[str, Any]:
+        """Translate the cloud's relay decision into an edge tactical decision.
+
+        proceed -> retry the step; wait -> pause and retry; reroute -> detour via
+        the cloud's first usable hop, inside the lease; abort/anything else ->
+        hand the situation to the cloud/operator. The resulting actions are the
+        same ones the C1/C3 executor below already knows how to run.
+        """
+        action = str(relay.get("action") or "").lower()
+        reason = f"C2 cloud relay ({relay.get('source', '?')}): {relay.get('rationale', '')}".strip()
+        if action == "wait":
+            return {"action": "LOCAL_WAIT", "target_waypoint": None, "reason": reason}
+        if action == "proceed":
+            return {"action": "DISPATCH_STEP", "target_waypoint": None, "reason": reason}
+        if action == "reroute":
+            via = [z for z in (relay.get("via_zones") or []) if z not in (current_zone, blocked_zone)]
+            if via:
+                return {"action": "LOCAL_DETOUR", "target_waypoint": via[0], "reason": reason}
+            return {"action": "ESCALATE_UNEXPECTED", "target_waypoint": None,
+                    "reason": reason + " (cloud reroute had no usable detour hop)"}
+        return {"action": "ESCALATE_UNEXPECTED", "target_waypoint": None, "reason": reason}
+
     def trigger_clarify(
         self,
         task_id: str,
@@ -1590,54 +1656,10 @@ class EdgeSupervisor:
                 event_desc = exec_report.get("message", "Obstruction encountered")
                 time_remaining = max(0.0, (expiry_dt - datetime.now(timezone.utc)).total_seconds())
 
-                # C2 Baseline (Cloud-Only Relay): Bypass edge SLM and immediately forward event to Cloud
-                if self.system_mode == "C2":
-                    if is_verbose:
-                        print(f"      |   |--- Execution Mode : [C2 CLOUD-ONLY RELAY TRIGGERED]")
-                        print(f"      |   |   |--- Trigger Event  : {event_desc} in '{blocked_zone}'")
-                        print(rf"      |   |   \--- Policy Action  : Bypassing local SLM; relaying event to Cloud")
-
-                    # Reflex halt robot motion
-                    stop_cmd = {
-                        "cmd_id": f"cmd-stop-{lease_id}-{idx+1}-{int(time.time()*1000)}",
-                        "lease_id": lease_id,
-                        "robot_id": robot_id,
-                        "action": "stop",
-                        "params": {"reason": f"C2 relay pause for event in {blocked_zone}"},
-                        "timestamp": time.time(),
-                    }
-                    robot.execute_command(stop_cmd)
-
-                    relay_ctx = {
-                        "lease_id": lease_id,
-                        "version": version,
-                        "robot_id": robot_id,
-                        "event_description": event_desc,
-                        "blocked_zone": blocked_zone,
-                        "current_pos": list(robot.pose),
-                    }
-                    self.store.log_decision(
-                        decision_id=f"dec-c2-relay-{lease_id}-v{version}-{idx+1}-{int(time.time()*1000)}",
-                        lease_id=lease_id,
-                        decided_by="RELAY",
-                        input_context=relay_ctx,
-                        decision_action="ESCALATE_UNEXPECTED",
-                        decision_output={"action": "ESCALATE_UNEXPECTED", "reason": f"C2 relay: {event_desc}"},
-                        latency_ms=1.0,
-                    )
-                    self._escalate_unexpected(
-                        lease, robot_id,
-                        what=f"C2 Relay: {event_desc}",
-                        where=blocked_zone,
-                    )
-                    return {
-                        "status": "ESCALATED_CLOUD",
-                        "reason": f"C2 Cloud-Only Relay: Event in {blocked_zone} forwarded to Cloud: {event_desc}",
-                        "blocked_zone": blocked_zone,
-                        "executed_steps": executed_steps,
-                    }
-
-                if is_verbose:
+                # C2 (cloud-only relay) decides below, in the decision block,
+                # by one round trip to the cloud -- the edge has no local SLM,
+                # so it does not take over here the way C1 does.
+                if is_verbose and self.system_mode != "C2":
                     print(f"      |   |--- Execution Mode : [SLM TAKEOVER TRIGGERED]")
                     print(f"      |   |   |--- Trigger Event  : {event_desc} in '{blocked_zone}'")
                     print(rf"      |   |   \--- Reasoner Engine: Edge SLM ({self.slm.model_name}, mode: {self.slm.mode})")
@@ -1685,6 +1707,33 @@ class EdgeSupervisor:
                         decision = {"action": "ESCALATE_UNEXPECTED", "target_waypoint": None,
                                     "reason": "C3 rules: retry failed and no permitted detour exists; operator required."}
                     decided_by, latency_ms = "C3_FSM", 0.0
+                elif self.system_mode == "C2":
+                    # C2 (cloud-only relay): the edge has no SLM, so every
+                    # non-reflex step pays one round trip to the cloud, which
+                    # decides inside the live lease (proceed / wait / reroute /
+                    # abort). The robot does exactly what comes back.
+                    relay = self._relay_decide_to_cloud(
+                        lease_id=lease_id, version=version, step_index=idx,
+                        current_zone=robot.current_zone, target=params.get("to"),
+                        blocked_zone=blocked_zone, attempt=step_wait_counts.get(idx, 0))
+                    if relay is None:
+                        # The WAN link is down: a thin relay has no local brain,
+                        # so it cannot resolve this itself -- it must not wait the
+                        # obstacle out the way C1's edge would, or C2 would quietly
+                        # gain the local autonomy it is defined not to have. It
+                        # halts and hands the event off; the store-and-forward
+                        # outbox carries it when the link returns. C2 stalling on
+                        # a bad link is exactly the baseline this configuration
+                        # exists to measure.
+                        decision = {"action": "ESCALATE_UNEXPECTED", "target_waypoint": None,
+                                    "reason": "C2 relay: cloud unreachable; a cloud-only relay cannot decide locally."}
+                        decided_by, latency_ms = "C2_RELAY_OFFLINE", 0.0
+                    else:
+                        decision = self._c2_decision_from_relay(relay, robot.current_zone, blocked_zone)
+                        decided_by, latency_ms = "C2_RELAY", float(relay.get("_latency_ms", 0.0))
+                    if is_verbose:
+                        print(f"      |   |--- Execution Mode : [C2 CLOUD-ONLY RELAY]")
+                        print(f"      |   |   |--- Trigger Event  : {event_desc} in '{blocked_zone}'")
                 else:
                     decision, decided_by, latency_ms = self.slm.evaluate_decision(tactical_ctx)
 
@@ -1717,6 +1766,12 @@ class EdgeSupervisor:
                         print(f"      |   |   |--- Decided By     : Deterministic Rule Engine")
                         print(f"      |   |   |--- Rule Action    : {tac_action}" + (f" -> Target: '{tac_waypoint}'" if tac_waypoint else ""))
                         print(rf"      |   |   \--- Rule Reason    : \"{tac_reason}\"")
+                    elif decided_by in ("C2_RELAY", "C2_RELAY_OFFLINE"):
+                        engine = "Cloud (round trip)" if decided_by == "C2_RELAY" else "Cloud UNREACHABLE (no local brain)"
+                        print(f"      |   |   |--- Relay Latency  : {latency_ms:.1f} ms ({latency_ms/1000.0:.2f} s)")
+                        print(f"      |   |   |--- Decided By     : {engine}")
+                        print(f"      |   |   |--- Cloud Action   : {tac_action}" + (f" -> Target: '{tac_waypoint}'" if tac_waypoint else ""))
+                        print(rf"      |   |   \--- Cloud Reason   : \"{tac_reason}\"")
                     else:
                         print(f"      |   |   |--- SLM Latency    : {latency_ms:.1f} ms ({latency_ms/1000.0:.2f} s) [PASS: <= 10.0s SLA]")
                         print(f"      |   |   |--- Decided By     : Edge SLM ({self.slm.model_name})")

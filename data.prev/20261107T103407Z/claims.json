@@ -5,8 +5,8 @@
     "lease_id": "lease-task-000001-v1",
     "version": 1,
     "priority": "urgent",
-    "deadline_ts": "2026-11-07T10:01:15Z",
-    "expiry_ts": "2026-11-07T10:04:15Z",
+    "deadline_ts": "2026-11-07T10:11:03Z",
+    "expiry_ts": "2026-11-07T10:14:03Z",
     "allowed_zones": [
      "south_equipment_approach",
      "east_south_hall_corner",
@@ -83,14 +83,8 @@
      "route_blocked_no_alternative"
     ]
    },
-   "state": "live"
+   "state": "released"
   }
  },
- "claims": {
-  "robot:R3": {
-   "task_id": "task-000001",
-   "version": 1,
-   "until": "2026-11-07T10:04:15Z"
-  }
- }
+ "claims": {}
 }
