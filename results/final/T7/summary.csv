@@ -1,0 +1,4 @@
+mode,seed,request,started_utc,cloud_kind,cloud_url,submit_status,task_id,n_places,success,final_status,completed,report_kind,wan_bytes,wan_bytes_per_place,completion_time_s
+C1,1,Count the idle infusion pumps.,2026-11-07T16:22:31Z,deployed,https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com,leased,task-000765,3,True,completed,True,edge_filtered_digest,148,49.3,44.119
+C2,1,Count the idle infusion pumps.,2026-11-07T16:23:20Z,deployed,https://xkczmnuqla.execute-api.ap-south-1.amazonaws.com,leased,task-000015,3,True,completed,True,raw_observations,12791,4263.7,36.682
+C3,1,Count the idle infusion pumps.,2026-11-07T16:24:01Z,local,http://127.0.0.1:56783,leased,task-000001,3,True,completed,True,structured_counts,322,107.3,4.037
