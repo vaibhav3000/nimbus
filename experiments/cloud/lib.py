@@ -38,7 +38,7 @@ from urllib.error import HTTPError, URLError
 
 ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "results" / "final"
-DEFAULT_DEPLOYED = "https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com"
+DEFAULT_DEPLOYED = os.environ.get("NIMBUS_CLOUD_URL", "http://127.0.0.1:8000")
 CLUSTERS = ("east-wing", "west-wing")
 
 # ----------------------------------------------------------------------------------------------- HTTP
