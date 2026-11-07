@@ -1,0 +1,1609 @@
+{
+  "seed_1": {
+    "task_count": 8,
+    "decision_rows_count": 13,
+    "sha256": "c411be3210375d6e9062d1a2341b7a20fd7a8e19ed54a09923bff3e238c90ee5",
+    "deterministic": true,
+    "sample_timeline": [
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Need a monitor at 2B, urgent.",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [
+                "robot_1"
+              ],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-PAED-01",
+              "SOP-URG-04"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "propose_lease",
+          "cluster": "east-wing",
+          "robots": [
+            "robot_1"
+          ],
+          "zones": [
+            "south_equipment_approach",
+            "east_south_hall_corner",
+            "east_south_hall",
+            "east_mid_hall",
+            "east_waiting_approach"
+          ],
+          "spec": {
+            "item": "monitor",
+            "destination": "east_waiting_approach",
+            "priority": "urgent",
+            "deadline_minutes": 12,
+            "constraints": [],
+            "rationale": "monitor to east_waiting_approach (urgent); offline model stand-in",
+            "destination_anchor": "east_waiting_approach",
+            "requested_at": "2026-10-18T09:00:00Z"
+          },
+          "proposed_by": "classical",
+          "rationale": "only east-wing can take it; nearest free robot",
+          "attempts": [
+            {
+              "source": "classical",
+              "cluster": "east-wing",
+              "robots": [
+                "robot_1"
+              ],
+              "ok": true,
+              "violations": []
+            }
+          ],
+          "llm": {
+            "calls": 1,
+            "input_tokens": 661,
+            "output_tokens": 61,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      },
+      {
+        "who": "rule",
+        "inputs": {
+          "proposal": {
+            "cluster": "east-wing",
+            "robots": [
+              "robot_1"
+            ],
+            "zones": [
+              "south_equipment_approach",
+              "east_south_hall_corner",
+              "east_south_hall",
+              "east_mid_hall",
+              "east_waiting_approach"
+            ]
+          }
+        },
+        "output": {
+          "decision": "approve",
+          "checks": [
+            "cluster",
+            "health",
+            "robots",
+            "capacity",
+            "stock",
+            "destination",
+            "reachability"
+          ]
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "lease_id": "lease-task-000001-v1"
+        },
+        "output": {
+          "decision": "issue_lease",
+          "lease_id": "lease-task-000001-v1",
+          "sha256": "1b0bc906357c79118e567e85105806aa47581ea81ad22a6bae2fa22b4f1b30c7"
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Deliver an iv pole to ward 3 within 20 minutes.",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "stale",
+              "west-wing": "stale"
+            },
+            "free_robots": {
+              "east-wing": [],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-SPEED-05"
+            ],
+            "restrictions": {},
+            "probes_sent": [
+              "east-wing",
+              "west-wing"
+            ],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "queue",
+          "reason": "east-wing: cluster health is stale; west-wing: cluster health is stale",
+          "excluded": [
+            {
+              "cluster_id": "east-wing",
+              "reason": "cluster health is stale",
+              "transient": true
+            },
+            {
+              "cluster_id": "west-wing",
+              "reason": "cluster health is stale",
+              "transient": true
+            }
+          ],
+          "attempts": [],
+          "llm": {
+            "calls": 1,
+            "input_tokens": 591,
+            "output_tokens": 60,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      }
+    ]
+  },
+  "seed_2": {
+    "task_count": 8,
+    "decision_rows_count": 19,
+    "sha256": "3d3cbed20cb1c2986a23de0ca279853906982f095491d5b1e584ca43d017778a",
+    "deterministic": true,
+    "sample_timeline": [
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Deliver an iv pole to ward 3 within 20 minutes.",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [
+                "robot_1"
+              ],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-SPEED-05"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "propose_lease",
+          "cluster": "east-wing",
+          "robots": [
+            "robot_1"
+          ],
+          "zones": [
+            "south_equipment_approach",
+            "south_room_approach"
+          ],
+          "spec": {
+            "item": "iv_pole",
+            "destination": "south_room_approach",
+            "priority": "routine",
+            "deadline_minutes": 20,
+            "constraints": [],
+            "rationale": "iv_pole to south_room_approach (routine); offline model stand-in",
+            "destination_anchor": "south_room_approach",
+            "requested_at": "2026-10-18T09:00:00Z"
+          },
+          "proposed_by": "llm",
+          "rationale": "robot_1 is nearest free robot in east-wing",
+          "attempts": [
+            {
+              "source": "llm",
+              "cluster": "east-wing",
+              "robots": [
+                "robot_1"
+              ],
+              "ok": true,
+              "violations": []
+            }
+          ],
+          "llm": {
+            "calls": 2,
+            "input_tokens": 1113,
+            "output_tokens": 98,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      },
+      {
+        "who": "rule",
+        "inputs": {
+          "proposal": {
+            "cluster": "east-wing",
+            "robots": [
+              "robot_1"
+            ],
+            "zones": [
+              "south_equipment_approach",
+              "south_room_approach"
+            ]
+          }
+        },
+        "output": {
+          "decision": "approve",
+          "checks": [
+            "cluster",
+            "health",
+            "robots",
+            "capacity",
+            "stock",
+            "destination",
+            "reachability"
+          ]
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "lease_id": "lease-task-000001-v1"
+        },
+        "output": {
+          "decision": "issue_lease",
+          "lease_id": "lease-task-000001-v1",
+          "sha256": "743b8671afad199ab9a565d0d583c2f3a9ede02f8903609b3df785f577baea27"
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "task_id": "task-000001"
+        },
+        "output": {
+          "decision": "notify",
+          "audience": "cluster",
+          "type": "MAP",
+          "text": "west_mid_hall is blocked; routes through it are closed.",
+          "cluster_id": "west-wing",
+          "message_id": "notice-e901e4f0fb"
+        },
+        "lease_version": null
+      }
+    ]
+  },
+  "seed_3": {
+    "task_count": 8,
+    "decision_rows_count": 11,
+    "sha256": "599068a94c575f42ca46cd1181ca3fe672991d818f65978eba94eb9a0d2ba2f6",
+    "deterministic": true,
+    "sample_timeline": [
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Need a monitor at 2B, urgent.",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [
+                "robot_1"
+              ],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-PAED-01",
+              "SOP-URG-04"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "propose_lease",
+          "cluster": "east-wing",
+          "robots": [
+            "robot_1"
+          ],
+          "zones": [
+            "south_equipment_approach",
+            "east_south_hall_corner",
+            "east_south_hall",
+            "east_mid_hall",
+            "east_waiting_approach"
+          ],
+          "spec": {
+            "item": "monitor",
+            "destination": "east_waiting_approach",
+            "priority": "urgent",
+            "deadline_minutes": 12,
+            "constraints": [],
+            "rationale": "monitor to east_waiting_approach (urgent); offline model stand-in",
+            "destination_anchor": "east_waiting_approach",
+            "requested_at": "2026-10-18T09:00:00Z"
+          },
+          "proposed_by": "classical",
+          "rationale": "only east-wing can take it; nearest free robot",
+          "attempts": [
+            {
+              "source": "classical",
+              "cluster": "east-wing",
+              "robots": [
+                "robot_1"
+              ],
+              "ok": true,
+              "violations": []
+            }
+          ],
+          "llm": {
+            "calls": 1,
+            "input_tokens": 661,
+            "output_tokens": 61,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      },
+      {
+        "who": "rule",
+        "inputs": {
+          "proposal": {
+            "cluster": "east-wing",
+            "robots": [
+              "robot_1"
+            ],
+            "zones": [
+              "south_equipment_approach",
+              "east_south_hall_corner",
+              "east_south_hall",
+              "east_mid_hall",
+              "east_waiting_approach"
+            ]
+          }
+        },
+        "output": {
+          "decision": "approve",
+          "checks": [
+            "cluster",
+            "health",
+            "robots",
+            "capacity",
+            "stock",
+            "destination",
+            "reachability"
+          ]
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "lease_id": "lease-task-000001-v1"
+        },
+        "output": {
+          "decision": "issue_lease",
+          "lease_id": "lease-task-000001-v1",
+          "sha256": "1b0bc906357c79118e567e85105806aa47581ea81ad22a6bae2fa22b4f1b30c7"
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Deliver a blanket to 2C, routine.",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "stale",
+              "west-wing": "stale"
+            },
+            "free_robots": {
+              "east-wing": [],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-URG-04"
+            ],
+            "restrictions": {},
+            "probes_sent": [
+              "east-wing",
+              "west-wing"
+            ],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "queue",
+          "reason": "west-wing: cluster health is stale",
+          "excluded": [
+            {
+              "cluster_id": "east-wing",
+              "reason": "destination west_waiting_approach is outside east-wing's area (hand-over needed)",
+              "transient": false
+            },
+            {
+              "cluster_id": "west-wing",
+              "reason": "cluster health is stale",
+              "transient": true
+            }
+          ],
+          "attempts": [],
+          "llm": {
+            "calls": 1,
+            "input_tokens": 612,
+            "output_tokens": 61,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      }
+    ]
+  },
+  "seed_4": {
+    "task_count": 8,
+    "decision_rows_count": 16,
+    "sha256": "a882c7c54c6a456838fe109361e823fa5705adb80e215f558c49c55adde43f54",
+    "deterministic": true,
+    "sample_timeline": [
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Need a monitor at 2B, urgent.",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [
+                "robot_1"
+              ],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-PAED-01",
+              "SOP-URG-04"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "propose_lease",
+          "cluster": "east-wing",
+          "robots": [
+            "robot_1"
+          ],
+          "zones": [
+            "south_equipment_approach",
+            "east_south_hall_corner",
+            "east_south_hall",
+            "east_mid_hall",
+            "east_waiting_approach"
+          ],
+          "spec": {
+            "item": "monitor",
+            "destination": "east_waiting_approach",
+            "priority": "urgent",
+            "deadline_minutes": 12,
+            "constraints": [],
+            "rationale": "monitor to east_waiting_approach (urgent); offline model stand-in",
+            "destination_anchor": "east_waiting_approach",
+            "requested_at": "2026-10-18T09:00:00Z"
+          },
+          "proposed_by": "classical",
+          "rationale": "only east-wing can take it; nearest free robot",
+          "attempts": [
+            {
+              "source": "classical",
+              "cluster": "east-wing",
+              "robots": [
+                "robot_1"
+              ],
+              "ok": true,
+              "violations": []
+            }
+          ],
+          "llm": {
+            "calls": 1,
+            "input_tokens": 661,
+            "output_tokens": 61,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      },
+      {
+        "who": "rule",
+        "inputs": {
+          "proposal": {
+            "cluster": "east-wing",
+            "robots": [
+              "robot_1"
+            ],
+            "zones": [
+              "south_equipment_approach",
+              "east_south_hall_corner",
+              "east_south_hall",
+              "east_mid_hall",
+              "east_waiting_approach"
+            ]
+          }
+        },
+        "output": {
+          "decision": "approve",
+          "checks": [
+            "cluster",
+            "health",
+            "robots",
+            "capacity",
+            "stock",
+            "destination",
+            "reachability"
+          ]
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "lease_id": "lease-task-000001-v1"
+        },
+        "output": {
+          "decision": "issue_lease",
+          "lease_id": "lease-task-000001-v1",
+          "sha256": "1b0bc906357c79118e567e85105806aa47581ea81ad22a6bae2fa22b4f1b30c7"
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "task_id": "task-000001"
+        },
+        "output": {
+          "decision": "notify",
+          "audience": "cluster",
+          "type": "MAP",
+          "text": "west_mid_hall is blocked; routes through it are closed.",
+          "cluster_id": "west-wing",
+          "message_id": "notice-e901e4f0fb"
+        },
+        "lease_version": null
+      }
+    ]
+  },
+  "seed_5": {
+    "task_count": 8,
+    "decision_rows_count": 16,
+    "sha256": "c1f311431dcf62e7a3a5e0ef9ec7e4d884f3aca3f27f722f4c154e318ac710f8",
+    "deterministic": true,
+    "sample_timeline": [
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Count the idle infusion pumps",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [
+                "robot_1"
+              ],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-PAED-01"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "propose_lease",
+          "cluster": "east-wing",
+          "robots": [
+            "robot_1"
+          ],
+          "zones": [
+            "south_equipment_approach",
+            "south_room_approach",
+            "east_south_hall_corner",
+            "east_south_hall",
+            "east_mid_hall",
+            "east_waiting_approach"
+          ],
+          "spec": {
+            "task": "survey",
+            "item": "infusion_pump",
+            "targets": [
+              "east_waiting_approach",
+              "south_equipment_approach",
+              "south_room_approach"
+            ],
+            "priority": "routine",
+            "deadline_minutes": 60,
+            "cluster_hint": "east-wing",
+            "destination": "east_waiting_approach",
+            "destination_anchor": "east_waiting_approach",
+            "constraints": [],
+            "rationale": "the message asks robots to look, not to carry",
+            "requested_at": "2026-10-18T09:00:00Z"
+          },
+          "proposed_by": "classical",
+          "survey": {
+            "assign": {
+              "robot_1": [
+                "south_equipment_approach",
+                "south_room_approach",
+                "east_waiting_approach"
+              ]
+            },
+            "skipped": []
+          }
+        },
+        "lease_version": null
+      },
+      {
+        "who": "rule",
+        "inputs": {
+          "proposal": {
+            "cluster": "east-wing",
+            "robots": [
+              "robot_1"
+            ]
+          }
+        },
+        "output": {
+          "decision": "approve",
+          "checks": [
+            "cluster",
+            "health",
+            "robots",
+            "capacity",
+            "reachability"
+          ]
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "lease_id": "lease-task-000001-v1"
+        },
+        "output": {
+          "decision": "issue_lease",
+          "lease_id": "lease-task-000001-v1"
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Deliver an iv pole to ward 3 within 20 minutes.",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-SPEED-05"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "propose_lease",
+          "cluster": "west-wing",
+          "robots": [
+            "robot_2"
+          ],
+          "zones": [
+            "south_equipment_approach",
+            "south_room_approach"
+          ],
+          "spec": {
+            "item": "iv_pole",
+            "destination": "south_room_approach",
+            "priority": "routine",
+            "deadline_minutes": 20,
+            "constraints": [],
+            "rationale": "iv_pole to south_room_approach (routine); offline model stand-in",
+            "destination_anchor": "south_room_approach",
+            "requested_at": "2026-10-18T09:00:30Z"
+          },
+          "proposed_by": "classical",
+          "rationale": "only west-wing can take it; nearest free robot",
+          "attempts": [
+            {
+              "source": "classical",
+              "cluster": "west-wing",
+              "robots": [
+                "robot_2"
+              ],
+              "ok": true,
+              "violations": []
+            }
+          ],
+          "llm": {
+            "calls": 1,
+            "input_tokens": 592,
+            "output_tokens": 60,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      }
+    ]
+  },
+  "seed_6": {
+    "task_count": 8,
+    "decision_rows_count": 11,
+    "sha256": "2ffe4f225ffc4e57eb17555818ad61c0afce3712eb330b5476b2e1ed05103c34",
+    "deterministic": true,
+    "sample_timeline": [
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Deliver an iv pole to ward 3 within 20 minutes.",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [
+                "robot_1"
+              ],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-SPEED-05"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "propose_lease",
+          "cluster": "east-wing",
+          "robots": [
+            "robot_1"
+          ],
+          "zones": [
+            "south_equipment_approach",
+            "south_room_approach"
+          ],
+          "spec": {
+            "item": "iv_pole",
+            "destination": "south_room_approach",
+            "priority": "routine",
+            "deadline_minutes": 20,
+            "constraints": [],
+            "rationale": "iv_pole to south_room_approach (routine); offline model stand-in",
+            "destination_anchor": "south_room_approach",
+            "requested_at": "2026-10-18T09:00:00Z"
+          },
+          "proposed_by": "llm",
+          "rationale": "robot_1 is nearest free robot in east-wing",
+          "attempts": [
+            {
+              "source": "llm",
+              "cluster": "east-wing",
+              "robots": [
+                "robot_1"
+              ],
+              "ok": true,
+              "violations": []
+            }
+          ],
+          "llm": {
+            "calls": 2,
+            "input_tokens": 1113,
+            "output_tokens": 98,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      },
+      {
+        "who": "rule",
+        "inputs": {
+          "proposal": {
+            "cluster": "east-wing",
+            "robots": [
+              "robot_1"
+            ],
+            "zones": [
+              "south_equipment_approach",
+              "south_room_approach"
+            ]
+          }
+        },
+        "output": {
+          "decision": "approve",
+          "checks": [
+            "cluster",
+            "health",
+            "robots",
+            "capacity",
+            "stock",
+            "destination",
+            "reachability"
+          ]
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "lease_id": "lease-task-000001-v1"
+        },
+        "output": {
+          "decision": "issue_lease",
+          "lease_id": "lease-task-000001-v1",
+          "sha256": "743b8671afad199ab9a565d0d583c2f3a9ede02f8903609b3df785f577baea27"
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Move a monitor from 2B to 2C, routine",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "stale",
+              "west-wing": "stale"
+            },
+            "free_robots": {
+              "east-wing": [],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-PAED-01",
+              "SOP-URG-04"
+            ],
+            "restrictions": {},
+            "probes_sent": [
+              "east-wing",
+              "west-wing"
+            ],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "no_lease",
+          "attempts": [],
+          "excluded": [
+            {
+              "cluster_id": "east-wing",
+              "reason": "destination west_waiting_approach is outside east-wing's area (hand-over needed)",
+              "transient": false
+            },
+            {
+              "cluster_id": "west-wing",
+              "reason": "destination west_waiting_approach is outside west-wing's area (hand-over needed)",
+              "transient": false
+            }
+          ],
+          "llm": {
+            "calls": 1,
+            "input_tokens": 662,
+            "output_tokens": 70,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      }
+    ]
+  },
+  "seed_7": {
+    "task_count": 8,
+    "decision_rows_count": 24,
+    "sha256": "de99b2a63558009479b63ea04a76ffdc020b4b1d7cd9cff5e75dbad4927db9ed",
+    "deterministic": true,
+    "sample_timeline": [
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Deliver a blanket to 2C, routine.",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [
+                "robot_1"
+              ],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-URG-04"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "propose_lease",
+          "cluster": "west-wing",
+          "robots": [
+            "robot_2"
+          ],
+          "zones": [
+            "south_equipment_approach",
+            "west_south_hall_corner",
+            "west_south_hall",
+            "west_mid_hall",
+            "west_waiting_approach"
+          ],
+          "spec": {
+            "item": "blanket",
+            "destination": "west_waiting_approach",
+            "priority": "routine",
+            "deadline_minutes": 60,
+            "constraints": [],
+            "rationale": "blanket to west_waiting_approach (routine); offline model stand-in",
+            "destination_anchor": "west_waiting_approach",
+            "requested_at": "2026-10-18T09:00:00Z"
+          },
+          "proposed_by": "classical",
+          "rationale": "only west-wing can take it; nearest free robot",
+          "attempts": [
+            {
+              "source": "classical",
+              "cluster": "west-wing",
+              "robots": [
+                "robot_2"
+              ],
+              "ok": true,
+              "violations": []
+            }
+          ],
+          "llm": {
+            "calls": 1,
+            "input_tokens": 613,
+            "output_tokens": 61,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      },
+      {
+        "who": "rule",
+        "inputs": {
+          "proposal": {
+            "cluster": "west-wing",
+            "robots": [
+              "robot_2"
+            ],
+            "zones": [
+              "south_equipment_approach",
+              "west_south_hall_corner",
+              "west_south_hall",
+              "west_mid_hall",
+              "west_waiting_approach"
+            ]
+          }
+        },
+        "output": {
+          "decision": "approve",
+          "checks": [
+            "cluster",
+            "health",
+            "robots",
+            "capacity",
+            "stock",
+            "destination",
+            "reachability"
+          ]
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "lease_id": "lease-task-000001-v1"
+        },
+        "output": {
+          "decision": "issue_lease",
+          "lease_id": "lease-task-000001-v1",
+          "sha256": "5ffc1462d3fadfb99e751334cc4d8402d6a66f58c6c559549e56db5de29b7ee5"
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "task_id": "task-000001"
+        },
+        "output": {
+          "decision": "notify",
+          "audience": "cluster",
+          "type": "MAP",
+          "text": "east_mid_hall is blocked; routes through it are closed.",
+          "cluster_id": "east-wing",
+          "message_id": "notice-0322399258"
+        },
+        "lease_version": null
+      }
+    ]
+  },
+  "seed_8": {
+    "task_count": 8,
+    "decision_rows_count": 13,
+    "sha256": "3e89e9356252b815bf3f08263f547ebf6d9161c02f2de3f9410d3995602382a7",
+    "deterministic": true,
+    "sample_timeline": [
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Need a monitor at 2B, urgent.",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [
+                "robot_1"
+              ],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-PAED-01",
+              "SOP-URG-04"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "propose_lease",
+          "cluster": "east-wing",
+          "robots": [
+            "robot_1"
+          ],
+          "zones": [
+            "south_equipment_approach",
+            "east_south_hall_corner",
+            "east_south_hall",
+            "east_mid_hall",
+            "east_waiting_approach"
+          ],
+          "spec": {
+            "item": "monitor",
+            "destination": "east_waiting_approach",
+            "priority": "urgent",
+            "deadline_minutes": 12,
+            "constraints": [],
+            "rationale": "monitor to east_waiting_approach (urgent); offline model stand-in",
+            "destination_anchor": "east_waiting_approach",
+            "requested_at": "2026-10-18T09:00:00Z"
+          },
+          "proposed_by": "classical",
+          "rationale": "only east-wing can take it; nearest free robot",
+          "attempts": [
+            {
+              "source": "classical",
+              "cluster": "east-wing",
+              "robots": [
+                "robot_1"
+              ],
+              "ok": true,
+              "violations": []
+            }
+          ],
+          "llm": {
+            "calls": 1,
+            "input_tokens": 661,
+            "output_tokens": 61,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      },
+      {
+        "who": "rule",
+        "inputs": {
+          "proposal": {
+            "cluster": "east-wing",
+            "robots": [
+              "robot_1"
+            ],
+            "zones": [
+              "south_equipment_approach",
+              "east_south_hall_corner",
+              "east_south_hall",
+              "east_mid_hall",
+              "east_waiting_approach"
+            ]
+          }
+        },
+        "output": {
+          "decision": "approve",
+          "checks": [
+            "cluster",
+            "health",
+            "robots",
+            "capacity",
+            "stock",
+            "destination",
+            "reachability"
+          ]
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "lease_id": "lease-task-000001-v1"
+        },
+        "output": {
+          "decision": "issue_lease",
+          "lease_id": "lease-task-000001-v1",
+          "sha256": "1b0bc906357c79118e567e85105806aa47581ea81ad22a6bae2fa22b4f1b30c7"
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Need a monitor at 2B, urgent.",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-PAED-01",
+              "SOP-URG-04"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "queue",
+          "reason": "east-wing: no free robot",
+          "excluded": [
+            {
+              "cluster_id": "east-wing",
+              "reason": "no free robot",
+              "transient": true
+            },
+            {
+              "cluster_id": "west-wing",
+              "reason": "destination east_waiting_approach is outside west-wing's area (hand-over needed)",
+              "transient": false
+            }
+          ],
+          "attempts": [],
+          "llm": {
+            "calls": 1,
+            "input_tokens": 661,
+            "output_tokens": 61,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      }
+    ]
+  },
+  "seed_9": {
+    "task_count": 8,
+    "decision_rows_count": 17,
+    "sha256": "a5aef9868309191edad5f0088f8ca58e8656cdc995c1a2f52c5737411fa1c06c",
+    "deterministic": true,
+    "sample_timeline": [
+      {
+        "who": "cloud",
+        "inputs": {
+          "spec": {
+            "item": "monitor",
+            "destination": "west_waiting_approach",
+            "priority": "routine",
+            "deadline_minutes": 60,
+            "constraints": [],
+            "rationale": "monitor to west_waiting_approach (routine); offline model stand-in",
+            "source": "east_waiting_approach",
+            "destination_anchor": "west_waiting_approach",
+            "requested_at": "2026-10-18T09:00:00Z"
+          }
+        },
+        "output": {
+          "decision": "plan_handover",
+          "handoff": "nurse_station_approach",
+          "legs": [
+            {
+              "from": "east-wing"
+            },
+            {
+              "to": "west-wing"
+            }
+          ]
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Move a monitor from 2B to 2C, routine",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [
+                "robot_1"
+              ],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-PAED-01",
+              "SOP-URG-04"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "propose_lease",
+          "cluster": "east-wing",
+          "robots": [
+            "robot_1"
+          ],
+          "zones": [
+            "east_waiting_approach",
+            "east_mid_hall",
+            "nurse_station_approach",
+            "east_north_gate",
+            "north_hall",
+            "south_equipment_approach",
+            "east_south_hall_corner",
+            "east_south_hall"
+          ],
+          "spec": {
+            "item": "monitor",
+            "destination": "nurse_station_approach",
+            "priority": "routine",
+            "deadline_minutes": 60,
+            "constraints": [],
+            "rationale": "monitor to west_waiting_approach (routine); offline model stand-in",
+            "source": "east_waiting_approach",
+            "requested_at": "2026-10-18T09:00:00Z",
+            "destination_anchor": "nurse_station_approach",
+            "leg": 1,
+            "legs": 2,
+            "final_destination": "west_waiting_approach"
+          },
+          "proposed_by": "classical",
+          "rationale": "only east-wing can take it; nearest free robot",
+          "attempts": [
+            {
+              "source": "classical",
+              "cluster": "east-wing",
+              "robots": [
+                "robot_1"
+              ],
+              "ok": true,
+              "violations": []
+            }
+          ],
+          "llm": {
+            "calls": 1,
+            "input_tokens": 663,
+            "output_tokens": 70,
+            "model": "rule-based-stand-in",
+            "tokens_estimated": true
+          }
+        },
+        "lease_version": null
+      },
+      {
+        "who": "rule",
+        "inputs": {
+          "proposal": {
+            "cluster": "east-wing",
+            "robots": [
+              "robot_1"
+            ],
+            "zones": [
+              "east_waiting_approach",
+              "east_mid_hall",
+              "nurse_station_approach",
+              "east_north_gate",
+              "north_hall",
+              "south_equipment_approach",
+              "east_south_hall_corner",
+              "east_south_hall"
+            ]
+          }
+        },
+        "output": {
+          "decision": "approve",
+          "checks": [
+            "cluster",
+            "health",
+            "robots",
+            "capacity",
+            "stock",
+            "destination",
+            "reachability"
+          ]
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "lease_id": "lease-task-000001-v1"
+        },
+        "output": {
+          "decision": "issue_lease",
+          "lease_id": "lease-task-000001-v1",
+          "sha256": "47a1d2b8bc7ba86e2889ff85fb0041d63cbbf176eed5172088e49ab268d76685"
+        },
+        "lease_version": 1
+      }
+    ]
+  },
+  "seed_10": {
+    "task_count": 8,
+    "decision_rows_count": 25,
+    "sha256": "06265c9159d5e32668e1a0c572342641b29ba9347f795388d8b72126879f9301",
+    "deterministic": true,
+    "sample_timeline": [
+      {
+        "who": "cloud",
+        "inputs": {
+          "request_text": "Count the idle infusion pumps",
+          "context": {
+            "pack": "hospital_sim@0.1.0:d2ca2dc0",
+            "topology": "sim-v0",
+            "health": {
+              "east-wing": "healthy",
+              "west-wing": "healthy"
+            },
+            "free_robots": {
+              "east-wing": [
+                "robot_1"
+              ],
+              "west-wing": [
+                "robot_2"
+              ]
+            },
+            "policies": [
+              "SOP-PAED-01"
+            ],
+            "restrictions": {},
+            "probes_sent": [],
+            "task_log_lines": 0,
+            "memory": []
+          }
+        },
+        "output": {
+          "decision": "propose_lease",
+          "cluster": "east-wing",
+          "robots": [
+            "robot_1"
+          ],
+          "zones": [
+            "south_equipment_approach",
+            "south_room_approach",
+            "east_south_hall_corner",
+            "east_south_hall",
+            "east_mid_hall",
+            "east_waiting_approach"
+          ],
+          "spec": {
+            "task": "survey",
+            "item": "infusion_pump",
+            "targets": [
+              "east_waiting_approach",
+              "south_equipment_approach",
+              "south_room_approach"
+            ],
+            "priority": "routine",
+            "deadline_minutes": 60,
+            "cluster_hint": "east-wing",
+            "destination": "east_waiting_approach",
+            "destination_anchor": "east_waiting_approach",
+            "constraints": [],
+            "rationale": "the message asks robots to look, not to carry",
+            "requested_at": "2026-10-18T09:00:00Z"
+          },
+          "proposed_by": "classical",
+          "survey": {
+            "assign": {
+              "robot_1": [
+                "south_equipment_approach",
+                "south_room_approach",
+                "east_waiting_approach"
+              ]
+            },
+            "skipped": []
+          }
+        },
+        "lease_version": null
+      },
+      {
+        "who": "rule",
+        "inputs": {
+          "proposal": {
+            "cluster": "east-wing",
+            "robots": [
+              "robot_1"
+            ]
+          }
+        },
+        "output": {
+          "decision": "approve",
+          "checks": [
+            "cluster",
+            "health",
+            "robots",
+            "capacity",
+            "reachability"
+          ]
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "lease_id": "lease-task-000001-v1"
+        },
+        "output": {
+          "decision": "issue_lease",
+          "lease_id": "lease-task-000001-v1"
+        },
+        "lease_version": 1
+      },
+      {
+        "who": "cloud",
+        "inputs": {
+          "task_id": "task-000001"
+        },
+        "output": {
+          "decision": "notify",
+          "audience": "cluster",
+          "type": "MAP",
+          "text": "east_north_gate is blocked; routes through it are closed.",
+          "cluster_id": "east-wing",
+          "message_id": "notice-f4292929ac"
+        },
+        "lease_version": null
+      }
+    ]
+  }
+}

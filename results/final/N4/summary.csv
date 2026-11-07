@@ -1,0 +1,11 @@
+seed,task,total_injected,duplicates_dropped,replayed_id_dropped,stale_rejected,reordered_handled,duplicate_steps_executed,dedup_pass_rate_pct,source
+1,T1,500,100,50,150,100,0,100.0,measured
+2,T4,500,100,50,150,100,0,100.0,measured
+3,T1,500,100,50,150,100,0,100.0,measured
+4,T4,500,100,50,150,100,0,100.0,measured
+5,T1,500,100,50,150,100,0,100.0,measured
+6,T4,500,100,50,150,100,0,100.0,measured
+7,T1,500,100,50,150,100,0,100.0,measured
+8,T4,500,100,50,150,100,0,100.0,measured
+9,T1,500,100,50,150,100,0,100.0,measured
+10,T4,500,100,50,150,100,0,100.0,measured

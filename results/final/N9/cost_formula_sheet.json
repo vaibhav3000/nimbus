@@ -1,0 +1,60 @@
+{
+  "prd_formula": "Cost = [T_in*p_in + T_out*p_out + F*p_fargate + M*p_iot + W*p_ddb + Q*p_sqs + S*p_s3 + D*p_transfer + G*p_apigw + K*p_cw] / N_tasks",
+  "pricing_parameters_usd": {
+    "p_in_per_token": 6e-08,
+    "p_out_per_token": 2.4e-07,
+    "p_fargate_per_gb_s": 4.445e-06,
+    "p_fargate_vcpu_s": 1.1244e-05,
+    "p_ddb_write": 1.25e-06,
+    "p_ddb_read": 2.5e-07,
+    "p_sqs": 4e-07,
+    "p_apigw": 1e-06,
+    "p_cw_metric": 3e-07
+  },
+  "aws_telemetry": {
+    "account_id": "930124786284",
+    "region": "ap-south-1",
+    "cloudwatch_ecs_metrics_active": 1,
+    "cost_explorer_records": [
+      {
+        "date": "2026-10-30",
+        "unblended_cost_usd": -3.61e-08
+      },
+      {
+        "date": "2026-10-31",
+        "unblended_cost_usd": -3.61e-08
+      },
+      {
+        "date": "2026-11-01",
+        "unblended_cost_usd": -3.43e-08
+      },
+      {
+        "date": "2026-11-02",
+        "unblended_cost_usd": -3.38e-08
+      },
+      {
+        "date": "2026-11-03",
+        "unblended_cost_usd": -3.38e-08
+      },
+      {
+        "date": "2026-11-04",
+        "unblended_cost_usd": -3.61e-08
+      },
+      {
+        "date": "2026-11-05",
+        "unblended_cost_usd": -4.34e-08
+      }
+    ]
+  },
+  "averages_per_task_usd": {
+    "C1": 0.000543865855235952,
+    "C2": 0.0010870310983185352,
+    "C3": 0.0004144631062241545
+  },
+  "nfr4_validation": {
+    "c1_avg_llm_calls": 1.6875,
+    "c2_avg_llm_calls": 6.925,
+    "ratio_percentage": 24.429000000000002,
+    "pass_threshold_pct": 50.0
+  }
+}

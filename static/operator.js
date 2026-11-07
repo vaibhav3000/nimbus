@@ -20,6 +20,237 @@ async function api(method, path, body) {
 const msgId = () => "op-" + Math.random().toString(36).slice(2, 12);
 let selectedTaskId = null;
 
+
+let demoTaskId = null;
+const demoLoggedStages = new Set();
+
+function formatTime(d = new Date()) {
+  return d.toTimeString().split(" ")[0];
+}
+
+function appendDemoStream(stageKey, badgeClass, badgeLabel, detailText) {
+  const stream = $("demo-progress-stream");
+  if (!stream) return;
+  if (stream.querySelector(".muted")) {
+    stream.innerHTML = "";
+  }
+  const streamKey = `${demoTaskId}:${stageKey}`;
+  if (demoLoggedStages.has(streamKey)) return;
+  demoLoggedStages.add(streamKey);
+
+  const row = document.createElement("div");
+  row.className = "stream-entry";
+  row.innerHTML = `<span class="stream-time">[${formatTime()}]</span>
+    <span class="stream-badge ${badgeClass}">${esc(badgeLabel)}</span>
+    <span class="stream-text">${esc(detailText)}</span>`;
+  stream.appendChild(row);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+function setDemoProgressBar(stageName, details = {}) {
+  const fill = $("demo-progress-fill");
+  const s1 = $("step-received");
+  const s2 = $("step-clarifying");
+  const s3 = $("step-leased");
+  const s4 = $("step-in-progress");
+  const s5 = $("step-final");
+  const finalLabel = $("step-final-label");
+  if (!s1 || !s2 || !s3 || !s4 || !s5) return;
+
+  [s1, s2, s3, s4, s5].forEach((s) => {
+    s.className = "progress-step";
+    const node = s.querySelector(".step-node");
+    if (node) node.textContent = s.dataset.num;
+  });
+  if (finalLabel) finalLabel.textContent = "Completed / Blocked";
+
+  if (stageName === "received") {
+    if (fill) fill.style.width = "10%";
+    s1.classList.add("active");
+  } else if (stageName === "clarifying") {
+    if (fill) fill.style.width = "30%";
+    s1.classList.add("completed");
+    s1.querySelector(".step-node").textContent = "✓";
+    s2.classList.add("active");
+  } else if (stageName === "leased") {
+    if (fill) fill.style.width = "55%";
+    s1.classList.add("completed");
+    s1.querySelector(".step-node").textContent = "✓";
+    if (details.clarified) {
+      s2.classList.add("completed");
+      s2.querySelector(".step-node").textContent = "✓";
+    } else {
+      s2.classList.add("skipped");
+    }
+    s3.classList.add("completed");
+    s3.querySelector(".step-node").textContent = "✓";
+    s4.classList.add("active");
+  } else if (stageName === "in_progress") {
+    if (fill) fill.style.width = "75%";
+    s1.classList.add("completed");
+    s1.querySelector(".step-node").textContent = "✓";
+    if (details.clarified) {
+      s2.classList.add("completed");
+      s2.querySelector(".step-node").textContent = "✓";
+    } else {
+      s2.classList.add("skipped");
+    }
+    s3.classList.add("completed");
+    s3.querySelector(".step-node").textContent = "✓";
+    s4.classList.add("active");
+  } else if (stageName === "completed") {
+    if (fill) fill.style.width = "100%";
+    s1.classList.add("completed");
+    s1.querySelector(".step-node").textContent = "✓";
+    if (details.clarified) {
+      s2.classList.add("completed");
+      s2.querySelector(".step-node").textContent = "✓";
+    } else {
+      s2.classList.add("skipped");
+    }
+    s3.classList.add("completed");
+    s3.querySelector(".step-node").textContent = "✓";
+    s4.classList.add("completed");
+    s4.querySelector(".step-node").textContent = "✓";
+    s5.classList.add("completed");
+    s5.querySelector(".step-node").textContent = "✓";
+    if (finalLabel) finalLabel.textContent = "Completed";
+  } else if (["blocked", "cancelled", "rejected", "failed"].includes(stageName)) {
+    if (fill) fill.style.width = "100%";
+    s1.classList.add("completed");
+    s1.querySelector(".step-node").textContent = "✓";
+    s5.classList.add("blocked");
+    s5.querySelector(".step-node").textContent = "✗";
+    if (finalLabel) finalLabel.textContent = stageName === "blocked" ? "Blocked" : stageName.toUpperCase();
+  }
+}
+
+function syncDemoTask(task) {
+  if (!task) return;
+  const status = task.status;
+  const badge = $("demo-task-badge");
+  if (badge) badge.textContent = `Task: ${task.task_id} [${status}]`;
+
+  const clarifyBox = $("demo-clarify-box");
+  const isClarified = demoLoggedStages.has(`${task.task_id}:clarified`);
+
+  if (status === "received") {
+    setDemoProgressBar("received");
+    appendDemoStream("received", "received", "Request received", `Task ${task.task_id} logged in queue`);
+  } else if (status === "needs_clarification") {
+    setDemoProgressBar("clarifying");
+    if (clarifyBox) {
+      clarifyBox.style.display = "flex";
+      $("demo-clarify-prompt").textContent = task.question || "Clarification needed:";
+    }
+    appendDemoStream("clarifying", "clarifying", "Clarifying", task.question || "Awaiting requester answer");
+  } else {
+    if (clarifyBox) clarifyBox.style.display = "none";
+  }
+
+  if (status === "leased") {
+    const l = task.lease || {};
+    setDemoProgressBar("leased", { clarified: isClarified });
+    appendDemoStream("leased", "leased", "Leased", `Lease v${l.version || 1} issued to ${l.cluster_id || "fleet"} (priority: ${l.priority || "routine"})`);
+    setDemoProgressBar("in_progress", { clarified: isClarified });
+    appendDemoStream("in_progress", "in-progress", "In progress", "Dispatched to robot fleet, route executing");
+  } else if (status === "in_progress" || status === "active") {
+    setDemoProgressBar("in_progress", { clarified: isClarified });
+    appendDemoStream("in_progress", "in-progress", "In progress", "Dispatched to robot fleet, route executing");
+  } else if (status === "completed") {
+    setDemoProgressBar("completed", { clarified: isClarified });
+    appendDemoStream("completed", "completed", "Completed", "Delivery verified, task completed successfully");
+  } else if (["blocked", "cancelled", "rejected", "failed"].includes(status)) {
+    setDemoProgressBar(status);
+    appendDemoStream(status, "blocked", status.toUpperCase(), task.reason || `Task transitioned to ${status}`);
+  }
+}
+
+function setupDemoControls() {
+  const input = $("demo-request-input");
+  const submitBtn = $("demo-submit-btn");
+  const clarifyBtn = $("demo-clarify-btn");
+  const clarifyInput = $("demo-clarify-input");
+
+  if (!submitBtn || !input) return;
+
+  const doSubmit = async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    submitBtn.disabled = true;
+    input.disabled = true;
+
+    const stream = $("demo-progress-stream");
+    if (stream) stream.innerHTML = "";
+    demoTaskId = "submitting...";
+    demoLoggedStages.clear();
+
+    const badge = $("demo-task-badge");
+    if (badge) badge.textContent = "Submitting request...";
+
+    setDemoProgressBar("received");
+    appendDemoStream("received", "received", "Request received", `"${text}"`);
+
+    try {
+      const { status, data } = await api("POST", "/requests", { text, message_id: msgId() });
+      if (status === 201 && data && data.task_id) {
+        demoTaskId = data.task_id;
+        input.value = "";
+        if (badge) badge.textContent = `Task: ${demoTaskId} [${data.status}]`;
+        await refreshTasks();
+        selectTask(demoTaskId);
+      } else {
+        alert(`Request failed: ${data.error || status}`);
+        if (badge) badge.textContent = "Request failed";
+        setDemoProgressBar("idle");
+      }
+    } catch (err) {
+      console.error("Submit request error:", err);
+      alert("Failed to submit request");
+      if (badge) badge.textContent = "Error submitting";
+      setDemoProgressBar("idle");
+    } finally {
+      submitBtn.disabled = false;
+      input.disabled = false;
+      input.focus();
+    }
+  };
+
+  submitBtn.onclick = doSubmit;
+  input.onkeydown = (e) => {
+    if (e.key === "Enter") doSubmit();
+  };
+
+  if (clarifyBtn && clarifyInput) {
+    const doClarify = async () => {
+      const answer = clarifyInput.value.trim();
+      if (!answer || !demoTaskId) return;
+      clarifyBtn.disabled = true;
+      try {
+        const { status, data } = await api("POST", `/requests/${demoTaskId}/answer`, { text: answer, message_id: msgId() });
+        if (status === 201) {
+          appendDemoStream("clarified", "clarifying", "Clarifying", `Answered: "${answer}"`);
+          clarifyInput.value = "";
+          const clarifyBox = $("demo-clarify-box");
+          if (clarifyBox) clarifyBox.style.display = "none";
+          await refreshTasks();
+        } else {
+          alert(`Clarification failed: ${data.error || status}`);
+        }
+      } catch (err) {
+        console.error("Clarification error:", err);
+        alert("Failed to submit clarification");
+      } finally {
+        clarifyBtn.disabled = false;
+      }
+    };
+    clarifyBtn.onclick = doClarify;
+    clarifyInput.onkeydown = (e) => {
+      if (e.key === "Enter") doClarify();
+    };
+  }
+}
+
 async function refreshTasks() {
   refreshStock();
   const { data } = await api("GET", "/tasks");
@@ -38,6 +269,10 @@ async function refreshTasks() {
   }
   if (window.NimbusSpatial && window.NimbusSpatial.onTasksUpdate) {
     window.NimbusSpatial.onTasksUpdate(data.tasks);
+  }
+  if (demoTaskId && data.tasks) {
+    const active = data.tasks.find((t) => t.task_id === demoTaskId);
+    if (active) syncDemoTask(active);
   }
 }
 
@@ -68,6 +303,7 @@ async function refreshStock() {
 
 async function selectTask(taskId) {
   selectedTaskId = taskId;
+  demoTaskId = taskId;
   if (window.NimbusSpatial && window.NimbusSpatial.onTaskSelect) {
     window.NimbusSpatial.onTaskSelect(taskId);
   }
@@ -280,9 +516,10 @@ refreshFault();
 updateLlmStatus();
 setupStockControls();
 setupMemoryControls();
+setupDemoControls();
 setInterval(() => {
   refreshTasks();
   refreshFleet();
   refreshFault();
-}, 4000);
+}, 2000);
 setInterval(updateLlmStatus, 5000);
