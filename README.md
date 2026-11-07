@@ -299,7 +299,7 @@ To be filled: one row per experiment, with a link to its results folder ([how](d
 | R3, map and localisation check | FR-2, FR-5 | to be filled |
 | R4, edge model benchmark | E1, NFR-1, FR-3 | to be filled |
 | R5, edge handles locally or asks | FR-4 | to be filled |
-| R6, stay within the lease | FR-5 | to be filled |
+| R6, stay within the lease | FR-5 | [MockRobot supervisor result](results/final/R6/README.md): 60/60 invalid task commands were prevented before execution (20 forbidden-zone, 20 expired-lease, 20 stale-version); 0 unauthorized task executions. The 20 expiry cases executed only the authorised safe-park command. PASS; this is not physical Gazebo validation. |
 | R7, safe parking on expiry or link cut | FR-6 | to be filled |
 | R8, edge node takeover | FR-7 | to be filled |
 | R9, store-and-forward and reconnection | FR-10, FR-12, NFR-2 | to be filled |
