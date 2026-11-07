@@ -43,3 +43,6 @@ results/tmp/
 logs/
 data_standin/
 logs_standin/
+
+*.tfstate
+*.tfstate.*

@@ -5,7 +5,7 @@
 const $ = (id) => document.getElementById(id);
 
 function esc(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
 }
@@ -251,7 +251,17 @@ function setupDemoControls() {
   }
 }
 
+let _refreshTasksInProgress = false;
 async function refreshTasks() {
+  if (_refreshTasksInProgress) return;
+  _refreshTasksInProgress = true;
+  try {
+    return await _doRefreshTasks();
+  } finally {
+    _refreshTasksInProgress = false;
+  }
+}
+async function _doRefreshTasks() {
   refreshStock();
   const { data } = await api("GET", "/tasks");
   const rows = $("task-rows");
@@ -338,6 +348,15 @@ async function renderDetail() {
 }
 
 async function control(action) {
+  const cancelBtn = $("cancel-btn");
+  const pauseBtn = $("pause-btn");
+  if (action === "cancel" && cancelBtn) {
+    cancelBtn.disabled = true;
+    cancelBtn.textContent = "Cancelling... (Awaiting Edge Ack)";
+  } else if (action === "pause" && pauseBtn) {
+    pauseBtn.disabled = true;
+    pauseBtn.textContent = "Pausing... (Awaiting Edge Ack)";
+  }
   const { status, data } = await api(
     "POST", `/tasks/${selectedTaskId}/control`, { action, message_id: msgId() }
   );

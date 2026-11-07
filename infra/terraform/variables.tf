@@ -62,3 +62,15 @@ variable "ecs_target_url" {
   type        = string
   default     = "http://127.0.0.1:8000"
 }
+
+variable "assign_public_ip" {
+  description = "Whether to assign public IP to Fargate tasks. Defaults to false for security; API Gateway or internal load balancer should be used for access."
+  type        = bool
+  default     = false
+}
+
+variable "allowed_ingress_cidr_blocks" {
+  description = "Allowed CIDR blocks for inbound port 8000 on ECS security group. Restricted to internal VPC CIDR by default; public traffic enters via API Gateway."
+  type        = list(string)
+  default     = ["10.20.0.0/16"]
+}

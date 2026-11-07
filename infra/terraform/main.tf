@@ -132,12 +132,13 @@ resource "aws_security_group" "app" {
   description = "Security group for Nimbus ECS service allowing inbound HTTP on port 8000"
   vpc_id      = aws_vpc.main.id
 
+  # Inbound 8000 is restricted to VPC/internal CIDRs by default. Public client traffic terminates at API Gateway.
   ingress {
-    description = "Allow inbound port 8000 for Nimbus web app and API"
+    description = "Allow inbound port 8000 from VPC and API Gateway"
     from_port   = 8000
     to_port     = 8000
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.allowed_ingress_cidr_blocks
   }
 
   egress {
@@ -161,7 +162,7 @@ resource "aws_ecs_service" "app" {
   network_configuration {
     subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
     security_groups  = [aws_security_group.app.id]
-    assign_public_ip = var.egress_mode == "public_ip" # see cloud.tf: private subnets had no route out
+    assign_public_ip = var.assign_public_ip # gated behind variable; defaults to false for security
   }
 }
 
@@ -179,8 +180,16 @@ resource "aws_apigatewayv2_api" "main" {
 resource "aws_apigatewayv2_integration" "app" {
   api_id                 = aws_apigatewayv2_api.main.id
   integration_type       = "HTTP_PROXY"
-  integration_uri        = "https://httpbin.org/post"
-  integration_method     = "POST"
+  integration_uri        = "${var.ecs_target_url}/{proxy}"
+  integration_method     = "ANY"
+  payload_format_version = "1.0"
+}
+
+resource "aws_apigatewayv2_integration" "root" {
+  api_id                 = aws_apigatewayv2_api.main.id
+  integration_type       = "HTTP_PROXY"
+  integration_uri        = var.ecs_target_url
+  integration_method     = "ANY"
   payload_format_version = "1.0"
 }
 
@@ -200,40 +209,6 @@ resource "aws_apigatewayv2_route" "proxy" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /{proxy+}"
   target    = "integrations/${aws_apigatewayv2_integration.app.id}"
-}
-
-resource "aws_apigatewayv2_route" "root" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "GET /"
-  target    = "integrations/${aws_apigatewayv2_integration.app.id}"
-}
-
-resource "aws_apigatewayv2_stage" "default" {
-  api_id      = aws_apigatewayv2_api.main.id
-  name        = "$default"
-  auto_deploy = true
-}
-
-resource "aws_apigatewayv2_integration" "proxy" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "HTTP_PROXY"
-  integration_uri        = "https://httpbin.org/anything/{proxy}"
-  integration_method     = "ANY"
-  payload_format_version = "1.0"
-}
-
-resource "aws_apigatewayv2_route" "proxy" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "ANY /{proxy+}"
-  target    = "integrations/${aws_apigatewayv2_integration.proxy.id}"
-}
-
-resource "aws_apigatewayv2_integration" "root" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "HTTP_PROXY"
-  integration_uri        = "https://httpbin.org/get"
-  integration_method     = "GET"
-  payload_format_version = "1.0"
 }
 
 resource "aws_apigatewayv2_route" "root" {
@@ -259,28 +234,14 @@ resource "aws_cloudwatch_event_rule" "task_events" {
   name           = "${local.name_prefix}-task-events"
   description    = "Route Nimbus task/lease events to the escalations queue"
   event_bus_name = aws_cloudwatch_event_bus.main.name
-  event_pattern  = jsonencode({
+  event_pattern = jsonencode({
     source      = ["nimbus.app"]
     detail-type = ["lease_issued", "escalation", "checkin_missed"]
   })
 }
 
 
-# Minimal CloudWatch alarm skeleton for missed check-ins (SKELETON ONLY: never applied).
-# In AWS production, edge supervisors emit heartbeat/checkin metrics via CloudWatch EMF
-# or IoT Core rule metrics; an alarm fires if no check-in metric arrives within the lease window.
-resource "aws_cloudwatch_metric_alarm" "missed_checkin" {
-  alarm_name          = "${local.name_prefix}-missed-checkin"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "CheckinReceived"
-  namespace           = "Nimbus/Fleet"
-  period              = 60
-  statistic           = "Sum"
-  threshold           = 1
-  alarm_description   = "Triggers when edge supervisor fails to check in within 60s lease window"
-  treat_missing_data  = "breaching"
-}
+
 resource "aws_cloudwatch_event_target" "to_queue" {
   event_bus_name = aws_cloudwatch_event_bus.main.name
   rule           = aws_cloudwatch_event_rule.task_events.name
@@ -373,6 +334,8 @@ resource "aws_iam_role_policy" "task_least_privilege" {
         Action = [
           "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem",
           "dynamodb:DeleteItem", "dynamodb:Query",
+          "dynamodb:TransactWriteItems", "dynamodb:TransactGetItems",
+          "dynamodb:DescribeTable",
         ]
         Resource = [
           aws_dynamodb_table.leases.arn,

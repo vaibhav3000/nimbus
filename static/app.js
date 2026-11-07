@@ -23,7 +23,7 @@ function msgId() {
 }
 
 function chip(status) {
-  return status ? `<span class="chip ${status}">${status}</span>` : "";
+  return status ? `<span class="chip ${esc(status)}">${esc(status)}</span>` : "";
 }
 
 function shortText(t) {
@@ -33,7 +33,7 @@ function shortText(t) {
 /* Escape before any innerHTML interpolation: the timeline carries edge-supplied
    text (escalation payloads), which is this app's trust boundary. */
 function esc(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
 }
@@ -45,7 +45,7 @@ async function refreshTasks() {
   list.innerHTML = "";
   for (const t of data.tasks) {
     const li = document.createElement("li");
-    li.innerHTML = `<strong>${t.task_id}</strong>${chip(t.status)}<br>
+    li.innerHTML = `<strong>${esc(t.task_id)}</strong>${chip(t.status)}<br>
       <span class="muted">${esc(shortText(t.request_text))}</span>`;
     if (t.task_id === selectedTaskId) li.className = "active";
     li.onclick = () => selectTask(t.task_id);
@@ -68,7 +68,7 @@ async function renderDetail() {
   const { status, data: task } = await api("GET", `/tasks/${selectedTaskId}`);
   if (status === 404) { box.innerHTML = `<p class="muted">Task not found.</p>`; return; }
 
-  let html = `<h3>${task.task_id} ${chip(task.status)}</h3>
+  let html = `<h3>${esc(task.task_id)} ${chip(task.status)}</h3>
     <p class="muted">“${esc(task.request_text)}”</p>`;
 
   if (task.notice) {
@@ -84,8 +84,8 @@ async function renderDetail() {
       <button id="answer-btn">Answer</button></p></div>`;
   }
   if (task.lease) {
-    html += `<h4>Lease v${task.lease.version}</h4>
-      <pre class="lease">${JSON.stringify(task.lease, null, 2)}</pre>`;
+    html += `<h4>Lease v${esc(task.lease.version)}</h4>
+      <pre class="lease">${esc(JSON.stringify(task.lease, null, 2))}</pre>`;
   }
   if (task.result_ref) {
     html += `<div class="result"><strong>Result:</strong> ${esc(task.result_ref)}</div>`;
@@ -96,9 +96,9 @@ async function renderDetail() {
 
   const { data: tl } = await api("GET", `/tasks/${selectedTaskId}/timeline`);
   html += `<h4>Decision timeline (FR-20)</h4><ol class="timeline">` +
-    tl.timeline.map(r =>
-      `<li><strong>${r.who}</strong>: ${esc(r.output.event || r.output.decision || "?")}
-       <span class="muted">${r.timestamp}</span></li>`).join("") +
+    (tl.timeline || []).map(r =>
+      `<li><strong>${esc(r.who)}</strong>: ${esc((r.output && (r.output.event || r.output.decision)) || "?")}
+       <span class="muted">${esc(r.timestamp)}</span></li>`).join("") +
     `</ol>`;
   box.innerHTML = html;
 

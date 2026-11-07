@@ -47,9 +47,18 @@ logger = logging.getLogger("nimbus.faults")
 
 @dataclass
 class FaultProfile:
-    """Configuration for simulated network degradation."""
+    """Configuration for simulated network degradation.
+
+    Semantics note (H10):
+    In user-space proxy mode, simulated packet loss operates at the TCP
+    connection level by aborting/closing the connection upfront. It does
+    NOT simulate kernel-level mid-stream IP packet drops; for true kernel IP
+    packet drops, use Linux tc/netem via `--tc-script`.
+    """
 
     name: str = "custom"
+    fault_id: str = ""
+    fault_class: str = "custom"
     latency_ms: float = 0.0
     jitter_ms: float = 0.0
     loss_rate: float = 0.0  # Fraction between 0.0 (0%) and 1.0 (100%)
@@ -57,6 +66,18 @@ class FaultProfile:
     trace_file: str | None = None
 
     def __post_init__(self) -> None:
+        import uuid
+        if not self.fault_id:
+            self.fault_id = "flt-" + uuid.uuid4().hex[:8]
+        if self.fault_class == "custom":
+            if self.disconnected:
+                self.fault_class = "partition"
+            elif self.loss_rate > 0:
+                self.fault_class = "connection_abort"
+            elif self.latency_ms > 0:
+                self.fault_class = "latency"
+            else:
+                self.fault_class = "healthy"
         if self.latency_ms < 0:
             raise ValueError(f"latency_ms must be non-negative, got {self.latency_ms}")
         if self.jitter_ms < 0:
@@ -192,11 +213,14 @@ class FaultProxy:
         self._server_sock: socket.socket | None = None
         self._worker_thread: threading.Thread | None = None
         self._active_sockets: set[socket.socket] = set()
+        self.generation: int = 0
 
         # Telemetry metrics for experiment evaluation
+        # Note: packets_dropped reflects upfront connection aborts in proxy mode
         self.stats = {
             "connections_total": 0,
             "connections_rejected": 0,
+            "connections_aborted": 0,
             "packets_forwarded": 0,
             "packets_dropped": 0,
             "bytes_forwarded": 0,
@@ -212,14 +236,21 @@ class FaultProxy:
     def _sync_fault_status(self) -> None:
         """Write current profile to local data/fault_status.json and notify target if local server."""
         with self._lock:
+            self.generation += 1
+            gen = self.generation
             fwd = self.stats.get("packets_forwarded", 0)
             drop = self.stats.get("packets_dropped", 0)
             bytes_fwd = self.stats.get("bytes_forwarded", 0)
             conn_tot = self.stats.get("connections_total", 0)
             conn_rej = self.stats.get("connections_rejected", 0)
+            conn_abort = self.stats.get("connections_aborted", conn_rej)
             active = not (self.profile.name == "healthy" and not self.profile.disconnected and self.profile.loss_rate == 0 and self.profile.latency_ms == 0)
             state = {
                 "active": active,
+                "fault_id": getattr(self.profile, "fault_id", "flt-default"),
+                "fault_class": getattr(self.profile, "fault_class", "custom"),
+                "generation": gen,
+                "timestamp": time.time(),
                 "profile": self.profile.name,
                 "latency_ms": self.profile.latency_ms,
                 "jitter_ms": self.profile.jitter_ms,
@@ -227,6 +258,7 @@ class FaultProxy:
                 "disconnected": self.profile.disconnected,
                 "packets_forwarded": fwd,
                 "packets_dropped": drop,
+                "connections_aborted": conn_abort,
                 "bytes_forwarded": bytes_fwd,
                 "connections_total": conn_tot,
                 "connections_rejected": conn_rej,
@@ -244,10 +276,14 @@ class FaultProxy:
                 try:
                     import json
                     from urllib import request as urlreq
+                    headers = {"Content-Type": "application/json"}
+                    tok = os.environ.get("NIMBUS_ADMIN_TOKEN") or os.environ.get("NIMBUS_FAULT_TOKEN") or os.environ.get("NIMBUS_EDGE_TOKEN")
+                    if tok:
+                        headers["Authorization"] = f"Bearer {tok}"
                     req = urlreq.Request(
                         f"http://{self.target_host}:{self.target_port}/fault",
                         data=json.dumps(state).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers=headers,
                         method="POST",
                     )
                     with urlreq.urlopen(req, timeout=0.5):
@@ -275,10 +311,14 @@ class FaultProxy:
             try:
                 import json
                 from urllib import request as urlreq
+                headers = {"Content-Type": "application/json"}
+                tok = os.environ.get("NIMBUS_ADMIN_TOKEN") or os.environ.get("NIMBUS_FAULT_TOKEN") or os.environ.get("NIMBUS_EDGE_TOKEN")
+                if tok:
+                    headers["Authorization"] = f"Bearer {tok}"
                 req = urlreq.Request(
                     f"http://{self.target_host}:{self.target_port}/fault",
-                    data=json.dumps({"active": False, "profile": "healthy"}).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
+                    data=json.dumps({"active": False, "profile": "healthy", "generation": self.generation}).encode("utf-8"),
+                    headers=headers,
                     method="POST",
                 )
                 with urlreq.urlopen(req, timeout=1.0):
