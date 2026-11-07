@@ -1,0 +1,116 @@
+{
+ "task-000001": {
+  "task_id": "task-000001",
+  "message_id": "app-mg33i9hj5s",
+  "request_text": "C3 structured request",
+  "status": "leased",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000001-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-11-07T10:01:15Z",
+   "expiry_ts": "2026-11-07T10:04:15Z",
+   "allowed_zones": [
+    "south_equipment_approach",
+    "east_south_hall_corner",
+    "east_south_hall",
+    "east_mid_hall",
+    "east_waiting_approach"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 1.0,
+   "assigned_robots": [
+    "R3"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "south_equipment_approach",
+      "via": [
+       "east_waiting_approach",
+       "east_mid_hall",
+       "east_south_hall",
+       "east_south_hall_corner",
+       "south_equipment_approach"
+      ],
+      "purpose": "pickup"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "east_waiting_approach",
+      "via": [
+       "south_equipment_approach",
+       "east_south_hall_corner",
+       "east_south_hall",
+       "east_mid_hall",
+       "east_waiting_approach"
+      ]
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R3"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R3"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": null,
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump_paediatric",
+   "destination": "east_waiting_approach",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "C3 structured form",
+   "destination_anchor": "east_waiting_approach",
+   "requested_at": "2026-11-07T09:49:15Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "infusion_pump_paediatric"
+  },
+  "stock_released": false
+ },
+ "_seen_message_ids": [
+  "app-mg33i9hj5s",
+  "msg-ci-1794044957622-8417b5",
+  "msg-ci-1794044962864-ceaf9c",
+  "msg-ci-1794044969131-82b84a",
+  "msg-ci-1794044975479-57f438"
+ ]
+}

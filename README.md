@@ -236,7 +236,7 @@ Then:
 | Use the real Bedrock model in the local cloud | `pip install -r requirements-aws.txt`, set AWS credentials, then `NIMBUS_LOCAL_CLOUD=1 NIMBUS_LLM=bedrock NIMBUS_BEDROCK_MODEL=apac.amazon.nova-lite-v1:0 ./run_all.sh kinematic` |
 | Use a real small model on the edge | Install [Ollama](https://ollama.com), run `ollama pull qwen2.5:1.5b`, then add `--slm-mode ollama` |
 | Real Gazebo (Docker image) | `docker pull kautuk05/ds252-icc:gazebo_hospital` then `./scripts/docker_gazebo.sh` (add `HEADLESS=1` for no window) |
-| Compare configurations | `NIMBUS_MODE=C2 ...` (cloud-only) or `NIMBUS_MODE=C3 ...` (no model) |
+| Compare configurations | `NIMBUS_LOCAL_CLOUD=1 ./run_all.sh kinematic --system-mode C2` (cloud-only) or `NIMBUS_LOCAL_CLOUD=1 ./run_all.sh kinematic --system-mode C3` (classical no-LLM baseline) |
 | Use the team's AWS deployment | `./run_all.sh` without `NIMBUS_LOCAL_CLOUD` uses the deployed cloud. It is shared, so only use it when you mean to. |
 
 ### Tests

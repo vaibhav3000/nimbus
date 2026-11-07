@@ -25,14 +25,14 @@ class NavigationConfig:
     control_period: float = 0.05
     # Damped and rate-limited steering: the vehicle must not zig-zag across
     # a narrow corridor after a planner turn.
-    steering_gain: float = 1.00
-    steering_derivative_gain: float = 0.09
-    max_steering_rate: float = 1.20
+    steering_gain: float = 1.35
+    steering_derivative_gain: float = 0.14
+    max_steering_rate: float = 2.40
     heading_deadband: float = 0.04
     derivative_filter_time_constant: float = 0.20
     maximum_forward_heading_error: float = 2.0
-    curvature_slowdown: float = 2.0
-    min_turn_speed: float = 0.08
+    curvature_slowdown: float = 0.80
+    min_turn_speed: float = 0.12
     startup_odometry_timeout: float = 5.0
     odometry_timeout: float = 1.0
     goal_timeout: float = float(os.environ.get("NIMBUS_GOAL_TIMEOUT", "600.0"))
@@ -56,8 +56,11 @@ class NavigationConfig:
     avoidance_distance: float = 1.50
     obstacle_inflation: float = 0.85
     minimum_control_speed: float = 0.10
-    minimum_alignment_scale: float = 0.30
-    approach_speed_gain: float = 0.35
+    # Keep an Ackermann vehicle moving decisively through a right-angle
+    # corner.  This is an alignment *scale*, not a speed-limit override.
+    # Front-obstacle checks and the caller's requested speed still bound it.
+    minimum_alignment_scale: float = 0.40
+    approach_speed_gain: float = 0.70
     reverse_required_angle: float = 2.50
     heading_correction_gain: float = 0.60
     enable_map_checked_uturn: bool = True
@@ -640,7 +643,12 @@ class NavigationController:
                 # An Ackermann vehicle cannot pivot. Slow it while its heading
                 # is far from the goal so it turns onto the target path instead
                 # of tracing a wide, high-speed circle.
-                alignment = max(self.config.min_turn_speed,math.cos(heading_error))
+                # ``cos(90 degrees)`` is zero.  Using it directly made a
+                # 0.3 m/s lease command collapse to a few mm/s at corners
+                # after curvature slowdown.  An Ackermann car needs a
+                # bounded forward crawl to acquire the new heading; this
+                # floor does not bypass requested-speed or safety limits.
+                alignment = max(self.config.minimum_alignment_scale, math.cos(heading_error))
                 approach_speed=max(self.config.min_turn_speed,distance*self.config.approach_speed_gain)
                 curve_factor = 1.0/(1.0+self.config.curvature_slowdown*abs(steering)/self.limits.max_steering_angle)
                 speed=min(requested_speed,approach_speed)*alignment*curve_factor*(avoidance.speed_scale if avoidance else 1.)

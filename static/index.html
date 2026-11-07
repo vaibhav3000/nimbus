@@ -108,7 +108,7 @@
     resize: vertical;
     transition: border-color 150ms ease;
   }
-  textarea:focus, input[type=text]:focus {
+  textarea:focus, input[type=text]:focus, input[type=number]:focus, select:focus {
     outline: none;
     border-color: var(--brass);
   }
@@ -123,6 +123,18 @@
     color: var(--text);
     transition: border-color 150ms ease;
   }
+  select, input[type=number] {
+    width: 100%;
+    font: inherit;
+    font-size: 13px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #11141a;
+    color: var(--text);
+  }
+  .form-field { margin: 10px 0; }
+  .form-field label { display: block; margin-bottom: 4px; font-size: 11px; color: var(--muted); }
 
   p { margin: 10px 0; }
   button {
@@ -368,8 +380,19 @@
   <section class="card">
     <div class="composer">
       <h3>New request</h3>
-      <textarea id="request-text" placeholder="Need an infusion pump at 2B-12, urgent."></textarea>
-      <p><button id="send">Send request</button></p>
+      <div id="free-text-composer">
+        <textarea id="request-text" placeholder="Need an infusion pump at 2B-12, urgent."></textarea>
+        <p><button id="send">Send request</button></p>
+      </div>
+      <form id="c3-form" hidden>
+        <p class="muted">Classical baseline: deterministic form entry; no language model.</p>
+        <div class="form-field"><label for="c3-item">Item</label><select id="c3-item" required></select></div>
+        <div class="form-field"><label for="c3-destination">Destination</label><select id="c3-destination" required></select></div>
+        <div class="form-field"><label for="c3-source">Source (optional)</label><select id="c3-source"></select></div>
+        <div class="form-field"><label for="c3-priority">Priority</label><select id="c3-priority" required></select></div>
+        <div class="form-field"><label for="c3-deadline">Deadline (minutes)</label><input id="c3-deadline" type="number" min="1" required></div>
+        <p><button type="submit">Create task</button></p>
+      </form>
     </div>
     <h3>My tasks <span class="muted" id="task-count"></span></h3>
     <ul class="tasks" id="task-list"></ul>

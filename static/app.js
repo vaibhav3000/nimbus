@@ -9,6 +9,7 @@ let selectedTaskId = null;
 /* Off unless the server says NIMBUS_DEMO_CONTROLS=1.  Gates the OUTPUT_READY
    stand-in below, which reports a delivery no robot performed. */
 let demoControls = false;
+let c3StructuredForms = false;
 
 async function api(method, path, body) {
   const opts = { method, headers: { "Content-Type": "application/json" } };
@@ -120,9 +121,33 @@ async function loadUiConfig() {
   try {
     const { data } = await api("GET", "/ui-config");
     demoControls = Boolean(data && data.demo_controls);
+    c3StructuredForms = Boolean(data && data.c3_structured_forms);
+    if (c3StructuredForms) configureC3Form(data.c3_form_options || {});
   } catch (e) {
     demoControls = false;   // unreachable or old server: stay off, never fabricate
   }
+}
+
+function fillSelect(id, rows, blankLabel = null) {
+  const el = $(id);
+  el.innerHTML = "";
+  if (blankLabel !== null) el.appendChild(new Option(blankLabel, ""));
+  for (const row of rows || []) el.appendChild(new Option(row.label, row.id));
+}
+
+function configureC3Form(options) {
+  $("free-text-composer").hidden = true;
+  $("c3-form").hidden = false;
+  fillSelect("c3-item", options.items);
+  fillSelect("c3-destination", options.destinations);
+  fillSelect("c3-source", options.sources, "Use normal stock location");
+  fillSelect("c3-priority", options.priorities);
+  const syncDeadline = () => {
+    const row = (options.priorities || []).find((p) => p.id === $("c3-priority").value);
+    if (row) $("c3-deadline").value = row.deadline_minutes;
+  };
+  $("c3-priority").onchange = syncDeadline;
+  syncDeadline();
 }
 
 async function simulateOutputReady() {
@@ -151,6 +176,21 @@ $("send").onclick = async () => {
   if (!text) return;
   const { data } = await api("POST", "/requests", { text, message_id: msgId() });
   $("request-text").value = "";
+  await refreshTasks();
+  await selectTask(data.task_id || selectedTaskId);
+};
+
+$("c3-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const form = {
+    item: $("c3-item").value,
+    destination: $("c3-destination").value,
+    source: $("c3-source").value || null,
+    priority: $("c3-priority").value,
+    deadline_minutes: Number($("c3-deadline").value),
+  };
+  const { status, data } = await api("POST", "/requests", { form, message_id: msgId() });
+  if (status >= 400) { alert(data.error || "Unable to create task"); return; }
   await refreshTasks();
   await selectTask(data.task_id || selectedTaskId);
 };

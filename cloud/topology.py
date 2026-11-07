@@ -10,6 +10,7 @@ any particular kind of place is.
 from __future__ import annotations
 
 import heapq
+import math
 import re
 
 from .pack import Pack
@@ -34,6 +35,18 @@ class Topology:
         for a, b, w in doc["edges"]:
             self.adj[a][b] = w
             self.adj[b][a] = w
+        # A map may omit positions (then A* safely falls back to Dijkstra).
+        # Scale the straight-line estimate by the smallest observed edge-cost /
+        # Euclidean-distance ratio.  That makes the heuristic admissible even
+        # when an edge cost includes a door or a slow corridor penalty.
+        ratios = []
+        for a, b, w in doc["edges"]:
+            pa, pb = self.nodes[a].get("pos"), self.nodes[b].get("pos")
+            if pa and pb:
+                straight = math.dist(pa[:2], pb[:2])
+                if straight > 0:
+                    ratios.append(float(w) / straight)
+        self._astar_scale = min(ratios) if ratios else 0.0
 
     # -- facts ------------------------------------------------------------------
 
@@ -161,18 +174,24 @@ class Topology:
                       avoid: set[str] = frozenset()) -> list[str] | None:
         """Cheapest route src->dst over allowed zones, never entering `avoid`.
 
-        Dijkstra on a graph of tens of nodes; the PRD calls it A* routing and
-        on a graph this small the heuristic buys nothing.
+        A* over the map graph.  Nodes without positions simply receive a zero
+        heuristic, retaining Dijkstra's correct behaviour for older packs.
         """
         if src in avoid or dst in avoid:
             return None
         if allowed is not None and (src not in allowed or dst not in allowed):
             return None
-        best = {src: 0.0}
+        def heuristic(node: str) -> float:
+            p, goal = self.nodes[node].get("pos"), self.nodes[dst].get("pos")
+            if not p or not goal:
+                return 0.0
+            return self._astar_scale * math.dist(p[:2], goal[:2])
+
+        best = {src: 0.0}  # g-score
         prev: dict[str, str] = {}
-        heap = [(0.0, src)]
+        heap = [(heuristic(src), 0.0, src)]  # f-score, g-score, node
         while heap:
-            cost, node = heapq.heappop(heap)
+            _, cost, node = heapq.heappop(heap)
             if node == dst:
                 path = [dst]
                 while path[-1] != src:
@@ -187,7 +206,7 @@ class Topology:
                 if c < best.get(nxt, float("inf")):
                     best[nxt] = c
                     prev[nxt] = node
-                    heapq.heappush(heap, (c, nxt))
+                heapq.heappush(heap, (c + heuristic(nxt), c, nxt))
         return None
 
     def routes(self, src: str, dst: str, *, allowed: set[str] | None = None,

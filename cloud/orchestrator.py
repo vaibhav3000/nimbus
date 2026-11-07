@@ -303,6 +303,52 @@ class Orchestrator:
         info = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0}
         return self._allocate(task, spec, ctx, info, self.mode in LLM_MODES, None, request_text=task["request_text"], answer=None)
 
+    def handle_structured_request(self, task: dict, form: dict) -> Outcome:
+        """Run the C3 form ingress without parsing prose or consulting a model.
+
+        This is deliberately separate from :meth:`handle_request`: C3 is an
+        ablation baseline, so its request fields are validated against the
+        active pack and passed straight to the classical scheduler/allocator.
+        """
+        if self.mode != "C3":
+            raise ValueError("structured C3 requests are available only in C3 mode")
+        if not isinstance(form, dict):
+            raise ValueError("form must be an object")
+        item = form.get("item")
+        destination = form.get("destination")
+        priority = form.get("priority")
+        source = form.get("source")
+        if not isinstance(item, str) or self.pack.item(item) is None:
+            raise ValueError("item must be an item in the active pack")
+        dest = self.topo.resolve_node(destination) if isinstance(destination, str) else None
+        if dest is None or not self.topo.is_destination(dest):
+            raise ValueError("destination must be a reachable destination in the active map")
+        if not isinstance(priority, str) or priority not in self.pack.ranks:
+            raise ValueError("priority must be a priority in the active pack")
+        src = None
+        if source not in (None, ""):
+            src = self.topo.resolve_node(source) if isinstance(source, str) else None
+            if src is None or src not in self.topo.sources():
+                raise ValueError("source must be a stock/source location in the active map")
+        default_deadline = self.pack.priority(priority)["default_deadline_minutes"]
+        deadline = form.get("deadline_minutes", default_deadline)
+        if not isinstance(deadline, int) or isinstance(deadline, bool):
+            raise ValueError("deadline_minutes must be an integer")
+        limits = self.pack.doc["deadline"]
+        if not limits["min_minutes"] <= deadline <= limits["max_minutes"]:
+            raise ValueError(f"deadline_minutes must be from {limits['min_minutes']} to {limits['max_minutes']}")
+        spec = {"item": item, "destination": dest, "priority": priority,
+                "deadline_minutes": deadline, "constraints": [],
+                "rationale": "C3 structured form", **({"source": src} if src else {})}
+        spec = self._complete_spec(spec)
+        ctx = self.build_context(task["request_text"], task["task_id"], [])
+        info = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "_latency_ms": 0}
+        out = self._allocate(task, spec, ctx, info, False, None,
+                             request_text=task["request_text"], answer=None)
+        if out.kind == "leased":
+            self._remember(spec)
+        return out
+
     def complete_summary(self, task: dict, result_ref: str) -> dict:
         """The edge reported the last result of a task (OUTPUT_READY): look at what it stored and tell the requester in plain
         words (PRD Table 2: "summarise for the user"). The model writes the sentence only when the result has text worth
@@ -860,21 +906,22 @@ class Orchestrator:
                                                              "assigned_robots", "deadline_ts", "expiry_ts")}, sort_keys=True)
                 + "\nSITUATION: " + json.dumps(event, sort_keys=True))
         ctx = self.build_context(event.get("situation", ""), task_id, [])
-        try:
-            res = self.llm.converse(system=self.pack.prompts["step"] + "\n\n" + ctx.to_prompt(),
-                                    messages=[{"role": "user", "text": text}], tools=self.tools.names("step"),
-                                    tool_choice="any", context=ctx)
-            self._tally(info, res)
-            call = res.tool_calls[0] if res.tool_calls else None
-            errs = ["no tool call"] if call is None else self.tools.validate(call["name"], call["input"])
-            if not errs:
-                errs = self._step_errors(call["input"], cur, event)
-            if errs:
-                error = "; ".join(errs)
-            else:
-                decision = call["input"]
-        except LLMError as exc:
-            error = str(exc)
+        if self.mode in LLM_MODES:
+            try:
+                res = self.llm.converse(system=self.pack.prompts["step"] + "\n\n" + ctx.to_prompt(),
+                                        messages=[{"role": "user", "text": text}], tools=self.tools.names("step"),
+                                        tool_choice="any", context=ctx)
+                self._tally(info, res)
+                call = res.tool_calls[0] if res.tool_calls else None
+                errs = ["no tool call"] if call is None else self.tools.validate(call["name"], call["input"])
+                if not errs:
+                    errs = self._step_errors(call["input"], cur, event)
+                if errs:
+                    error = "; ".join(errs)
+                else:
+                    decision = call["input"]
+            except LLMError as exc:
+                error = str(exc)
         if decision is None:
             decision, source = self._step_rules(cur, event), "rules"
         out = {"action": decision["action"], "via_zones": decision.get("via_zones", []),

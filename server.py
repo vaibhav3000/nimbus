@@ -413,6 +413,18 @@ class Handler(BaseHTTPRequestHandler):
             # demonstrable through it unless someone deliberately asked.
             self._send_json(200, {
                 "demo_controls": os.environ.get("NIMBUS_DEMO_CONTROLS", "0").lower() in ("1", "true", "yes"),
+                "c3_structured_forms": self.orch.mode == "C3",
+                "c3_form_options": {
+                    "items": [{"id": i["id"], "label": i.get("label", i["id"].replace("_", " "))}
+                              for i in self.orch.pack.items],
+                    "destinations": [{"id": node, "label": data.get("label", node.replace("_", " "))}
+                                     for node, data in sorted(self.orch.topo.destinations().items())],
+                    "sources": [{"id": node, "label": data.get("label", node.replace("_", " "))}
+                                for node, data in sorted(self.orch.topo.sources().items())],
+                    "priorities": [{"id": p["id"], "label": p.get("label", p["id"]),
+                                    "deadline_minutes": p["default_deadline_minutes"]}
+                                   for p in self.orch.pack.priorities],
+                },
             })
         elif path == "/outbox":
             active_only = "active=1" in (self.path.split("?", 1)[1] if "?" in self.path else "")
@@ -533,8 +545,17 @@ class Handler(BaseHTTPRequestHandler):
             return False, message_id
 
     def _post_request(self, body: dict):
+        form = body.get("form")
         text = body.get("text")
-        if not isinstance(text, str) or not text.strip():
+        if form is not None:
+            if self.orch.mode != "C3":
+                self._send_json(409, {"error": "structured requests are available only in C3 mode"})
+                return
+            if not isinstance(form, dict):
+                self._send_json(400, {"error": "form must be an object"})
+                return
+            text = "C3 structured request"
+        elif not isinstance(text, str) or not text.strip():
             self._send_json(400, {"error": "text is required"})
             return
         dup, message_id = self._dedupe(body)
@@ -552,11 +573,13 @@ class Handler(BaseHTTPRequestHandler):
                 "lease": None,
                 "result_ref": None,
             }
-            self.store.append_decision(
-                self._row("requester", {"text": text}, {"event": "request_received"}, None, task_id)
-            )
+            self.store.append_decision(self._row("requester", {"form": form} if form is not None else {"text": text},
+                                                 {"event": "structured_request_received" if form is not None else "request_received"}, None, task_id))
             history = self.store.timeline(task_id)
-        self._decide(task, lambda: self.orch.handle_request(task, text, history=history), created=True)
+        if form is not None:
+            self._decide(task, lambda: self.orch.handle_structured_request(task, form), created=True)
+        else:
+            self._decide(task, lambda: self.orch.handle_request(task, text, history=history), created=True)
 
     def _decide(self, task: dict, run, *, created: bool = False) -> bool:
         """Run one orchestrator decision and answer the caller. Returns False
@@ -570,6 +593,9 @@ class Handler(BaseHTTPRequestHandler):
                 task.pop("message_id", None)  # faulted delivery must not burn the id
                 self.store.put_task(task)
             self._send_json(500, {"error": "orchestrator produced an invalid lease", "detail": exc.errors})
+            return False
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
             return False
         self.orch.metrics.inc("requests")
         self.orch.metrics.inc(f"outcome_{outcome.kind}")

@@ -1670,7 +1670,23 @@ class EdgeSupervisor:
                     "idle_robots": [r for r in self.robots if r not in failed_robots and r != robot_id],
                 }
 
-                decision, decided_by, latency_ms = self.slm.evaluate_decision(tactical_ctx)
+                if self.system_mode == "C3":
+                    # C3 is intentionally a small, auditable finite-state
+                    # baseline: wait/retry once, one map-valid detour, then
+                    # hand the situation to an operator.  It must not inherit
+                    # C1's richer SLM fallback choices (swap, clarify, park).
+                    if step_wait_counts.get(idx, 0) == 0:
+                        decision = {"action": "LOCAL_WAIT", "target_waypoint": None,
+                                    "reason": "C3 rules: wait once, then retry the blocked route."}
+                    elif alt_wps:
+                        decision = {"action": "LOCAL_DETOUR", "target_waypoint": alt_wps[0],
+                                    "reason": f"C3 rules: retry failed; detour via {alt_wps[0]}."}
+                    else:
+                        decision = {"action": "ESCALATE_UNEXPECTED", "target_waypoint": None,
+                                    "reason": "C3 rules: retry failed and no permitted detour exists; operator required."}
+                    decided_by, latency_ms = "C3_FSM", 0.0
+                else:
+                    decision, decided_by, latency_ms = self.slm.evaluate_decision(tactical_ctx)
 
                 self.store.log_decision(
                     decision_id=f"dec-tac-{lease_id}-v{version}-{idx+1}-{int(time.time()*1000)}",

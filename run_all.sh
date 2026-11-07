@@ -19,6 +19,7 @@ MODE="auto"
 EDGE_QUIET_ARGS=(--quiet)
 SLM_MODE="${NIMBUS_SLM_MODE:-auto}"
 SLM_MODEL="${NIMBUS_SLM_MODEL:-qwen2.5:1.5b}"
+SYSTEM_MODE="${NIMBUS_MODE:-C1}"
 while [ "$#" -gt 0 ]; do
   arg="$1"
   case "$arg" in
@@ -48,17 +49,31 @@ while [ "$#" -gt 0 ]; do
       fi
       SLM_MODEL="$1"
       ;;
+    --system-mode)
+      shift
+      if [ "$#" -eq 0 ]; then
+        echo "!! --system-mode requires C1, C2, or C3" >&2
+        exit 2
+      fi
+      SYSTEM_MODE="${1^^}"
+      ;;
     *)
-      echo "Usage: $0 [auto|kinematic|gazebo] [--not-quiet] [--slm-mode auto|ollama|llama_cpp|mock|rules_only] [--slm-model MODEL]" >&2
+      echo "Usage: $0 [auto|kinematic|gazebo] [--not-quiet] [--system-mode C1|C2|C3] [--slm-mode auto|ollama|llama_cpp|mock|rules_only] [--slm-model MODEL]" >&2
       exit 2
       ;;
   esac
   shift
 done
+SYSTEM_MODE="${SYSTEM_MODE^^}"
 case "$SLM_MODE" in
   auto|ollama|llama_cpp|mock|rules_only) ;;
   *) echo "!! invalid --slm-mode: $SLM_MODE" >&2; exit 2 ;;
 esac
+case "$SYSTEM_MODE" in
+  C1|C2|C3) ;;
+  *) echo "!! --system-mode must be C1, C2, or C3" >&2; exit 2 ;;
+esac
+export NIMBUS_MODE="$SYSTEM_MODE"
 LOGS="${LOGS_DIR:-$ROOT/logs}"; PIDS="$LOGS/pids"; mkdir -p "$LOGS"; : > "$PIDS"
 
 # --- environment (ROS 2 if present) -------------------------------------------------------------
@@ -89,6 +104,10 @@ if [ "${NIMBUS_LOCAL_CLOUD:-0}" = 1 ]; then
 else
   CLOUD="${NIMBUS_CLOUD_URL:-$DEPLOYED_CLOUD_URL}"
   USE_LOCAL_CLOUD=0
+fi
+if [ "$SYSTEM_MODE" != "C1" ] && [ "$USE_LOCAL_CLOUD" != 1 ]; then
+  echo "!! $SYSTEM_MODE needs NIMBUS_LOCAL_CLOUD=1: the deployed cloud mode cannot be changed by this launcher" >&2
+  exit 2
 fi
 export NIMBUS_CLOUD_URL="$CLOUD"
 # The deployed two-cluster registry names its assigned vehicles robot_1 and
@@ -166,12 +185,13 @@ fi
 # --- 3. edge supervisors (one per wing) -----------------------------------------------------------
 echo "== starting edge supervisors"
 for c in east-wing west-wing; do
-  start "edge_$c" python3 -u edge/run_supervisor.py --cluster "$c" --cloud-url "$CLOUD" "${SIM_ARGS[@]}" "${EDGE_QUIET_ARGS[@]}" --slm-mode "$SLM_MODE" --slm-model "$SLM_MODEL" --db "$DATA_DIR/edge_${c//-/_}.db"
+  start "edge_$c" python3 -u edge/run_supervisor.py --cluster "$c" --cloud-url "$CLOUD" --system-mode "$SYSTEM_MODE" "${SIM_ARGS[@]}" "${EDGE_QUIET_ARGS[@]}" --slm-mode "$SLM_MODE" --slm-model "$SLM_MODEL" --db "$DATA_DIR/edge_${c//-/_}.db"
 done
 sleep 6
 
 echo
 echo "================ Nimbus is up ($MODE) ================"
+echo " System mode   : $SYSTEM_MODE"
 echo " Requester app : $CLOUD/            (type: Need an infusion pump at 2B-12, urgent)"
 echo " Operator      : $CLOUD/operator    Map: $CLOUD/map"
 [ "$MODE" = kinematic ] && echo " Robots moving : http://127.0.0.1:${VIEWER_PORT:-8090}   (live map of the hospital)"
