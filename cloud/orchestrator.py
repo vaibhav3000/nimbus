@@ -92,6 +92,8 @@ class Orchestrator:
                  allow_unknown: bool = True, publish=None, probe_timeout_s: float = 0.0, durable=None, results=None):
         self.pack, self.topo, self.fleet, self.policies, self.repo = pack, topo, fleet, policies, repo
         self.scheduler, self.llm, self.clock = scheduler, llm, clock
+        if getattr(scheduler, "now", None) is None:
+            scheduler.now = clock.now        # lets the scheduler promote overdue tasks (starvation guard)
         self.tools = ToolRegistry(pack)
         self.durable = durable
         self.mapstate = MapState(topo, durable)

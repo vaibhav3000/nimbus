@@ -38,7 +38,8 @@ from urllib.error import HTTPError, URLError
 
 ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "results" / "final"
-DEFAULT_DEPLOYED = "https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com"
+# The shared deployment is never baked into code: set NIMBUS_CLOUD_URL (or pass --target <url>) to use one.
+DEFAULT_DEPLOYED = os.environ.get("NIMBUS_CLOUD_URL", "")
 CLUSTERS = ("east-wing", "west-wing")
 
 # ----------------------------------------------------------------------------------------------- HTTP
@@ -176,6 +177,8 @@ def open_target(spec: str, mode: str = "C1", **kw) -> Target:
     if spec in ("local", "local-bedrock"):
         return start_local(mode, bedrock=spec == "local-bedrock", **kw)
     url = DEFAULT_DEPLOYED if spec == "deployed" else spec
+    if not url:
+        raise SystemExit("--target deployed needs the API address: set NIMBUS_CLOUD_URL or pass --target <url>")
     t = Target("deployed", Api(url, token=os.environ.get("NIMBUS_ADMIN_TOKEN")), "real_bedrock", is_deployed=True)
     t.mode = t.info().get("mode") or "C1"
     return t

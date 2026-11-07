@@ -4,6 +4,11 @@ arrival order breaks ties.
 
 It decides *order*, never allocation. A queued task is retried whenever
 capacity frees up; a blocked entry never holds up runnable ones behind it.
+
+Starvation guard: a task whose deadline has already passed is ranked with the most urgent class (still earliest
+deadline first), so a stream of new urgent requests cannot keep an overdue routine task waiting for ever. Tasks that
+are not yet overdue keep the plain order, so urgent work still goes first while there is time. The guard needs a
+clock (`now`, set by the Orchestrator); without one the order is the plain one.
 """
 
 from __future__ import annotations
@@ -23,13 +28,17 @@ class Entry:
     seq: int
     tried_epoch: int = -1      # the capacity epoch at which this task last failed to place; retry only when it moved
 
-    def key(self, ranks: dict) -> tuple:
-        return (ranks[self.priority], self.deadline, self.seq)
+    def key(self, ranks: dict, now: datetime | None = None) -> tuple:
+        rank = ranks[self.priority]
+        if now is not None and self.deadline < now:
+            rank = min(ranks.values())      # overdue: no longer allowed to wait behind newer urgent work
+        return (rank, self.deadline, self.seq)
 
 
 class Scheduler:
-    def __init__(self, ranks: dict):
+    def __init__(self, ranks: dict, now: Callable[[], datetime] | None = None):
         self._ranks = ranks
+        self.now = now
         self._lock = threading.Lock()
         self._seq = itertools.count()
         self._entries: dict[str, Entry] = {}
@@ -50,7 +59,8 @@ class Scheduler:
 
     def ordered(self) -> list[Entry]:
         with self._lock:
-            return sorted(self._entries.values(), key=lambda e: e.key(self._ranks))
+            now = self.now() if self.now is not None else None
+            return sorted(self._entries.values(), key=lambda e: e.key(self._ranks, now))
 
     def __contains__(self, task_id: str) -> bool:
         return task_id in self._entries

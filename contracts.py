@@ -29,6 +29,7 @@ _SCHEMA_FILES = {
     "escalation": "escalation.schema.json",
     "robot_subtask": "robot_subtask.schema.json",
     "decision_log_entry": "decision_log_entry.schema.json",
+    "notice": "notice.schema.json",
 }
 
 

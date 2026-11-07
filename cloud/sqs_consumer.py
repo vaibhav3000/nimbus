@@ -7,8 +7,11 @@ version fencing, validation and logging are identical whichever way a message ar
 Delivery rules (at-least-once, so the handler must be idempotent, and it is: repeated message ids are ignored):
 * a result below 500 (accepted, duplicate, refused as stale, or invalid) deletes the message: retrying cannot change it;
 * a 5xx or an exception leaves it on the queue to reappear after the visibility timeout;
-* after `max_receives` receives the message is deleted and counted as poison (a redrive policy to a dead-letter
-  queue is the better home for it; this stops a bad message from looping forever if none is configured).
+* a message that fails repeatedly is moved to the dead-letter queue by SQS (redrive policy in infra/terraform/cloud.tf,
+  after 5 receives). `max_receives` (6) is only the backstop for a queue without one: past it the message is deleted and
+  counted as poison so a bad message cannot loop forever.
+* the visibility timeout is asked for on every receive (`visibility_s`, default 120 s), so a slow decision (a model call
+  with retries) is not handed to a second consumer while the first is still working on it.
 """
 
 from __future__ import annotations
@@ -38,18 +41,21 @@ def classify(topic: str | None, body: dict) -> str | None:
 
 class SQSConsumer:
     def __init__(self, queue_url: str, handler, *, client=None, region: str = "ap-south-1", wait_s: int = 10,
-                 max_receives: int = 5, metrics=None):
+                 max_receives: int = 6, metrics=None, visibility_s: int = 120):
         if client is None:
             import boto3
-            client = boto3.client("sqs", region_name=region)
+            from botocore.config import Config
+            # Bounded calls: the read timeout must outlast the long poll, or every empty poll would look like a failure.
+            client = boto3.client("sqs", region_name=region, config=Config(
+                connect_timeout=5, read_timeout=wait_s + 10, retries={"max_attempts": 3, "mode": "standard"}))
         self.url, self.handler, self.c = queue_url, handler, client
-        self.wait_s, self.max_receives, self.metrics = wait_s, max_receives, metrics
+        self.wait_s, self.max_receives, self.metrics, self.visibility_s = wait_s, max_receives, metrics, visibility_s
         self.stats = {"received": 0, "handled": 0, "retried": 0, "poison": 0, "ignored": 0}
         self._stop = threading.Event()
 
     def poll_once(self) -> int:
         resp = self.c.receive_message(QueueUrl=self.url, MaxNumberOfMessages=10, WaitTimeSeconds=self.wait_s,
-                                      AttributeNames=["ApproximateReceiveCount"], MessageAttributeNames=["All"])
+                                      VisibilityTimeout=self.visibility_s, AttributeNames=["ApproximateReceiveCount"], MessageAttributeNames=["All"])
         msgs = resp.get("Messages", [])
         for m in msgs:
             self.stats["received"] += 1

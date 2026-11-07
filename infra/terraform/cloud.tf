@@ -86,6 +86,8 @@ resource "aws_iam_role_policy" "task_p3" {
         Action = [
           "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem",
           "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan",
+          # cloud/aws_dynamo.py commits a lease, its robot claims and the stock count in one transaction.
+          "dynamodb:TransactWriteItems",
         ]
         Resource = [aws_dynamodb_table.state.arn]
       },
@@ -158,6 +160,25 @@ resource "aws_iam_role_policy" "task_p3" {
       },
 
     ]
+  })
+}
+
+# ---------------------------------------------------------------------------
+# Dead-letter queue for edge messages the cloud cannot handle. cloud/sqs_consumer.py deletes a message that keeps failing
+# after max_receives; with this redrive policy SQS moves it here first (after 5 receives), so nothing is lost silently.
+# The redrive policy is a separate resource so the queue itself (P4's main.tf) is not edited.
+# ---------------------------------------------------------------------------
+
+resource "aws_sqs_queue" "escalations_dlq" {
+  name                      = "${local.name_prefix}-escalations-dlq"
+  message_retention_seconds = 1209600
+}
+
+resource "aws_sqs_queue_redrive_policy" "escalations" {
+  queue_url = aws_sqs_queue.escalations.id
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.escalations_dlq.arn
+    maxReceiveCount     = 5
   })
 }
 
