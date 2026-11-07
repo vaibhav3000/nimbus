@@ -4,6 +4,7 @@ Uses SQLite for persistent, ACID-compliant local storage of leases, commands,
 decision logs, and outbox escalations (FR-6, FR-8, FR-10, NFR-6).
 """
 
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
@@ -17,8 +18,9 @@ class EdgeLocalStore:
         self.init_db()
 
     def _get_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), timeout=10.0)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL;")
         return conn
 
     def init_db(self):
@@ -99,6 +101,17 @@ class EdgeLocalStore:
                     uploaded_at REAL
                 )
             """)
+
+            # 7. Clarification answers table (M10)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS clarification_answers (
+                    message_id TEXT PRIMARY KEY,
+                    task_id TEXT,
+                    lease_version INTEGER,
+                    answer_json TEXT,
+                    received_at REAL
+                )
+            """)
             conn.commit()
 
     def record_incoming_message(self, message_id: str) -> bool:
@@ -122,37 +135,59 @@ class EdgeLocalStore:
             conn.commit()
             return True
 
+    @staticmethod
+    def _extract_task_key(lease_data: Dict[str, Any]) -> str:
+        tid = lease_data.get("task_id")
+        if tid:
+            tid_s = str(tid)
+            if tid_s.startswith("lease-") and "-v" in tid_s:
+                return tid_s[len("lease-"):tid_s.rindex("-v")]
+            return tid_s
+        lid = str(lease_data.get("lease_id", ""))
+        if lid.startswith("lease-") and "-v" in lid:
+            return lid[len("lease-"):lid.rindex("-v")]
+        return lid
+
     def store_lease(self, lease_data: Dict[str, Any]) -> Tuple[bool, str]:
         """
         Stores an incoming lease if its version is strictly higher than seen before (FR-8).
+        Transitions previous active versions for this task to SUPERSEDED (C5).
         """
         lease_id = lease_data["lease_id"]
         version = int(lease_data["version"])
+        task_key = self._extract_task_key(lease_data)
         now = time.time()
 
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT highest_version FROM lease_versions WHERE lease_id = ?",
-                (lease_id,)
+                "SELECT MAX(highest_version) as highest_version FROM lease_versions WHERE lease_id = ? OR lease_id = ?",
+                (task_key, lease_id)
             )
             row = cursor.fetchone()
+            highest_seen = row["highest_version"] if row and row["highest_version"] is not None else None
 
-            if row:
-                highest_seen = row["highest_version"]
-                if version <= highest_seen:
-                    return False, f"Stale/duplicate version {version} <= {highest_seen}. Dropped."
-                cursor.execute(
-                    "UPDATE lease_versions SET highest_version = ?, updated_at = ? WHERE lease_id = ?",
-                    (version, now, lease_id)
-                )
-            else:
-                cursor.execute(
-                    "INSERT INTO lease_versions (lease_id, highest_version, updated_at) VALUES (?, ?, ?)",
-                    (lease_id, version, now)
-                )
+            if highest_seen is not None and version <= highest_seen:
+                return False, f"Stale/duplicate version {version} <= {highest_seen}. Dropped."
+
+            for track_id in set([task_key, lease_id]):
+                cursor.execute("""
+                    INSERT INTO lease_versions (lease_id, highest_version, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(lease_id) DO UPDATE SET highest_version = excluded.highest_version, updated_at = excluded.updated_at
+                """, (track_id, version, now))
+
+            # C5: Transition prior active leases of this task / lease to SUPERSEDED
+            cursor.execute("""
+                UPDATE leases
+                SET status = 'SUPERSEDED'
+                WHERE (task_id = ? OR lease_id = ? OR lease_id LIKE ?)
+                  AND version < ?
+                  AND status = 'ACTIVE'
+            """, (task_key, lease_id, f"lease-{task_key}-v%", version))
 
             expires_at = lease_data.get("expiry_ts") or lease_data.get("valid_until")
+            canonical_task_id = lease_data.get("task_id") or task_key
 
             cursor.execute("""
                 INSERT INTO leases (lease_id, version, cluster_id, task_id, status, valid_until, lease_json, received_at)
@@ -161,13 +196,31 @@ class EdgeLocalStore:
                 lease_id,
                 version,
                 lease_data.get("cluster_id", "unknown"),
-                lease_data.get("task_id") or lease_id,
+                canonical_task_id,
                 str(expires_at),
                 json.dumps(lease_data),
                 now
             ))
             conn.commit()
             return True, f"Lease {lease_id} v{version} stored successfully."
+
+    def save_lease(self, lease_data: Dict[str, Any]):
+        """Persists updated lease state (e.g. after robot swap or dynamic replan) (C7)."""
+        lease_id = lease_data["lease_id"]
+        version = int(lease_data.get("version", 1))
+        task_key = self._extract_task_key(lease_data)
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE leases
+                SET lease_json = ?
+                WHERE (lease_id = ? OR task_id = ?) AND version = ?
+            """, (json.dumps(lease_data), lease_id, task_key, version))
+            if cursor.rowcount == 0:
+                conn.commit()
+                self.store_lease(lease_data)
+            else:
+                conn.commit()
 
     def get_lease(self, lease_id: str, version: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """Retrieves a lease by lease_id, regardless of status."""
@@ -185,14 +238,14 @@ class EdgeLocalStore:
             return None
 
     def get_active_lease(self, lease_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieves the latest active lease by lease_id."""
+        """Retrieves the latest active lease by lease_id or task_key."""
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT lease_json FROM leases
-                WHERE lease_id = ? AND status = 'ACTIVE'
+                WHERE (lease_id = ? OR task_id = ? OR lease_id LIKE ?) AND status = 'ACTIVE'
                 ORDER BY version DESC LIMIT 1
-            """, (lease_id,))
+            """, (lease_id, lease_id, f"lease-{lease_id}-v%"))
             row = cursor.fetchone()
             if row:
                 return json.loads(row["lease_json"])
@@ -204,18 +257,43 @@ class EdgeLocalStore:
             cursor = conn.cursor()
             if cluster_id:
                 cursor.execute("""
-                    SELECT lease_json FROM leases
+                    SELECT lease_json, valid_until, task_id, version FROM leases
                     WHERE status = 'ACTIVE' AND cluster_id = ?
-                    ORDER BY received_at ASC
+                    ORDER BY version DESC, received_at ASC
                 """, (cluster_id,))
             else:
                 cursor.execute("""
-                    SELECT lease_json FROM leases
+                    SELECT lease_json, valid_until, task_id, version FROM leases
                     WHERE status = 'ACTIVE'
-                    ORDER BY received_at ASC
+                    ORDER BY version DESC, received_at ASC
                 """)
             rows = cursor.fetchall()
-            return [json.loads(r["lease_json"]) for r in rows]
+            now_dt = datetime.now(timezone.utc)
+
+            seen_tasks = set()
+            active_list = []
+            for r in rows:
+                ld = json.loads(r["lease_json"])
+                task_k = self._extract_task_key(ld)
+                if task_k in seen_tasks:
+                    continue
+                # Expiry check (FR-6)
+                exp = ld.get("expiry_ts") or ld.get("valid_until")
+                if exp:
+                    try:
+                        exp_s = str(exp).strip()
+                        if exp_s.endswith("Z"):
+                            exp_s = exp_s[:-1] + "+00:00"
+                        exp_dt = datetime.fromisoformat(exp_s)
+                        if exp_dt.tzinfo is None:
+                            exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                        if exp_dt <= now_dt:
+                            continue
+                    except Exception:
+                        pass
+                seen_tasks.add(task_k)
+                active_list.append(ld)
+            return active_list
 
     def update_lease_status(self, lease_id: str, version: int, status: str):
         """Updates lease status (e.g. COMPLETED, EXPIRED, CANCELLED, EXPIRED_PARKED)."""
@@ -261,13 +339,19 @@ class EdgeLocalStore:
             conn.commit()
 
     def cancel_active_commands(self, lease_id: str) -> int:
-        """Cancels all PENDING or DISPATCHED commands for a given lease (FR-6)."""
+        """Cancels all PENDING or DISPATCHED commands for a given lease (FR-6, C5)."""
         now = time.time()
+        task_key = lease_id
+        if task_key.startswith("lease-") and "-v" in task_key:
+            task_key = task_key[len("lease-"):task_key.rindex("-v")]
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE robot_commands SET status = 'CANCELLED', completed_at = ? WHERE lease_id = ? AND status IN ('PENDING', 'DISPATCHED')",
-                (now, lease_id)
+                """UPDATE robot_commands
+                   SET status = 'CANCELLED', completed_at = ?
+                   WHERE (lease_id = ? OR lease_id = ? OR lease_id LIKE ?)
+                     AND status IN ('PENDING', 'DISPATCHED')""",
+                (now, lease_id, task_key, f"lease-{task_key}-v%")
             )
             count = cursor.rowcount
             conn.commit()
@@ -294,11 +378,27 @@ class EdgeLocalStore:
             ]
 
     def get_robot_command(self, cmd_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieves a single command by cmd_id."""
+        """Retrieves a single command by cmd_id or canonical task-step pattern (C5, FR-7)."""
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM robot_commands WHERE cmd_id = ?", (cmd_id,))
             r = cursor.fetchone()
+            if not r and "-step-" in cmd_id:
+                # If queried with lease-task-X-v2-step-1, also check for completed prior versions of task-X
+                prefix, step_part = cmd_id.rsplit("-step-", 1)
+                task_k = prefix
+                if task_k.startswith("cmd-lease-"):
+                    task_k = task_k[len("cmd-lease-"):]
+                elif task_k.startswith("cmd-"):
+                    task_k = task_k[len("cmd-"):]
+                if "-v" in task_k:
+                    task_k = task_k[:task_k.rindex("-v")]
+                cursor.execute("""
+                    SELECT * FROM robot_commands
+                    WHERE (cmd_id LIKE ? OR cmd_id LIKE ? OR cmd_id = ?) AND status = 'COMPLETED'
+                    ORDER BY completed_at DESC LIMIT 1
+                """, (f"cmd-lease-{task_k}-v%-step-{step_part}", f"cmd-{task_k}-step-{step_part}", f"cmd-task-{task_k}-step-{step_part}"))
+                r = cursor.fetchone()
             if not r:
                 return None
             return {
@@ -378,9 +478,10 @@ class EdgeLocalStore:
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT OR REPLACE INTO outbox
+                INSERT INTO outbox
                 (message_id, lease_id, message_type, payload_json, status, created_at)
                 VALUES (?, ?, ?, ?, 'PENDING', ?)
+                ON CONFLICT(message_id) DO NOTHING
             """, (
                 message_id,
                 lease_id,
@@ -415,3 +516,50 @@ class EdgeLocalStore:
                 UPDATE outbox SET status = 'UPLOADED', uploaded_at = ? WHERE message_id = ?
             """, (time.time(), message_id))
             conn.commit()
+
+    def mark_outbox_terminal(self, message_id: str, status: str = "FAILED_TERMINAL"):
+        """Marks an outbox message as terminally failed to unblock queue (H3)."""
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE outbox SET status = ?, uploaded_at = ? WHERE message_id = ?
+            """, (status, time.time(), message_id))
+            conn.commit()
+
+    def store_clarification_answer(
+        self,
+        message_id: str,
+        task_id: str,
+        lease_version: Optional[int],
+        answer_payload: Dict[str, Any]
+    ):
+        """Persists a clarification answer notice durably (M10)."""
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO clarification_answers
+                (message_id, task_id, lease_version, answer_json, received_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(message_id) DO UPDATE SET
+                    answer_json = excluded.answer_json,
+                    received_at = excluded.received_at
+            """, (
+                message_id,
+                task_id,
+                lease_version,
+                json.dumps(answer_payload),
+                time.time()
+            ))
+            conn.commit()
+
+    def get_clarification_answers(self, task_id: str) -> List[Dict[str, Any]]:
+        """Retrieves stored clarification answers for a task (M10)."""
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT answer_json FROM clarification_answers
+                WHERE task_id = ?
+                ORDER BY received_at ASC
+            """, (task_id,))
+            rows = cursor.fetchall()
+            return [json.loads(r["answer_json"]) for r in rows]

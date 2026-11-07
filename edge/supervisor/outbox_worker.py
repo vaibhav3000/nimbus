@@ -124,13 +124,16 @@ class OutboxUploadWorker:
             endpoint = "/checkins" if msg_type == "CHECKIN" else "/escalations"
             target_url = f"{self.cloud_url}{endpoint}"
 
-            success = self._send_single_payload(target_url, payload)
-            if success:
+            status = self._send_single_payload(target_url, payload)
+            if status == "SUCCESS":
                 self.store.mark_outbox_uploaded(msg_id)
                 self.total_uploaded += 1
                 uploaded_in_pass += 1
                 self.consecutive_failures = 0
                 self.current_backoff_delay = 0.0
+            elif status == "TERMINAL":
+                logger.warning(f"Dropping unprocessable outbox item {msg_id} (terminal HTTP 4xx error)")
+                self.store.mark_outbox_terminal(msg_id, "FAILED_TERMINAL")
             else:
                 self.consecutive_failures += 1
                 self.total_failures += 1
@@ -144,10 +147,10 @@ class OutboxUploadWorker:
 
         return uploaded_in_pass
 
-    def _send_single_payload(self, url: str, payload: Dict[str, Any]) -> bool:
-        """Sends single HTTP POST request to Cloud."""
+    def _send_single_payload(self, url: str, payload: Dict[str, Any]) -> str:
+        """Sends single HTTP POST request to Cloud. Returns 'SUCCESS', 'TERMINAL', or 'RETRY'."""
         if not self._network_available:
-            return False
+            return "RETRY"
 
         req_bytes = json.dumps(payload).encode("utf-8")
         headers = {"Content-Type": "application/json"}
@@ -163,19 +166,21 @@ class OutboxUploadWorker:
                 # 200, 201, 204 are success
                 # Note: Server returns 200 for duplicate seen messages
                 if resp.status in (200, 201, 204):
-                    return True
-                return False
+                    return "SUCCESS"
+                return "RETRY"
         except urllib.error.HTTPError as he:
             # If server explicitly answered 409 duplicate or already accepted
             try:
                 err_body = json.loads(he.read().decode("utf-8"))
                 if err_body.get("duplicate") is True:
-                    return True
+                    return "SUCCESS"
             except Exception:
                 pass
-            return False
+            if 400 <= he.code < 500 and he.code not in (408, 429):
+                return "TERMINAL"
+            return "RETRY"
         except Exception:
-            return False
+            return "RETRY"
 
     def _worker_loop(self):
         """Main loop of background worker thread."""

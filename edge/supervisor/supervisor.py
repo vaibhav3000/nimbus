@@ -42,6 +42,21 @@ from edge.supervisor.reconnection import ReconnectionManager
 
 
 class EdgeSupervisor:
+    @staticmethod
+    def _parse_iso_ts(ts_val: Any) -> Optional[datetime]:
+        """Parses ISO timestamp string into UTC datetime (M4)."""
+        if not ts_val:
+            return None
+        s = str(ts_val).strip()
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(s)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except Exception:
+            return None
     # Cluster configuration profiles matching hospital wings to topology circulation
     CLUSTER_DEFAULTS = {
         "east-wing": {
@@ -540,6 +555,12 @@ class EdgeSupervisor:
                         if self.verbose and nkey not in self._seen_notices:
                             self._seen_notices.add(nkey)
                             print(f"[{self.cluster_id}] Notice received: {npayload.get('type')}")
+                        if npayload.get("type") == "ANSWER":
+                            amid = npayload.get("message_id") or nkey
+                            atask = npayload.get("task_id")
+                            aver = npayload.get("lease_version")
+                            if amid and atask:
+                                self.store.store_clarification_answer(amid, atask, aver, npayload)
                         continue
                     if topic and not topic.startswith(f"nimbus/{self.cluster_id}/"):
                         continue
@@ -548,7 +569,7 @@ class EdgeSupervisor:
                         # cloud -> edge: same lease version, later expiry_ts (PRD Sec. 6 renewal)
                         rp = item["payload"]
                         al = self.active_lease
-                        if al and al.get("lease_id") == rp.get("lease_id") and rp.get("expiry_ts", "") > str(al.get("expiry_ts", "")):
+                        if al and al.get("lease_id") == rp.get("lease_id") and (self._parse_iso_ts(rp.get("expiry_ts")) or datetime.min.replace(tzinfo=timezone.utc)) > (self._parse_iso_ts(al.get("expiry_ts")) or datetime.min.replace(tzinfo=timezone.utc)):
                             al["expiry_ts"] = rp["expiry_ts"]
                         continue
                     if kind == "probe" and isinstance(item.get("payload"), dict):
@@ -1057,7 +1078,7 @@ class EdgeSupervisor:
                         last_checkin = time.time()
                         _ok, why, reply = self.send_checkin_to_cloud(lease)
                         new_exp = reply.get("renewed_until") if why == "renewed" else None
-                        if new_exp and new_exp > str(lease.get("expiry_ts", "")):
+                        if new_exp and (self._parse_iso_ts(new_exp) or datetime.min.replace(tzinfo=timezone.utc)) > (self._parse_iso_ts(lease.get("expiry_ts")) or datetime.min.replace(tzinfo=timezone.utc)):
                             lease["expiry_ts"] = new_exp
                         elif why == "stale_version":
                             self._request_preempt(lease, f"cloud says lease v{version} is outdated (current v{reply.get('current')})")
@@ -1120,6 +1141,24 @@ class EdgeSupervisor:
                                        "params": {"reason": "lease superseded"}, "robot_id": rid})
             except Exception:
                 pass
+        # Emit STOP_ACKNOWLEDGED to Cloud/Outbox so Cloud knows robot acknowledged stop (H7)
+        task_id = self._extract_task_id(lease)
+        if task_id:
+            stop_ack_msg = {
+                "type": "STOP_ACKNOWLEDGED",
+                "message_id": f"msg-stopack-{task_id}-{self.cluster_id}-{int(time.time()*1000)}",
+                "lease_id": lease.get("lease_id", ""),
+                "task_id": task_id,
+                "lease_version": lease.get("version", 1),
+                "payload": {
+                    "task_id": task_id,
+                    "lease_id": lease.get("lease_id", ""),
+                    "reason": reason,
+                    "stopped_robots": lease.get("assigned_robots", []),
+                    "timestamp": time.time(),
+                }
+            }
+            self.send_escalation_to_cloud(stop_ack_msg)
 
     def _supersede(self, lease: Dict[str, Any], lease_id: str, version: int, executed_steps: list) -> Dict[str, Any]:
         reason = (self._preempt or {}).get("reason", "superseded")
@@ -1193,6 +1232,12 @@ class EdgeSupervisor:
         while True:
             if self._preempt:
                 return {"outcome": "superseded"}
+            if not self._answers:
+                for sa in self.store.get_clarification_answers(task_id):
+                    mid = sa.get("message_id")
+                    if mid and mid not in self._seen_answers:
+                        self._seen_answers.add(mid)
+                        self._answers.append(sa)
             if self._answers:
                 ans = self._answers.pop(0)
                 allowed = list(lease.get("allowed_zones", []))
@@ -2106,7 +2151,7 @@ class EdgeSupervisor:
 
         escalation = {
             "type": "OUTPUT_READY",
-            "message_id": f"msg-out-{int(time.time()*1000)}",
+            "message_id": f"msg-out-{task_id}-{self.cluster_id}-{int(time.time()*1000)}-{uuid.uuid4().hex[:6]}",
             "lease_version": version,
             "task_id": task_id,
             "payload": {
@@ -2184,6 +2229,35 @@ class EdgeSupervisor:
             allowed_zones=lease.get("allowed_zones"),
             forbidden_zones=lease.get("forbidden_zones"),
         )
+        if safe_spot_info is None:
+            # Fallback when all safe spots are excluded: emergency reflex stop in place
+            park_cmd = {
+                "cmd_id": f"cmd-stop-{int(time.time()*1000)}",
+                "lease_id": lease.get("lease_id", ""),
+                "robot_id": robot_id,
+                "action": "stop",
+                "params": {"reason": "Lease expired and no reachable safe parking spot outside forbidden zones"},
+            }
+            park_report = robot.execute_command(park_cmd)
+            task_id = self._extract_task_id(lease)
+            self.trigger_unexpected_event(
+                task_id=task_id,
+                what="Lease expired: all parking spots in forbidden zones; emergency reflex stop in place",
+                where=getattr(robot, "current_zone", "corridor"),
+                robots_saw=[f"{robot_id} emergency stopped at {robot.pose[:2]}"],
+                lease_version=lease.get("version", 1),
+                robot_zone=getattr(robot, "current_zone", "corridor"),
+            )
+            return {
+                "robot_id": robot_id,
+                "action": "stop",
+                "params": park_cmd["params"],
+                "target_spot": None,
+                "stop_executed": True,
+                "parking_status": park_report.get("status", "COMPLETED"),
+                "final_pose": robot.pose,
+                "reason": "Lease expired: no safe parking spot outside forbidden zones",
+            }
         safe_spot = safe_spot_info["zone_name"]
         target_coords = safe_spot_info["coords"]
 

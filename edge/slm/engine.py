@@ -10,17 +10,11 @@ Supports:
 
 from datetime import datetime, timezone
 import json
-import re
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 import urllib.request
 import urllib.error
 
-
-# Modes in which a real quantised model produces the decision.  Anything else
-# ("mock", "rules_only") is deterministic local code: useful for CI and as the
-# FR-3 fallback, but it must never be reported as edge-SLM behaviour (PRD E1/E2).
-REAL_MODEL_MODES = ("ollama", "llama_cpp")
 
 ALLOWED_TACTICAL_ACTIONS = {
     "DISPATCH_STEP",
@@ -34,7 +28,7 @@ ALLOWED_TACTICAL_ACTIONS = {
 
 
 class EdgeSLMEngine:
-    def __init__(self, model_name: str = "qwen2.5:1.5b", mode: str = "auto", timeout_sec: float = 10.0):
+    def __init__(self, model_name: str = "qwen2.5:1.5b", mode: str = "auto", timeout_sec: float = 8.0):
         """
         mode:
           - "ollama": Queries local Ollama server (http://127.0.0.1:11434)
@@ -48,6 +42,7 @@ class EdgeSLMEngine:
         self.timeout_sec = timeout_sec
         self.llm = None
         self.ollama_url = "http://127.0.0.1:11434/api/generate"
+        self.cold_start_latency_s = None
 
         if self.mode == "auto":
             try:
@@ -65,68 +60,70 @@ class EdgeSLMEngine:
             except ImportError:
                 self.mode = "mock"
 
-    @property
-    def is_real_model(self) -> bool:
-        """True only when a quantised model is actually being invoked.
+        if self.mode == "ollama":
+            self.warmup_model()
 
-        ``mode="auto"`` silently resolves to ``"mock"`` when no Ollama server
-        answers, so callers that publish measurements must check this before
-        writing an artifact.
-        """
-        return self.mode in REAL_MODEL_MODES
+    def warmup_model(self) -> float:
+        """Warms up the model during initialization and records cold-start latency (M9)."""
+        if self.mode != "ollama":
+            return 0.0
+        start = time.time()
+        try:
+            req_data = {
+                "model": self.model_name,
+                "prompt": "{}",
+                "stream": False,
+                "options": {"num_predict": 1}
+            }
+            req = urllib.request.Request(
+                self.ollama_url,
+                data=json.dumps(req_data).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=35.0) as resp:
+                if resp.status == 200:
+                    self.cold_start_latency_s = time.time() - start
+                    return self.cold_start_latency_s
+        except Exception:
+            pass
+        self.cold_start_latency_s = time.time() - start
+        return self.cold_start_latency_s
 
     def format_prompt(self, context: Dict[str, Any]) -> str:
         """Formats tactical prompt according to SPEC-P2 Sec 4.2."""
         allowed_zones = context.get("allowed_zones", [])
         forbidden_zones = context.get("forbidden_zones", [])
-        cluster = context.get("cluster_id", "edge")
         prompt = (
             "<|im_start|>system\n"
-            f"You are the tactical supervisor of the {cluster} edge cluster of a hospital delivery-robot fleet.\n"
-            "A robot reported a problem. Choose exactly ONE action and answer ONLY with the JSON object requested.\n\n"
-            "STEP 1. Decide the CAUSE from \"Current Event\":\n"
-            "- PERSON_OR_TRANSIENT: a person, patient, visitor, staff, trolley, cart, wheelchair, or "
-            "\"front obstacle is inside safety distance\". It usually clears within seconds.\n"
-            "- STATIC: wall, furniture, pallet, spill, ladder, maintenance, or still blocked after several waits.\n"
-            "- ROBOT_STUCK: \"departed the traversable costmap\", localization/odometry/sensor stale, stall, fault, battery. "
-            "The robot itself is the problem. Waiting never fixes this.\n"
-            "- CLOSED: door closed, locked, lockdown, cordon, barrier, \"no route\".\n"
-            "- UNCLEAR: you cannot tell what the obstacle is.\n\n"
-            "STEP 2. Choose the action:\n"
-            "- PERSON_OR_TRANSIENT and Wait Count < 3 -> LOCAL_WAIT.\n"
-            "- PERSON_OR_TRANSIENT and Wait Count >= 3, or STATIC -> LOCAL_DETOUR if Allowed Next Waypoints is not empty, "
-            "else ESCALATE_UNEXPECTED.\n"
-            "- ROBOT_STUCK -> SWAP_ROBOT if Idle Robots is not empty, else ESCALATE_UNEXPECTED.\n"
-            "- CLOSED -> ESCALATE_UNEXPECTED.\n"
-            "- UNCLEAR -> ESCALATE_CLARIFY.\n"
-            "- Time Remaining below 30 -> SAFE_PARK.\n\n"
+            "You are the Nimbus Edge Cluster Tactical Supervisor for the hospital East Wing.\n"
+            "Your job is to make bounded tactical decisions for mobile delivery robots.\n"
+            "You can ONLY output valid JSON adhering to the specified schema.\n"
+            "Allowed actions:\n"
+            "1. \"DISPATCH_STEP\" (proceed with next sub-task)\n"
+            "2. \"LOCAL_DETOUR\" (detour via adjacent clear waypoint within allowed zones)\n"
+            "3. \"LOCAL_WAIT\" (wait up to 30 seconds for dynamic obstacle to pass)\n"
+            "4. \"SWAP_ROBOT\" (reassign sub-task to idle robot in same cluster)\n"
+            "5. \"ESCALATE_CLARIFY\" (ask cloud for user clarification)\n"
+            "6. \"ESCALATE_UNEXPECTED\" (report unsolvable event / route closure / lease breach)\n"
+            "7. \"SAFE_PARK\" (lease expiry is imminent (<30s remaining))\n\n"
             "RULES:\n"
             f"- Never exceed allowed zones: {allowed_zones}\n"
             f"- Never enter forbidden zones: {forbidden_zones}\n"
-            "- Allowed Next Waypoints are lease-safe candidates, not verified complete detours. Selecting one asks edge to attempt "
-            "navigation; if it cannot complete, edge escalates. Never claim a candidate bypasses the obstacle.\n"
-            "- For LOCAL_DETOUR, target_waypoint must be one of Allowed Next Waypoints. For SWAP_ROBOT, it must be one of Idle Robots. "
-            "For SAFE_PARK, use null: edge chooses the nearest verified safe recess. Otherwise use null.\n"
-            "- \"reason\" is at most 20 words and may only use facts shown below. Never state a lease time, "
-            "zone or robot that is not in the text.\n\n"
-            "EXAMPLES:\n"
-            "Event: Navigation blocked: front obstacle is inside safety distance | Wait Count: 0 -> "
-            "{\"action\":\"LOCAL_WAIT\",\"target_waypoint\":null,\"reason\":\"Person or object ahead; waiting for it to clear.\"}\n"
-            "Event: Navigation blocked: robot departed the traversable costmap | Idle Robots: [R3] -> "
-            "{\"action\":\"SWAP_ROBOT\",\"target_waypoint\":\"R3\",\"reason\":\"Robot left the map; waiting will not help.\"}\n"
-            "Event: corridor closed, lockdown | Wait Count: 0 -> "
-            "{\"action\":\"ESCALATE_UNEXPECTED\",\"target_waypoint\":null,\"reason\":\"Corridor is closed; no local alternative.\"}\n"
+            "- If lease expires in < 30 seconds, choose \"SAFE_PARK\"\n"
+            "- Keep explanation under 20 words.\n"
             "<|im_end|>\n"
             "<|im_start|>user\n"
             f"Current Lease: {context.get('lease_id')} (Version {context.get('version')})\n"
             f"Time Remaining: {context.get('time_remaining_sec')}s\n"
             f"Assigned Robot: {context.get('robot_id')} at {context.get('current_pos')} (Zone: {context.get('current_zone')})\n"
-            f"Wait Count: {context.get('wait_count', 0)}\n"
-            f"Idle Robots: {context.get('idle_robots', [])}\n"
             f"Current Event: {context.get('event_description')}\n"
             f"Allowed Next Waypoints: {context.get('allowed_waypoints')}\n\n"
             "Respond in JSON format:\n"
-            "{\"action\": \"<action_name>\", \"target_waypoint\": \"<waypoint_id_or_null>\", \"reason\": \"<short_explanation>\"}\n"
+            "{\n"
+            "  \"action\": \"<action_name>\",\n"
+            "  \"target_waypoint\": \"<waypoint_id_or_null>\",\n"
+            "  \"reason\": \"<short_explanation>\"\n"
+            "}\n"
             "<|im_end|>\n"
             "<|im_start|>assistant\n"
         )
@@ -152,31 +149,12 @@ class EdgeSLMEngine:
             latency_ms = (time.time() - start_time) * 1000.0
             return {
                 "action": "SAFE_PARK",
-                "target_waypoint": None,
+                "target_waypoint": "safe-parking-bay-1",
                 "reason": "Lease expiry imminent (<30s remaining)."
             }, "RULE", latency_ms
 
-        # 1b. Deterministic rule: the robot itself is stuck / off the map. Waiting never fixes this, and a small
-        #     model must not be allowed to wait three times on it (seen live: "departed the traversable costmap").
-        ev_low = str(context.get("event_description", "")).lower()
-        if context.get("failure_cause") == "LEFT_COSTMAP" or "departed the traversable costmap" in ev_low:
-            latency_ms = (time.time() - start_time) * 1000.0
-            return {"action": "ESCALATE_UNEXPECTED", "target_waypoint": None,
-                    "reason": "Robot left its verified map; it was stopped and must be re-localized before any retry."}, "RULE", latency_ms
-        if any(w in ev_low for w in ("localization", "odometry is stale", "range contact lost", "range sensor", "sensor stale", "sensor unavailable")):
-            current = context.get("robot_id", "")
-            failed = set(context.get("failed_robots", [])) | {current}
-            idle = context.get("idle_robots") or [r for r in context.get("assigned_robots", []) if r not in failed]
-            latency_ms = (time.time() - start_time) * 1000.0
-            if idle:
-                return {"action": "SWAP_ROBOT", "target_waypoint": idle[0],
-                        "reason": "Robot left the map or lost localization; waiting will not help."}, "RULE", latency_ms
-            return {"action": "ESCALATE_UNEXPECTED", "target_waypoint": None,
-                    "reason": "Robot is stuck and no idle robot is available."}, "RULE", latency_ms
-
         # 2. Try Ollama local inference
         if self.mode == "ollama":
-            timed_out = False
             try:
                 prompt = self.format_prompt(context)
                 req_data = json.dumps({
@@ -215,19 +193,12 @@ class EdgeSLMEngine:
                     if action in ALLOWED_TACTICAL_ACTIONS:
                         latency_ms = (time.time() - start_time) * 1000.0
                         return parsed, "SLM", latency_ms
-            except (TimeoutError, urllib.error.URLError) as e:
-                # Timeout occurred
-                timed_out = True
             except Exception:
-                # Malformed JSON or other connection exception
+                # Timeout, network disconnection, or malformed JSON -> fall through to rule fallback
                 pass
-
-            # If Ollama timed out or failed, fall through to deterministic rule fallback
-            return self._rule_fallback(context, start_time, timed_out=timed_out)
 
         # 3. Try llama_cpp inference
         if self.mode == "llama_cpp" and self.llm is not None:
-            timed_out = False
             try:
                 prompt = self.format_prompt(context)
                 output = self.llm(
@@ -243,59 +214,27 @@ class EdgeSLMEngine:
                     return parsed, "SLM", latency_ms
             except Exception:
                 pass
-            return self._rule_fallback(context, start_time, timed_out=timed_out)
 
         # 4. Mock SLM Mode (Realistic tactical reasoning for unit testing and CI)
         if self.mode == "mock":
-            if context.get("simulate_timeout"):
-                sim_lat = context.get("simulate_latency_ms", 10250.0)
-                return self._rule_fallback(context, start_time, timed_out=True, simulated_latency_ms=sim_lat)
-
             decision = self._mock_slm_reasoning(context)
-            sim_lat = context.get("simulate_latency_ms")
-            if sim_lat is not None:
-                latency_ms = float(sim_lat)
-            else:
-                latency_ms = (time.time() - start_time) * 1000.0 + 15.0
+            latency_ms = (time.time() - start_time) * 1000.0 + 15.0
             return decision, "SLM", latency_ms
 
         # 5. Deterministic Rule-Based Fallback Engine (SPEC-P2 Sec 4.3)
-        return self._rule_fallback(
-            context,
-            start_time,
-            timed_out=bool(context.get("simulate_timeout")),
-            simulated_latency_ms=context.get("simulate_latency_ms")
-        )
+        return self._rule_fallback(context, start_time)
 
     def _mock_slm_reasoning(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """High-fidelity tactical emulation for all 7 allowed actions matching Qwen2.5 prompt."""
+        """High-fidelity tactical emulation for all 7 allowed actions."""
         event = context.get("event_description", "").lower()
         allowed_wps = context.get("allowed_waypoints", [])
         wait_count = context.get("wait_count", 0)
-        time_remaining = float(context.get("time_remaining_sec", 999.0))
 
-        # Rule 1: Expiry imminent (<= 30s) -> SAFE_PARK (Invariant 4)
-        if time_remaining <= 30.0:
-            target = allowed_wps[0] if allowed_wps else None
-            return {
-                "action": "SAFE_PARK",
-                "target_waypoint": None,
-                "reason": f"Lease authority expiring in {time_remaining:.0f}s (<= 30s ceiling); safely parking in recess (Invariant 4)."
-            }
-
-        # Case 2: Robot hardware fault or depleted battery -> SWAP_ROBOT
-        has_hw_fault = (
-            bool(context.get("has_fault"))
-            or any(w in event for w in ["motor", "encoder", "battery", "stall", "hardware fault", "hardware failure", "device failure", "actuator"])
-            or ("fault" in event and "no fault" not in event and "default" not in event)
-            or ("fail" in event and not any(nw in event for nw in ["failed to reach", "navigation", "arrival", "blocked", "path", "corridor", "timeout"]))
-        )
-        if has_hw_fault:
+        # Case 1: Robot hardware fault or depleted battery -> SWAP_ROBOT
+        if any(w in event for w in ["fault", "failure", "fail", "motor", "encoder", "battery", "stall", "hardware", "actuator"]):
             assigned = context.get("assigned_robots", [])
             current_robot = context.get("robot_id", "")
-            failed = set(context.get("failed_robots", []))
-            failed.add(current_robot)
-            idle_candidates = [r for r in assigned if r not in failed]
+            idle_candidates = [r for r in assigned if r != current_robot]
             if idle_candidates:
                 return {
                     "action": "SWAP_ROBOT",
@@ -305,49 +244,26 @@ class EdgeSLMEngine:
             return {
                 "action": "ESCALATE_UNEXPECTED",
                 "target_waypoint": None,
-                "reason": f"Active robot {current_robot} faulted and all cluster robots have failed."
+                "reason": f"Active robot {current_robot} faulted and no standby robot is available in cluster."
             }
 
-        # Case 3: Ambiguous instructions -> ESCALATE_CLARIFY
-        if any(w in event for w in ["ambiguous", "which", "unclear", "unspecified", "confirm", "conflict", "variant", "clarify", "unoccupied"]):
+        # Case 2: Ambiguous instructions -> ESCALATE_CLARIFY
+        if "ambiguous" in event or "which" in event or "unclear" in event:
             return {
                 "action": "ESCALATE_CLARIFY",
                 "target_waypoint": None,
                 "reason": "Destination bed or supply item is ambiguous; clarifying with cloud orchestrator."
             }
 
-        # Case 4: Route closure / locked doors / zero bypass -> ESCALATE_UNEXPECTED
-        is_closure = (not allowed_wps) or any(w in event for w in ["completely", "no bypass", "closed", "cordon", "lockdown", "barrier", "unsolvable", "zero permitted", "tape"]) or bool(re.search(r"locked", event))
-        if is_closure:
-            if "spill" in event and allowed_wps:
-                pass  # has detour
-            elif "ladder" in event and allowed_wps:
-                pass  # has detour
-            else:
-                return {
-                    "action": "ESCALATE_UNEXPECTED",
-                    "target_waypoint": None,
-                    "reason": "Corridor is completely blocked and no alternate detour exists within lease authority."
-                }
-
-        # Case 5: Static detour available
-        if allowed_wps and any(w in event for w in ["detour", "bypass", "alternate", "ladder", "spill", "maintenance", "pallet", "scaffolding", "cart", "blocked"]):
-            if wait_count >= 1 or any(w in event for w in ["spill", "ladder", "maintenance", "pallet", "scaffolding", "detour"]):
-                return {
-                    "action": "LOCAL_DETOUR",
-                    "target_waypoint": allowed_wps[0],
-                    "reason": f"Corridor path blocked; taking local detour via permitted bypass {allowed_wps[0]}."
-                }
-
-        # Case 6: Transient obstacle -> LOCAL_WAIT
-        if any(w in event for w in ["transient", "laundry", "trolley", "cleaning", "visitor", "cart", "wheelchair", "passing", "moment", "temporary", "brief", "wait", "scrubber", "orderly", "clinician", "notes"]) and wait_count < 3:
+        # Case 3: Transient obstacle -> LOCAL_WAIT
+        if ("transient" in event or "laundry" in event or "trolley" in event or "cleaning" in event) and wait_count < 2:
             return {
                 "action": "LOCAL_WAIT",
                 "target_waypoint": None,
                 "reason": "Transient corridor obstacle detected; waiting for passage clearance."
             }
 
-        # Case 7: Persistent blockage or waited >= 2 times
+        # Case 4: Persistent blockage or waited >= 2 times
         if "blocked" in event or "obstacle" in event or "closed" in event or "persistent" in event or wait_count >= 2:
             if allowed_wps:
                 return {
@@ -368,16 +284,10 @@ class EdgeSLMEngine:
             "reason": "Path is clear; continuing standard step progression."
         }
 
-    def _rule_fallback(
-        self,
-        context: Dict[str, Any],
-        start_time: float,
-        timed_out: bool = False,
-        simulated_latency_ms: Optional[float] = None,
-    ) -> Tuple[Dict[str, Any], str, float]:
+    def _rule_fallback(self, context: Dict[str, Any], start_time: float) -> Tuple[Dict[str, Any], str, float]:
         """
         Deterministic Rule-Based Fallback (SPEC-P2 Sec 4.3).
-        Guarantees safe behavior when SLM times out (>8s/10s) or is unconfigured.
+        Guarantees safe behavior when SLM times out (>8s) or is unconfigured.
         """
         event = context.get("event_description", "").lower()
         allowed_wps = context.get("allowed_waypoints", [])
@@ -388,21 +298,14 @@ class EdgeSLMEngine:
         if time_remaining <= 30.0:
             decision = {
                 "action": "SAFE_PARK",
-                "target_waypoint": None,
+                "target_waypoint": "safe-parking-bay-1",
                 "reason": "Rule fallback: Lease expiry imminent (<30s)."
             }
         # Rule 2: Robot fault -> swap robot if possible
-        elif (
-            bool(context.get("has_fault"))
-            or any(w in event for w in ["motor", "encoder", "battery", "stall", "hardware fault", "hardware failure", "device failure", "actuator"])
-            or ("fault" in event and "no fault" not in event and "default" not in event)
-            or ("fail" in event and not any(nw in event for nw in ["failed to reach", "navigation", "arrival", "blocked", "path", "corridor", "timeout"]))
-        ):
+        elif any(w in event for w in ["fault", "failure", "fail", "motor", "encoder", "battery", "stall", "hardware", "actuator"]):
             assigned = context.get("assigned_robots", [])
             current_robot = context.get("robot_id", "")
-            failed = set(context.get("failed_robots", []))
-            failed.add(current_robot)
-            idle_candidates = [r for r in assigned if r not in failed]
+            idle_candidates = [r for r in assigned if r != current_robot]
             if idle_candidates:
                 decision = {
                     "action": "SWAP_ROBOT",
@@ -416,47 +319,27 @@ class EdgeSLMEngine:
                     "reason": "Rule fallback: Robot faulted with no backup robot available."
                 }
         # Rule 3: Ambiguity
-        elif any(w in event for w in ["ambiguous", "which", "unclear", "unspecified", "confirm", "conflict", "variant", "clarify", "unoccupied"]):
+        elif "ambiguous" in event or "which" in event:
             decision = {
                 "action": "ESCALATE_CLARIFY",
                 "target_waypoint": None,
                 "reason": "Rule fallback: Instruction ambiguity requires requester clarification."
             }
-        # Rule 4: Unsolvable blockage / route closure
-        elif (not allowed_wps) or any(w in event for w in ["completely", "no bypass", "closed", "cordon", "lockdown", "barrier", "unsolvable", "zero permitted", "tape"]) or bool(re.search(r"locked", event)):
-            if "spill" in event and allowed_wps:
-                decision = {
-                    "action": "LOCAL_DETOUR",
-                    "target_waypoint": allowed_wps[0],
-                    "reason": f"Rule fallback: Detouring via allowed bypass {allowed_wps[0]}."
-                }
-            elif "ladder" in event and allowed_wps:
-                decision = {
-                    "action": "LOCAL_DETOUR",
-                    "target_waypoint": allowed_wps[0],
-                    "reason": f"Rule fallback: Detouring via allowed bypass {allowed_wps[0]}."
-                }
-            else:
-                decision = {
-                    "action": "ESCALATE_UNEXPECTED",
-                    "target_waypoint": None,
-                    "reason": "Rule fallback: Path blocked with zero permitted detours."
-                }
-        # Rule 5: Transient obstacle & wait count < 3 -> wait 10s
-        elif any(w in event for w in ["transient", "laundry", "trolley", "cleaning", "visitor", "cart", "wheelchair", "passing", "moment", "temporary", "brief", "wait", "scrubber", "orderly", "clinician", "notes"]) and wait_count < 3:
+        # Rule 4: Transient obstacle & wait count < 2 -> wait 10s
+        elif ("transient" in event or "laundry" in event or "trolley" in event or wait_count < 2) and "persistent" not in event:
             decision = {
                 "action": "LOCAL_WAIT",
                 "target_waypoint": None,
                 "reason": "Rule fallback: Dynamic obstacle; waiting 10s for clearance."
             }
-        # Rule 6: Blocked & alternative route available -> detour
+        # Rule 5: Blocked & alternative route available -> detour
         elif allowed_wps:
             decision = {
                 "action": "LOCAL_DETOUR",
                 "target_waypoint": allowed_wps[0],
                 "reason": f"Rule fallback: Detouring via allowed bypass {allowed_wps[0]}."
             }
-        # Rule 7: Blocked with no detour -> escalate
+        # Rule 6: Blocked with no detour -> escalate
         else:
             decision = {
                 "action": "ESCALATE_UNEXPECTED",
@@ -464,15 +347,5 @@ class EdgeSLMEngine:
                 "reason": "Rule fallback: Path blocked with zero permitted detours."
             }
 
-        if timed_out:
-            decision["timed_out"] = True
-            decision["timeout_threshold_sec"] = self.timeout_sec
-
-        if simulated_latency_ms is not None:
-            latency_ms = float(simulated_latency_ms)
-        else:
-            latency_ms = (time.time() - start_time) * 1000.0
-            if timed_out and latency_ms < self.timeout_sec * 1000.0:
-                latency_ms = self.timeout_sec * 1000.0 + 50.0
-
+        latency_ms = (time.time() - start_time) * 1000.0
         return decision, "RULE", latency_ms

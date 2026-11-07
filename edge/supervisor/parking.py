@@ -84,7 +84,7 @@ class SafeParkingEngine:
 
         # Name heuristic check
         lower_name = zone_name.lower()
-        for prohibited in ("doorway", "gate", "fire-exit", "elevator", "corridor", "hall", "stair"):
+        for prohibited in ("doorway", "gate", "fire-exit", "elevator", "lift", "corridor", "hall", "stair"):
             if prohibited in lower_name:
                 return False
 
@@ -94,9 +94,34 @@ class SafeParkingEngine:
 
         if zone_info:
             ztype = zone_info.get("zone_type", "").lower()
-            if ztype in ("parking_bay", "recess", "alcove", "zone"):
+            if ztype in ("parking_bay", "recess", "alcove"):
                 return True
 
+        return False
+
+    def _is_in_forbidden_zone(
+        self,
+        spot_name: str,
+        coords: List[float],
+        forbidden_zones: Optional[List[str]]
+    ) -> bool:
+        """
+        Checks if spot name or its physical coordinates fall inside any forbidden zone (FR-6, C6).
+        Resolves spatial containment against zone registry bounds (e.g. safe-parking-bay-2
+        inside prohibited corridor-2B-service).
+        """
+        if not forbidden_zones:
+            return False
+        forbidden_set = set(forbidden_zones)
+        if spot_name in forbidden_set:
+            return True
+        x, y = coords[0], coords[1]
+        for fz_name in forbidden_set:
+            fz_info = self.zone_registry.get(fz_name)
+            if fz_info and "bounds" in fz_info:
+                xmin, ymin, xmax, ymax = fz_info["bounds"]
+                if xmin <= x <= xmax and ymin <= y <= ymax:
+                    return True
         return False
 
     def find_nearest_safe_parking_spot(
@@ -104,26 +129,31 @@ class SafeParkingEngine:
         current_pose: List[float],
         allowed_zones: Optional[List[str]] = None,
         forbidden_zones: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
         """
         Calculates Euclidean distance from current [x, y] pose to all registered
-        safe parking spots, filtering out any spots that violate forbidden_zones.
+        safe parking spots, strictly filtering out any spots that violate forbidden_zones
+        either by name or coordinate bounds containment (FR-6, C6 / Invariant 4).
         
-        Returns the closest valid safe parking spot record.
+        Returns the closest valid safe parking spot record, or None if all spots
+        are excluded or violate forbidden zones.
         """
         cx, cy = current_pose[0], current_pose[1]
-        forbidden_set = set(forbidden_zones or [])
         allowed_set = set(allowed_zones or [])
 
         candidates: List[Tuple[float, Dict[str, Any]]] = []
 
         for name, spot in self.safe_spots.items():
-            # Exclude spots that violate forbidden zones
-            if name in forbidden_set:
+            # 1. Enforce static safe parking verification (not doorway, lift, corridor, etc.)
+            if not self.is_safe_for_parking(name):
                 continue
 
-            # If allowed_zones is given, prioritize spots inside allowed_zones
             sx, sy = spot["coords"][0], spot["coords"][1]
+
+            # 2. Exclude spots that violate forbidden zones by name or coordinate containment
+            if self._is_in_forbidden_zone(name, [sx, sy], forbidden_zones):
+                continue
+
             dist = math.hypot(cx - sx, cy - sy)
 
             # Weight candidates slightly if within allowed_zones
@@ -133,9 +163,8 @@ class SafeParkingEngine:
             candidates.append((score, spot))
 
         if not candidates:
-            # Fallback to the first safe parking spot
-            first_name = next(iter(self.safe_spots))
-            return self.safe_spots[first_name]
+            # Strictly do not return a spot that is in forbidden_zones (FR-6)
+            return None
 
         # Sort by distance / score ascending
         candidates.sort(key=lambda item: item[0])

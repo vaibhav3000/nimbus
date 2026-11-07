@@ -389,7 +389,9 @@ class SimRobot:
         self.goal_timeout = float(os.environ.get("NIMBUS_GOAL_TIMEOUT", "600"))
         self.minimum_front_distance = float(os.environ.get("NIMBUS_MINIMUM_FRONT_DISTANCE", "0.30"))
         self.robot_id = robot_id
-        cfg = DEFAULT_ROBOT_DEPLOYMENT.get(robot_id, DEFAULT_ROBOT_DEPLOYMENT["R1"])
+        if robot_id not in DEFAULT_ROBOT_DEPLOYMENT:
+            raise ValueError(f"Unknown robot_id {robot_id!r}. Supported robots: {list(DEFAULT_ROBOT_DEPLOYMENT.keys())}")
+        cfg = DEFAULT_ROBOT_DEPLOYMENT[robot_id]
         self.sim_name = cfg["sim_name"]
         self.namespace = cfg["namespace"]
         self.spawn_pose = tuple(spawn_pose or cfg["spawn_pose"])
@@ -1106,14 +1108,6 @@ class SimRobot:
                 supplied_via = params.get("via")
                 if supplied_via is not None and not isinstance(supplied_via, list):
                     return finish("INVALID_DESTINATION", "Route 'via' must be a list")
-                route = self._find_route(
-                    self.current_zone,
-                    target_name,
-                    allowed_zones=allowed_zones,
-                    avoid_zones=persistent_obstacles,
-                )
-                if not route:
-                    return finish("BLOCKED", f"No obstacle-free route to {target_name!r} exists inside allowed_zones")
                 if supplied_via:
                     requested = [canonical_topology_location(node) for node in supplied_via]
                     start_node = canonical_topology_location(self.current_zone)
@@ -1128,6 +1122,14 @@ class SimRobot:
                     illegal = [node for node in requested[1:] if (allowed_nodes is not None and node not in allowed_nodes) or node in forbidden_zones]
                     if illegal:
                         return finish("INVALID_DESTINATION", f"Lease route leaves permitted zones via {illegal[0]!r}")
+                route = self._find_route(
+                    self.current_zone,
+                    target_name,
+                    allowed_zones=allowed_zones,
+                    avoid_zones=persistent_obstacles,
+                )
+                if not route:
+                    return finish("BLOCKED", f"No obstacle-free route to {target_name!r} exists inside allowed_zones")
                 illegal = [node for node in route[1:] if (allowed_nodes is not None and node not in allowed_nodes) or node in forbidden_zones]
                 if illegal:
                     return finish("INVALID_DESTINATION", f"Lease route leaves permitted zones via {illegal[0]!r}")

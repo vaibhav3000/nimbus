@@ -11,7 +11,6 @@ Usage:
 """
 
 import argparse
-import os
 from pathlib import Path
 import sys
 import time
@@ -30,24 +29,16 @@ from edge.supervisor.supervisor import EdgeSupervisor
 
 def main():
     parser = argparse.ArgumentParser(description="Run an edge supervisor cluster daemon.")
+    import os
     parser.add_argument("--cluster", default="east-wing", help="Cluster ID (e.g., east-wing, west-wing)")
-    parser.add_argument(
-        "--cloud-url",
-        default=os.environ.get("NIMBUS_CLOUD_URL", "https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com"),
-        help="Cloud API endpoint URL (defaults to NIMBUS_CLOUD_URL or the deployed Nimbus cloud)",
-    )
+    parser.add_argument("--cloud-url", default=os.environ.get("NIMBUS_CLOUD_URL", "http://127.0.0.1:8000"), help="Cloud API endpoint URL")
     parser.add_argument("--db", default=None, help="Path to local SQLite DB (defaults to edge_<cluster>.db)")
     parser.add_argument("--interval", type=float, default=2.0, help="Outbox polling interval in seconds")
     parser.add_argument("--heartbeat-interval", type=float, default=15.0, help="Idle heartbeat interval in seconds")
     parser.add_argument("--topology", default=None, help="Path to custom hospital_topology.json")
     parser.add_argument("--waypoints", default=None, help="Path to custom topology_waypoints.json")
     parser.add_argument("--robot-backend", choices=["mock", "sim"], default="mock", help="Robot backend: mock (in-memory) or sim (Person 1 ground_robot_sdk/Gazebo)")
-    parser.add_argument("--gazebo-validation",choices=["odometry","ground_truth"],default="odometry",help="Final-arrival validation source for the sim backend")
-    parser.add_argument("--pose-source", choices=["gazebo", "odometry", "controller"], default=os.environ.get("NIMBUS_POSE_SOURCE"), help="Active navigation pose source; Gazebo is the live-simulation default, while controller aliases odometry")
-    parser.add_argument("--sim-mode", choices=["auto", "gazebo", "kinematic"], default="auto", help="sim backend only: gazebo (live ROS 2 + Gazebo, fails closed), kinematic (P1's SDK kinematic stand-in, no Gazebo), auto (gazebo if rclpy importable, else kinematic)")
     parser.add_argument("--system-mode", choices=["C1", "C2", "C3"], default="C1", help="System mode: C1 (Edge SLM), C2 (Cloud-Only Relay), C3 (Deterministic Rules)")
-    parser.add_argument("--slm-mode", choices=["auto", "ollama", "llama_cpp", "mock", "rules_only"], default=os.environ.get("NIMBUS_SLM_MODE", "auto"), help="Tactical decision engine. Use ollama for a real local model; auto may fall back to mock.")
-    parser.add_argument("--slm-model", default=os.environ.get("NIMBUS_SLM_MODEL", "qwen2.5:1.5b"), help="Model name for ollama/llama_cpp mode")
     parser.add_argument("--token", default=None, help="Nimbus edge authentication token (NFR-5)")
     parser.add_argument("--quiet", action="store_true", help="Suppress detailed per-step execution logs")
     parser.add_argument("--once", action="store_true", help="Poll once and exit")
@@ -56,34 +47,26 @@ def main():
     db_path = args.db or f"edge_{args.cluster.replace('-', '_')}.db"
     verbose_mode = not args.quiet
 
+    import os
     token = args.token or os.environ.get("NIMBUS_EDGE_TOKEN")
     supervisor = EdgeSupervisor(
         cluster_id=args.cluster,
         cloud_url=args.cloud_url,
         db_path=db_path,
-        slm_mode=args.slm_mode,
-        slm_model=args.slm_model,
+        slm_mode="auto",
         topology_file=args.topology,
         waypoints_file=args.waypoints,
         verbose=verbose_mode,
         robot_backend=args.robot_backend,
-        gazebo_validation=args.gazebo_validation,
-        pose_source=args.pose_source,
         system_mode=args.system_mode,
         token=token,
-        sim_mode=args.sim_mode,
     )
 
     print("=" * 70)
     print(f"  NIMBUS EDGE SUPERVISOR DAEMON: [{args.cluster.upper()}]")
     print("=" * 70)
     print(f"  Cluster ID       : {args.cluster}")
-    print(f"  Robot Backend    : {args.robot_backend.upper()} ({'SDK sim, mode=' + args.sim_mode if args.robot_backend == 'sim' else 'SIMULATED IN-MEMORY; not physical verification'})")
-    if args.robot_backend == "sim":
-        print(f"  Navigation Pose   : {supervisor.pose_source}")
-        print(f"  Arrival Validation: {args.gazebo_validation}")
-        states={rid:getattr(robot,"connection_state","UNKNOWN") for rid,robot in supervisor.robots.items()}
-        print(f"  Gazebo Readiness : {states}")
+    print(f"  Robot Backend    : {args.robot_backend.upper()} ({'ground_robot_sdk / Gazebo' if args.robot_backend == 'sim' else 'in-memory mock'})")
     print(f"  Cloud Endpoint   : {args.cloud_url}")
     print(f"  Local SQLite DB  : {db_path}")
     print(f"  Topology Graph   : {len(supervisor.topology.get('nodes', {}))} nodes, {len(supervisor.waypoints)} waypoints")
@@ -98,6 +81,19 @@ def main():
     processed_leases = set()
     last_heartbeat_time = 0.0
 
+    # 0. Resume any in-flight active leases from prior supervisor failover (FR-7)
+    try:
+        resumed = supervisor.resume_from_failover()
+        if resumed:
+            print(f"[{args.cluster}] Resumed {len(resumed)} active lease(s) from failover store.")
+            for r in resumed:
+                print(f"[{args.cluster}] >>> Resumed Lease Result: {r.get('status')}")
+    except Exception as e:
+        print(f"[{args.cluster}] Failover resumption error: {e}")
+
+    # Start background upload worker (H3)
+    supervisor.start_outbox_worker()
+
     try:
         while True:
             # 1. Flush any pending escalations (store-and-forward FR-10)
@@ -108,8 +104,7 @@ def main():
             now_time = time.time()
 
             # 2. Send periodic heartbeat to POST /fleet/heartbeat
-            if getattr(supervisor, "probe_requested", False) or now_time - last_heartbeat_time >= args.heartbeat_interval:
-                supervisor.probe_requested = False
+            if now_time - last_heartbeat_time >= args.heartbeat_interval:
                 ok, hb_data = supervisor.send_heartbeat_to_cloud()
                 if ok:
                     print(f"[{args.cluster}] Heartbeat sent -> cluster health: {hb_data.get('health', 'healthy')}")
@@ -124,6 +119,14 @@ def main():
                 if key in processed_leases:
                     continue
 
+                # Check SQLite store: do not re-execute if already finalized
+                existing = supervisor.store.get_lease(lid, ver)
+                if existing and existing.get("status") in (
+                    "COMPLETED", "SUPERSEDED", "CANCELLED", "EXPIRED_PARKED", "FAILED_BOUNDARY", "DROPPED_STALE"
+                ):
+                    processed_leases.add(key)
+                    continue
+
                 target_cluster = lease.get("cluster_id")
                 if target_cluster != args.cluster:
                     # Ignore leases targeted to other clusters
@@ -136,10 +139,8 @@ def main():
                     print(f"[{args.cluster}]     Result Ref : {result.get('result_ref')}")
                     if "sha256" in result:
                         print(f"[{args.cluster}]     SHA-256    : {result.get('sha256')}")
-                elif status in ("REJECTED", "FAILED_BOUNDARY", "DROPPED_STALE", "STOPPED", "FAILED", "ESCALATED_UNEXPECTED", "ESCALATED_CLOUD", "SUPERSEDED", "EXPIRED_PARKED"):
+                elif status in ("REJECTED", "FAILED_BOUNDARY", "DROPPED_STALE", "STOPPED"):
                     print(f"[{args.cluster}]     Reason     : {result.get('reason')}")
-                    if result.get("execution_status"):
-                        print(f"[{args.cluster}]     Robot status: {result.get('execution_status')}")
 
                 processed_leases.add(key)
                 last_heartbeat_time = time.time()
@@ -150,6 +151,8 @@ def main():
 
     except KeyboardInterrupt:
         print(f"\n[{args.cluster}] Supervisor shutting down cleanly.")
+    finally:
+        supervisor.stop_outbox_worker()
 
 
 if __name__ == "__main__":

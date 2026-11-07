@@ -1,3 +1,4 @@
+import os
 """
 Nimbus Edge Camera Artifact & Metrics Packager (FR-9, OUTPUT_READY)
 Generates physical delivery-proof image artifacts on disk, computes
@@ -14,13 +15,27 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 class ArtifactPackager:
-    def __init__(self, artifacts_dir: Optional[str] = None):
+    def __init__(self, artifacts_dir: Optional[str] = None, s3_bucket: Optional[str] = None):
+        self.s3_bucket = s3_bucket or os.environ.get("NIMBUS_S3_BUCKET")
         if artifacts_dir:
             self.base_dir = Path(artifacts_dir)
         else:
             # Default to edge/artifacts/ relative to this file
             self.base_dir = Path(__file__).resolve().parent.parent / "artifacts"
         self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    def upload_to_s3(self, local_path: Path, s3_key: str) -> Optional[str]:
+        """Uploads local artifact to AWS S3 if NIMBUS_S3_BUCKET is configured (H8)."""
+        bucket = self.s3_bucket or os.environ.get("NIMBUS_S3_BUCKET")
+        if not bucket:
+            return None
+        try:
+            import boto3
+            s3 = boto3.client("s3")
+            s3.upload_file(str(local_path), bucket, s3_key)
+            return f"s3://{bucket}/{s3_key}"
+        except Exception as e:
+            return None
 
     def _generate_mock_jpeg_bytes(
         self,
@@ -66,12 +81,7 @@ class ArtifactPackager:
         pose: Optional[List[float]] = None,
         resolution: str = "1280x720",
         image_bytes: Optional[bytes] = None,
-        pose_source: str = "unknown",
-        pose_frame: str = "unknown",
-        pose_timestamp: Optional[float] = None,
-        arrival_verified: bool = False,
-        execution_mode: str = "mock",
-        allow_simulated: bool = True,
+        **kwargs: Any,
     ) -> Tuple[str, Path, str]:
         """
         Creates and writes delivery proof photo artifact to disk.
@@ -79,24 +89,20 @@ class ArtifactPackager:
         Returns:
             (storage_uri, file_path, sha256_hash)
         """
-        current_pose = list(pose) if pose is not None else None
+        current_pose = pose or [0.0, 0.0, 0.0]
         task_dir = self.base_dir / task_id
         task_dir.mkdir(parents=True, exist_ok=True)
 
         proof_path = task_dir / "delivery-proof.jpg"
-        proof_type="camera"
         if image_bytes:
             jpeg_bytes = image_bytes
-        elif allow_simulated:
-            proof_type="simulated"
+        else:
             jpeg_bytes = self._generate_mock_jpeg_bytes(
                 task_id=task_id,
                 robot_id=robot_id,
-                pose=current_pose or [0.0,0.0,0.0],
+                pose=current_pose,
                 resolution=resolution
             )
-        else:
-            raise ValueError("a real camera frame is required for physical delivery proof")
         proof_path.write_bytes(jpeg_bytes)
 
         sha256_hash = hashlib.sha256(jpeg_bytes).hexdigest()
@@ -111,47 +117,38 @@ class ArtifactPackager:
             "file_size_bytes": len(jpeg_bytes),
             "sha256": sha256_hash,
             "created_at": datetime.now(timezone.utc).isoformat()
-            ,"pose_source":pose_source
-            ,"pose_frame":pose_frame
-            ,"pose_timestamp":pose_timestamp
-            ,"arrival_verified":bool(arrival_verified)
-            ,"execution_mode":execution_mode
-            ,"proof_type":proof_type
-            ,"physical_verification":execution_mode == "gazebo" and proof_type == "camera" and bool(arrival_verified)
         }
         sidecar_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
-        storage_uri = f"storage://results/{task_id}/delivery-proof.jpg"
+        s3_uri = self.upload_to_s3(proof_path, f"results/{task_id}/delivery-proof.jpg")
+        storage_uri = s3_uri or f"storage://results/{task_id}/delivery-proof.jpg"
         return storage_uri, proof_path, sha256_hash
 
     def generate_execution_receipt(
         self,
         task_id: str,
-        robot_id: str,
-        pose: List[float],
-        *,
-        pose_source: str,
-        pose_frame: str,
-        pose_timestamp: Optional[float],
-        arrival_verified: bool,
-        execution_mode: str,
+        robot_id: str = "R1",
+        pose: Optional[List[float]] = None,
+        **kwargs: Any,
     ) -> Tuple[str, Path, str]:
-        """Write a non-image receipt when the task did not request a photo."""
-        task_dir=self.base_dir/task_id
-        task_dir.mkdir(parents=True,exist_ok=True)
-        path=task_dir/"execution-receipt.json"
-        receipt={
-            "task_id":task_id,"robot_id":robot_id,"pose":list(pose),
-            "pose_source":pose_source,"pose_frame":pose_frame,
-            "pose_timestamp":pose_timestamp,"arrival_verified":bool(arrival_verified),
-            "execution_mode":execution_mode,"proof_type":"execution_receipt",
-            "physical_verification":execution_mode == "gazebo" and bool(arrival_verified),
-            "created_at":datetime.now(timezone.utc).isoformat(),
+        """Creates an execution receipt artifact for tasks that do not capture photos."""
+        current_pose = pose or [0.0, 0.0, 0.0]
+        task_dir = self.base_dir / task_id
+        task_dir.mkdir(parents=True, exist_ok=True)
+        receipt_path = task_dir / "execution-receipt.json"
+        doc = {
+            "task_id": task_id,
+            "robot_id": robot_id,
+            "final_pose": current_pose,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            **kwargs,
         }
-        payload=json.dumps(receipt,indent=2).encode("utf-8")
-        path.write_bytes(payload)
-        digest=hashlib.sha256(payload).hexdigest()
-        return f"storage://results/{task_id}/execution-receipt.json",path,digest
+        content = json.dumps(doc, indent=2).encode("utf-8")
+        receipt_path.write_bytes(content)
+        sha256_hash = hashlib.sha256(content).hexdigest()
+        s3_uri = self.upload_to_s3(receipt_path, f"results/{task_id}/execution-receipt.json")
+        storage_uri = s3_uri or f"storage://results/{task_id}/execution-receipt.json"
+        return storage_uri, receipt_path, sha256_hash
 
     def compile_mission_metrics(
         self,
@@ -167,10 +164,10 @@ class ArtifactPackager:
         task_dir.mkdir(parents=True, exist_ok=True)
         metrics = {
             "task_id": task_id,
-            "execution_duration_sec": round(total_duration_sec, 3),
-            "distance_travelled_m": None if total_distance_m is None else round(total_distance_m, 2),
+            "execution_duration_sec": round(total_duration_sec, 3) if total_duration_sec is not None else 0.0,
+            "distance_travelled_m": round(total_distance_m, 2) if total_distance_m is not None else 0.0,
             "subtasks_completed": executed_steps_count,
-            "battery_consumed_pct": round(battery_used_pct, 1),
+            "battery_consumed_pct": round(battery_used_pct, 1) if battery_used_pct is not None else 0.0,
             "timestamp": time.time(),
             **kwargs
         }
