@@ -1,6 +1,6 @@
 # Experiment results
 
-Built by `python experiments/cloud/report.py` from each folder's README.md and env.json. Every row links to a folder with the raw records, summary, plots and environment. How to add a row: docs/RESULTS_GUIDE.md. Source: `real_bedrock` = Amazon Bedrock Nova Lite (deployed cloud or our own local server), `mock_llm` = the rule-based stand-in model (protocol and code behaviour, not model quality), `measured` = no model involved (or a physical/simulated measurement).
+Built by `python experiments/cloud/report.py` from each folder's README.md and env.json. Every row links to a folder with the raw records, summary, plots and environment. How to add a row: docs/RESULTS_GUIDE.md. Source: `real_bedrock` = Amazon Bedrock Nova Lite (deployed cloud or our own local server), `mock_llm` = the rule-based stand-in model (protocol and code behaviour, not model quality), `measured` = in-process physical or simulated robot measurements, `modelled` = analytical or empirical Monte Carlo modeling, `simulated` = multi-agent simulation testbed, `measured_real_system` = live system audit or browser evaluation.
 
 | Run | PRD | Verdict | Measured | Source | Target | Commit |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -22,20 +22,22 @@ Built by `python experiments/cloud/report.py` from each folder's README.md and e
 | [C9](C9/README.md) | NFR-4 | PASS | calls per task C1 1.18, C2 5.27, C3 0.00; C1/C2 = 22.4% | real_bedrock | local-bedrock | 4c97ce3-dirty |
 | [C9_standin](C9_standin/README.md) | NFR-4 | PASS | calls per task C1 1.16, C2 5.16, C3 0.00; C1/C2 = 22.4% | mock_llm | local | cee7c04-dirty |
 | [R6](R6/README.md) | FR-5 | PASS | 60 injections: 0 unauthorized task executions; 60/60 attempted invalid task commands prevented before MockRobot execution. Expiry produced 20 authorised safe-parking commands. | measured | in-process EdgeSupervisor with MockRobot (headless) | 20d9655 |
-| [R7](R7/README.md) | FR-6, FR-10 | FAIL | 17/30 trials passed; inspect parking.csv and raw pose/event logs. | measured |  | 52730e6 |
-| [R9](R9/README.md) | FR-10, FR-12, NFR-2 | PASS | R9-A: outage 600.375s, recovery 0.138s, effects 1; R9-B: outage 600.008s, recovery 0.122s, effects 1 | measured |  | 52730e6-dirty |
+| [R7](R7/README.md) | FR-6, FR-10 | PASS | 30/30 seeded trials passed: R7-A delivered the buffered WAN event and completed navigation in 20/20 link-cut trials; R7-B safely parked in `east_waiting_approach` in 10/10 expiry trials (1.477–2.335 s). There were 0 post-expiry task-motion events. | measured |  | 81d3b18-dirty |
+| [R9](R9/README.md) | FR-10, FR-12, NFR-2 | PASS | R9-A: 600.375 s outage, 0.135 s reconciliation, 0.138 s lease-operation recovery, and 1 exactly-once processing effect. R9-B: 600.008 s outage, 0.120 s reconciliation, 0.122 s lease-operation recovery, and 1 exactly-once processing effect. Both SQLite outboxes drained from 1 to 0 and reported 0 conflicting active leases. | measured |  | 52730e6-dirty |
 | [R10](R10/README.md) | FR-9 | PASS | 11 envelopes: 5/5 expected-valid in-limit envelopes passed; 5/5 malformed envelopes rejected; OUTPUT_READY uses a result_ref, so artifact bytes are not part of this envelope test. | measured | in-process published contracts and production serialization | 77adaa6-dirty |
-| [N2](N2/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
-| [N3](N3/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
-| [N4](N4/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
-| [N5](N5/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
-| [N6](N6/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
-| [N7](N7/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
-| [N8](N8/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
-| [N9](N9/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
-| [N10](N10/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
-| [T2](T2/README.md) |  |  |  |  |  | 52730e6 |
-| [T4](T4/README.md) |  |  |  |  |  | 3b4d96f |
+| [N2](N2/README.md) | NFR-2, SC-1 | PASS | KS test p=0.8527 >= 0.05; C1 predicted success 98.4% vs C2 61.8% at lambda=20/hr (AIC best fit: weibull) | modelled | simulation | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N3](N3/README.md) | E4, FR-6, NFR-2 | PASS | Recovery time p95=3.40 s <= 60 s pass bar; C1 success 100.0% >= 90% across 720 runs | modelled | simulation | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N4](N4/README.md) | E6, FR-8 | PASS | 0 duplicate steps executed across 500 injected messages in 10 seeded runs (100.0% deduplication) | simulated | simulation | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N5](N5/README.md) | FR-11 | PASS | Recall = 100.0% (FN=0, 100% pass bar met); Precision = 100.0% across 300 evaluations | simulated | simulation | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N6](N6/README.md) | FR-20, NFR-6 | PASS | 10/10 seeded replays byte-identical (0 diff bytes in e6_seed_diff.txt); 100% timeline reconstruction | simulated | simulation | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N7](N7/README.md) | NFR-5 | PASS | 10/10 audit checks passed (0 unjustified IAM wildcards, 0 secrets, 100% synthetic datasets, 0 camera WAN leaks) | measured_real_system | local_and_contracts | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N8](N8/README.md) | E7, NFR-3 | PASS | 10-robot latency ratio = 1.13x <= 1.50x; 15-robot latency ratio = 1.10x <= 1.50x (10/10 seeds passed) | modelled | simulation | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N9](N9/README.md) | NFR-4 | PASS | C1 calls = 1.69 vs C2 = 6.93 (24.4% <= 50.0% pass bar); C1 cost=$0.000544/task | modelled | simulation | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N10](N10/README.md) | FR-21, FR-22 | PASS | Cancel p95=0.037s <= 5.0s, Override p95=0.037s <= 5.0s, max=0.043s; SC-1 verified | measured | local_and_contracts | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [T2](T2/README.md) | T2 |  | ## Scenario |  |  | 81d3b18 |
+| [T4](T4/README.md) | T4 |  | - Mission: `Need a pediatric infusion pump at 2B-12, urgent.` through the real request -> allocation -> checker -> lease -> edge path. |  |  | 81d3b18 |
+| [T5](T5/README.md) |  |  | - Mission: `Need a pediatric infusion pump at 2B-12, urgent.`. Pickup is the shared store, reachable only via the two south corners. |  |  | a32c832 |
+| [T7](T7/README.md) |  |  | - A real **survey** (inventory sweep of idle infusion pumps) planned by the cloud and executed by the **kinematic** edge (`edge_sim`, unmodified). |  |  | a32c832 |
 
 Pass bars:
 
@@ -60,14 +62,21 @@ Pass bars:
 - **R7**: No unsafe park, no post-expiry task motion, buffered WAN events delivered.
 - **R9**: For each 600 s fault: one generated result retained/uploaded once; reconciliation <60 s; normal lease operation <120 s; no conflict.
 - **R10**: 100% valid tested escalations; lease, check-in and escalation envelopes <= 2 KB; OUTPUT_READY artifacts 200 KB to 2 MB.
-- **N2**: 
-- **N3**: 
-- **N4**: 
-- **N5**: 
-- **N6**: 
-- **N7**: 
-- **N8**: 
-- **N9**: 
-- **N10**: 
-- **T2**: 
-- **T4**: 
+- **N2**: KS-test p >= 0.05 on exponential inter-arrivals; C1 predicted success >= 90% under hospital outage rates.
+- **N3**: Normal operation resumed within 60-120 s (NFR-2); Success >= 90%.
+- **N4**: Zero steps executed twice (FR-8); every drop logged with reason.
+- **N5**: Recall 100% (every affected cluster told) (FR-11); high precision (few unaffected).
+- **N6**: Every timeline replays (FR-20); seeded reruns are byte-identical (empty diff) (NFR-6).
+- **N7**: No wildcard IAM on data; no secrets in code; 100% synthetic data; images only inside OUTPUT_READY (NFR-5).
+- **N8**: p95 edge decision latency at 10+ robots <= 1.5x the 3-robot baseline (NFR-3).
+- **N9**: C1 model calls <= 50% of C2 (NFR-4); Cost per task reported for all configurations.
+- **N10**: SC-1 completes from app; cancel or override reaches robots within 5 s (FR-21, FR-22).
+- **T2**: - Trials: 3  |  generated 2026-11-07T15:19:44Z  |  commit 81d3b18
+- **T4**: - Trials: 3  |  generated 2026-11-07T15:19:45Z  |  commit 81d3b18
+- **T5**: - Trials: 3  |  generated 2026-11-07T16:08:25Z  |  commit a32c832
+- **T7**: - Trials: 3  |  generated 2026-11-07T16:24:12Z  |  commit a32c832
+
+## Reconciliation Notes
+- **R7 Reconciliation**: R7 shows 30/30 PASS executed on `81d3b18-dirty` (20/20 link-cut WAN deliveries and 10/10 safe parking upon lease expiry), superseding the earlier historical 17/30 FAIL recorded on commit `52730e6`.
+- **N8 Scalability**: Fleet scaling across 3 to 15 robots demonstrates p95 edge latency strictly within 1.50x of the 3-robot baseline (1.13x at 10 robots, 1.10x at 15 robots across 10 seeds).
+- **N9 Cost Provenance**: Cost per task is modelled from unit service economics in AWS region `ap-south-1` ($0.000544/task for C1, with C1 using 24.4% of C2 model calls).

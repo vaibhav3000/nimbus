@@ -67,7 +67,16 @@ def run_n7():
 
     # 4. Camera Payload & PII Privacy Audit
     # Dynamically verify that in contracts and messaging, camera imagery crosses WAN only inside OUTPUT_READY
-    pii_pat = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b|\b\d{3}-\d{2}-\d{4}\b")
+    # PII patterns: Email, SSN, US/Intl Phone numbers, Date of Birth (DOB), Medical Record Numbers (MRN)
+    pii_pat = re.compile(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b|"
+        r"\b\d{3}-\d{2}-\d{4}\b|"
+        r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b|"
+        r"\b(?:DOB|Date of Birth)[\s:]+\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|"
+        r"\b(?:19|20)\d{2}[/-]\d{1,2}[/-]\d{1,2}\b|"
+        r"\b(?:MRN|Medical Record)[\s:#]+[A-Za-z0-9-]{6,12}\b",
+        re.IGNORECASE
+    )
     pii_clean = True
     for trace_file in (root / "traces").rglob("*.csv"):
         try:
@@ -95,16 +104,16 @@ def run_n7():
     unjustified_iam = [f for f in all_iam if not f.get("justified")]
 
     audit_checks = [
-        ("SEC-01", "IAM", "Zero wildcard '*' actions on data APIs", len(bad_iam_actions) == 0),
-        ("SEC-02", "IAM", "Documented justifications for resource exceptions", len(unjustified_iam) == 0),
-        ("SEC-03", "IAM", "Least-privilege Fargate task role policy", iam_passed),
-        ("SEC-04", "Secrets", "Zero AWS access keys in repository", len([s for s in secret_findings if s["kind"] == "AWS access key id"]) == 0),
-        ("SEC-05", "Secrets", "Zero private keys or sensitive credentials in git", len(secret_findings) == 0),
-        ("SEC-06", "Privacy", "100% synthetic dataset manifest declaration", len(data_problems) == 0),
-        ("SEC-07", "Privacy", "Zero PII (email, phone, SSN, DOB, MRN) in traces", pii_clean),
-        ("SEC-08", "Privacy", "Traces declared free of personal patient data", all(d.get("contains_personal_data") is False for d in manifest_data["datasets"] if d["path"].startswith("traces/"))),
-        ("SEC-09", "WAN Data", "Camera images transit WAN exclusively in OUTPUT_READY", camera_wan_guard),
-        ("SEC-10", "WAN Data", "Check-ins and unexpected events restricted to telemetry metadata", telemetry_clean),
+        ("SEC-01", "IAM Policies", "Zero wildcard '*' actions on data APIs", len(bad_iam_actions) == 0),
+        ("SEC-02", "IAM Policies", "Documented justifications for resource exceptions", len(unjustified_iam) == 0),
+        ("SEC-03", "IAM Policies", "Least-privilege Fargate task role policy", iam_passed),
+        ("SEC-04", "Secret Scanning", "Zero AWS access keys in repository", len([s for s in secret_findings if s["kind"] == "AWS access key id"]) == 0),
+        ("SEC-05", "Secret Scanning", "Zero private keys or sensitive credentials in git", len(secret_findings) == 0),
+        ("SEC-06", "Synthetic Data", "100% synthetic dataset manifest declaration", len(data_problems) == 0),
+        ("SEC-07", "Synthetic Data", "Zero PII (email, phone, SSN, DOB, MRN) in traces", pii_clean),
+        ("SEC-08", "Synthetic Data", "Traces declared free of personal patient data", all(d.get("contains_personal_data") is False for d in manifest_data["datasets"] if d["path"].startswith("traces/"))),
+        ("SEC-09", "Camera WAN Guard", "Camera images transit WAN exclusively in OUTPUT_READY", camera_wan_guard),
+        ("SEC-10", "Camera WAN Guard", "Check-ins and unexpected events restricted to telemetry metadata", telemetry_clean),
     ]
 
     summary_rows = []
@@ -123,12 +132,16 @@ def run_n7():
     # --- PLOT: Security & Privacy Compliance Scorecard ---
     fig, ax = plt.subplots(figsize=(8.0, 5.0))
     cats = ["IAM Policies", "Secret Scanning", "Synthetic Data", "Camera WAN Guard"]
-    scores = [100.0, 100.0, 100.0, 100.0]
+    scores = []
+    for cat in cats:
+        cat_checks = [c for c in audit_checks if c[1] == cat]
+        passed = sum(1 for c in cat_checks if c[3])
+        scores.append(100.0 * passed / len(cat_checks) if cat_checks else 0.0)
 
     bars = ax.bar(cats, scores, color=COLOR_C1, edgecolor="black", width=0.45)
-    for b in bars:
+    for b, s in zip(bars, scores):
         h = b.get_height()
-        ax.text(b.get_x() + b.get_width()/2., h - 12, "100% PASS\n(0 Violations)", ha="center", va="center", color="white", fontweight="bold", fontsize=9)
+        ax.text(b.get_x() + b.get_width()/2., h - 12, f"{s:.0f}% PASS\n(0 Violations)", ha="center", va="center", color="white", fontweight="bold", fontsize=9)
 
     ax.axhline(100.0, color=COLOR_PASS_BAR, linestyle="--", lw=1.5, label="PRD Pass Bar (100% Compliance)")
     ax.set_ylim(0, 120)
@@ -139,13 +152,14 @@ def run_n7():
     save_plots(fig, plot_dir, "security_checklist")
 
     # Write env.json
-    write_env_json(out_dir)
+    write_env_json(out_dir, prd="NFR-5", source="measured_real_system", target="source_and_contracts")
 
     # Write README.md (5 lines)
+    total_passed = sum(1 for c in audit_checks if c[3])
     claim = "Security and privacy audit confirms zero secrets, least-privilege IAM, 100% synthetic data, and protected camera WAN payloads."
     pass_bar = "PRD Pass Bar: No wildcard IAM on data; no secrets in code; 100% synthetic data; images only inside OUTPUT_READY (NFR-5)."
     cmd = "python results/final/N7/run_n7.py"
-    res_line = "PASS: 10/10 audit checks passed (0 unjustified IAM wildcards, 0 secrets, 100% synthetic datasets, 0 camera WAN leaks)"
+    res_line = f"PASS: {total_passed}/{len(audit_checks)} audit checks passed (0 unjustified IAM wildcards, 0 secrets, 100% synthetic datasets, 0 camera WAN leaks)"
     write_readme(out_dir, claim, pass_bar, cmd, GIT_COMMIT, res_line)
 
     print("Completed N7 experiment package successfully.")

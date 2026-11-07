@@ -147,7 +147,7 @@ def run_n9():
                 "bedrock_cost_usd": 0.0, "fargate_cost_usd": f_cost_c3,
                 "dynamodb_cost_usd": ddb_cost_c3, "sqs_cost_usd": sqs_cost_c3,
                 "apigw_cost_usd": apigw_cost_c3, "cloudwatch_cost_usd": cw_cost_c3,
-                "total_cost_usd": total_cost_c3, "source": "measured"
+                "total_cost_usd": total_cost_c3, "source": "modelled"
             })
 
         mean_c1_c = np.mean(seed_c1_calls)
@@ -163,7 +163,7 @@ def run_n9():
             "c2_avg_cost_usd": round(np.mean(seed_c2_costs), 6),
             "c3_avg_cost_usd": round(np.mean(seed_c3_costs), 6),
             "pass_nfr4": (call_ratio <= 50.0),
-            "source": "measured"
+            "source": "modelled"
         })
 
     # Save cost.csv
@@ -259,7 +259,7 @@ def run_n9():
     save_plots(fig, plot_dir, "success_vs_cost")
 
     # Write env.json
-    write_env_json(out_dir)
+    write_env_json(out_dir, prd="NFR-4", source="modelled", target="simulation")
 
     # Compute key quantitative metrics for README
     c1_mean_calls = df_sum["c1_avg_calls_per_task"].mean()
@@ -267,7 +267,7 @@ def run_n9():
     ratio_mean = df_sum["c1_vs_c2_call_ratio_pct"].mean()
     c1_cost_avg = df_sum["c1_avg_cost_usd"].mean()
 
-    claim = "C1 requires less than 50% of C2 model calls while providing higher reliability at $0.00038/task."
+    claim = f"C1 requires less than 50% of C2 model calls while providing higher reliability at ${c1_cost_avg:.6f}/task."
     pass_bar = "PRD Pass Bar: C1 model calls <= 50% of C2 (NFR-4); Cost per task reported for all configurations."
     cmd = "python results/final/N9/run_n9.py"
     res_line = f"PASS: C1 calls = {c1_mean_calls:.2f} vs C2 = {c2_mean_calls:.2f} ({ratio_mean:.1f}% <= 50.0% pass bar); C1 cost=${c1_cost_avg:.6f}/task"

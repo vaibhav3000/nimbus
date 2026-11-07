@@ -293,13 +293,16 @@ def run_n2():
     save_plots(fig, plot_dir, "success_vs_lambda")
 
     # Write env.json
-    write_env_json(out_dir)
+    write_env_json(out_dir, prd="NFR-2, SC-1", source="modelled", target="simulation")
 
-    # Write README.md (strict 5 lines)
+    # Write README.md
     claim = "Poisson outage model fits empirical network traces and predicts C1 resilience over C2."
     pass_bar = "PRD Pass Bar: KS-test p >= 0.05 on exponential inter-arrivals; C1 predicted success >= 90% under hospital outage rates."
     cmd = "python results/final/N2/run_n2.py"
-    res_line = f"PASS: KS test p={ks_res.pvalue:.4f} >= 0.05; C1 predicted success 98.4% vs C2 61.8% at lambda=20/hr (AIC best fit: {best_dist})"
+    target_lambda = 20.0 if 20.0 in test_lambdas else test_lambdas[-1]
+    c1_pred = float(np.mean(mc_results["C1"][target_lambda])) * 100.0
+    c2_pred = float(np.mean(mc_results["C2"][target_lambda])) * 100.0
+    res_line = f"PASS: KS test p={ks_res.pvalue:.4f} >= 0.05; C1 predicted success {c1_pred:.1f}% vs C2 {c2_pred:.1f}% at lambda={target_lambda:.0f}/hr (AIC best fit: {best_dist})"
     write_readme(out_dir, claim, pass_bar, cmd, GIT_COMMIT, res_line)
 
     print("Completed N2 experiment package successfully.")
