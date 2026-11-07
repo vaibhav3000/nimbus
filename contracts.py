@@ -70,20 +70,50 @@ def validate_document(contract: str, document: dict) -> list[str]:
     return errors
 
 
-def _parse_ts(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+def _parse_iso8601(value: object, field_name: str) -> tuple[datetime | None, str | None]:
+    if value is None:
+        return None, f"$.{field_name}: field is required"
+    if not isinstance(value, str):
+        return None, f"$.{field_name}: must be an ISO-8601 string, got {type(value).__name__}"
+    try:
+        normalized = value.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(normalized)
+    except Exception as exc:
+        return None, f"$.{field_name}: invalid ISO-8601 timestamp '{value}' ({exc})"
+    if dt.tzinfo is None:
+        return None, f"$.{field_name}: timestamp '{value}' must be offset-aware (e.g. UTC 'Z' or offset)"
+    return dt, None
 
 
 def semantic_lease_errors(lease: dict) -> list[str]:
     """Cross-field lease rules that JSON Schema cannot express."""
+    if not isinstance(lease, dict):
+        return ["$: lease must be a JSON object"]
+
     errors: list[str] = []
-    try:
-        if _parse_ts(lease["deadline_ts"]) > _parse_ts(lease["expiry_ts"]):
+
+    if "deadline_ts" not in lease:
+        errors.append("$.deadline_ts: field is required in lease")
+        deadline_dt = None
+    else:
+        deadline_dt, err = _parse_iso8601(lease["deadline_ts"], "deadline_ts")
+        if err:
+            errors.append(err)
+
+    if "expiry_ts" not in lease:
+        errors.append("$.expiry_ts: field is required in lease")
+        expiry_dt = None
+    else:
+        expiry_dt, err = _parse_iso8601(lease["expiry_ts"], "expiry_ts")
+        if err:
+            errors.append(err)
+
+    if deadline_dt is not None and expiry_dt is not None:
+        if deadline_dt > expiry_dt:
             errors.append(
                 f"deadline_ts ({lease['deadline_ts']}) must be <= expiry_ts "
                 f"({lease['expiry_ts']}); the deadline must be reachable inside "
                 "the leased authority window (SC-1)"
             )
-    except (KeyError, ValueError, TypeError):
-        pass
+
     return errors
