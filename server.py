@@ -896,8 +896,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         task_id = body.get("task_id")
         name = body.get("name") or body.get("filename")
-        if not isinstance(task_id, str) or not task_id:
-            self._send_json(400, {"error": "task_id is required"})
+        if not isinstance(task_id, str) or not task_id or ".." in task_id or "/" in task_id or "\\" in task_id:
+            self._send_json(400, {"error": "task_id is required and must be a valid identifier"})
             return
         task = self.store.get_task(task_id)
         if task is None:
@@ -932,6 +932,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self._edge_authorised(path):
             return
         task_id, name = parts[3], parts[4]
+        if not isinstance(task_id, str) or not task_id or ".." in task_id or "/" in task_id or "\\" in task_id:
+            self._send_json(400, {"error": "task_id must be a valid identifier"})
+            return
         if not isinstance(name, str) or not name or ".." in name or "/" in name or "\\" in name:
             self._send_json(400, {"error": "name must be a plain file name (letters, digits, . _ -)"})
             return

@@ -11,9 +11,11 @@ Covers:
 from __future__ import annotations
 
 import collections
+import http.client
 import json
 import os
 import re
+import socket
 import tempfile
 import threading
 import uuid
@@ -21,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib import request as urlreq
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 import pytest
 
 import contracts
@@ -224,6 +227,93 @@ def test_edge_role_result_upload_authorization_and_validation(test_cloud_server)
     assert len(files) == 1
     assert files[0].read_bytes() == content
 
+    # 6c. Path traversal in task_id on upload-url must be rejected with 400
+    for bad_task_id in ("../task", "..\\evil", "/etc/passwd", "task/evil"):
+        status, _ = req_json(
+            "POST",
+            f"{base}/results/upload-url",
+            {"task_id": bad_task_id, "cluster_id": "east-wing", "filename": "photo.jpg"},
+            headers={"Authorization": f"Bearer {tokens['edge']}"},
+        )
+        assert status == 400
+
+    # 6d. Path traversal in task_id on PUT route must be rejected with 400
+    req = urlreq.Request(
+        f"{base}/results/upload/..%2fevil/photo.jpg",
+        data=b"test",
+        headers={"Authorization": f"Bearer {tokens['edge']}"},
+        method="PUT",
+    )
+    with pytest.raises(HTTPError) as exc_info:
+        urlreq.urlopen(req)
+    assert exc_info.value.code in (400, 404)
+
+    # 6e. Nonexistent task on PUT must return 404
+    req = urlreq.Request(
+        f"{base}/results/upload/task-non-existent-9999/photo.jpg",
+        data=b"test_payload",
+        headers={"Authorization": f"Bearer {tokens['edge']}"},
+        method="PUT",
+    )
+    with pytest.raises(HTTPError) as exc_info:
+        urlreq.urlopen(req)
+    assert exc_info.value.code == 404
+
+    # 6f. Oversized upload (> 10MB) must be rejected with 413
+    oversized_len = 10 * 1024 * 1024 + 1
+    parsed_base = urlparse(base)
+    conn = http.client.HTTPConnection(parsed_base.hostname, parsed_base.port, timeout=5)
+    conn.putrequest("PUT", upload_url)
+    conn.putheader("Authorization", f"Bearer {tokens['edge']}")
+    conn.putheader("Content-Length", str(oversized_len))
+    conn.endheaders()
+    resp = conn.getresponse()
+    assert resp.status == 413
+    conn.close()
+
+    # 6g. Truncated payload must be rejected with 400
+    s = socket.create_connection((parsed_base.hostname, parsed_base.port), timeout=5)
+    req_bytes = (
+        f"PUT {upload_url} HTTP/1.1\r\n"
+        f"Host: {parsed_base.hostname}:{parsed_base.port}\r\n"
+        f"Authorization: Bearer {tokens['edge']}\r\n"
+        f"Content-Length: 100\r\n"
+        f"Connection: close\r\n\r\n"
+        "short"
+    ).encode()
+    s.sendall(req_bytes)
+    s.shutdown(socket.SHUT_WR)
+    resp_bytes = b""
+    while True:
+        chunk = s.recv(4096)
+        if not chunk:
+            break
+        resp_bytes += chunk
+    s.close()
+    resp_text = resp_bytes.decode("utf-8", errors="replace")
+    assert "400" in resp_text
+    assert "truncated" in resp_text.lower()
+
+    # 6h. Clarification answer endpoint (/requests/{task_id}/answer):
+    # Requester token is accepted (not 401/403; returns 409 because task is not awaiting answer)
+    status, res = req_json(
+        "POST",
+        f"{base}/requests/{task_id}/answer",
+        {"text": "paediatric pump", "message_id": f"msg-{uuid.uuid4().hex}"},
+        headers={"Authorization": f"Bearer {tokens['requester']}"},
+    )
+    assert status == 409  # Not awaiting answer, but authenticated!
+    assert "not awaiting an answer" in str(res).lower()
+
+    # Unauthenticated / invalid token to clarification answer returns 401
+    status, _ = req_json(
+        "POST",
+        f"{base}/requests/{task_id}/answer",
+        {"text": "paediatric pump", "message_id": f"msg-{uuid.uuid4().hex}"},
+        headers={"Authorization": "Bearer bad-token"},
+    )
+    assert status == 401
+
 
 # ============================================================================
 # Area B: Terraform & AWS IAM Static Security Tests
@@ -264,6 +354,9 @@ def test_terraform_iot_iam_policy_resource_separation():
     assert 'Action = ["iot:Receive"]' in main_text
     assert 'Action = ["iot:Subscribe"]' in main_text
     assert "topicfilter/nimbus/*/lease" in main_text
+    # Probe is Cloud->Edge: edge receives/subscribes to probe, cloud publishes probe
+    assert "topic/nimbus/*/probe" in main_text
+    assert "topicfilter/nimbus/*/probe" in main_text
 
     # Verify cloud.tf also separates Receive and Subscribe
     assert re.search(r'Sid\s*=\s*"IotReceive"', cloud_text) is not None

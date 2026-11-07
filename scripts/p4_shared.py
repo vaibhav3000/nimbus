@@ -48,10 +48,27 @@ def get_aws_account_id() -> str | None:
     except Exception:
         return None
 
-def get_env_dict(prd: str | None = None, source: str = "modelled", target: str = "simulation"):
+def get_env_dict(
+    prd: str | None = None,
+    source: str = "modelled",
+    target: str = "simulation",
+    target_url: str | None = None,
+    execution_mode: str | None = None,
+    backend: str | None = None,
+):
+    from datetime import datetime, timezone
+
     commit_full, is_dirty = get_git_info()
-    commit_str = f"{commit_full[:7]}-dirty" if is_dirty else commit_full[:7]
+    commit_str = f"{commit_full[:7]}-dirty" if is_dirty else (commit_full[:7] if commit_full else "unknown")
+
+    aws_region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION")
+    bedrock_model = os.environ.get("NIMBUS_BEDROCK_MODEL")
+    exec_mode = execution_mode or os.environ.get("NIMBUS_MODE", "C1")
+    bk = backend or os.environ.get("NIMBUS_BACKEND", "local")
+    tgt_url = target_url or os.environ.get("NIMBUS_CLOUD_URL")
+
     env_info = {
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "platform": platform.platform(),
         "system": platform.system(),
         "release": platform.release(),
@@ -60,24 +77,50 @@ def get_env_dict(prd: str | None = None, source: str = "modelled", target: str =
         "cpu_count_logical": os.cpu_count(),
         "memory_total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
         "python_version": platform.python_version(),
-        "aws_region": os.environ.get("AWS_DEFAULT_REGION", os.environ.get("AWS_REGION", "ap-south-1")),
+        "aws_region": aws_region,
         "aws_account_id": get_aws_account_id(),
-        "bedrock_model_id": os.environ.get("NIMBUS_BEDROCK_MODEL", "apac.amazon.nova-lite-v1:0"),
+        "bedrock_model_id": bedrock_model,
+        "execution_mode": exec_mode,
+        "testbed_backend": bk,
+        "target_url": tgt_url,
         "git_commit": commit_str,
         "git_commit_full": commit_full,
         "is_dirty": is_dirty,
         "source": source,
         "target": target,
+        "dependency_fingerprint": {
+            "psutil": psutil.__version__,
+            "matplotlib": matplotlib.__version__,
+        },
     }
     if prd:
         env_info["prd"] = prd
     return env_info
 
-def write_env_json(output_dir: str, prd: str | None = None, source: str = "modelled", target: str = "simulation"):
+def write_env_json(
+    output_dir: str,
+    prd: str | None = None,
+    source: str = "modelled",
+    target: str = "simulation",
+    target_url: str | None = None,
+    execution_mode: str | None = None,
+    backend: str | None = None,
+):
     os.makedirs(output_dir, exist_ok=True)
     path = os.path.join(output_dir, "env.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(get_env_dict(prd=prd, source=source, target=target), f, indent=2)
+        json.dump(
+            get_env_dict(
+                prd=prd,
+                source=source,
+                target=target,
+                target_url=target_url,
+                execution_mode=execution_mode,
+                backend=backend,
+            ),
+            f,
+            indent=2,
+        )
     return path
 
 def setup_matplotlib_style():

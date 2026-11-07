@@ -131,7 +131,7 @@ def run_n9():
                 "bedrock_cost_usd": bedrock_cost_c1, "fargate_cost_usd": f_cost_c1,
                 "dynamodb_cost_usd": ddb_cost_c1, "sqs_cost_usd": sqs_cost_c1,
                 "apigw_cost_usd": apigw_cost_c1, "cloudwatch_cost_usd": cw_cost_c1,
-                "total_cost_usd": total_cost_c1, "source": "real_bedrock"
+                "total_cost_usd": total_cost_c1, "source": "modelled"
             })
             cost_records.append({
                 "seed": seed, "task": tid, "config": "C2",

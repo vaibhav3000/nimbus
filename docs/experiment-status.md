@@ -67,7 +67,7 @@
 
 ### N2 — Poisson Outage Modeling
 - **Status:** `Fixed` (`modelled`).
-- **Finding:** Fitted outage inter-arrivals from synthetic traces using MLE. Kolmogorov-Smirnov test confirmed Poisson goodness-of-fit ($p = 0.8527 \ge 0.05$). Outage duration survival curves selected Weibull distribution via Akaike Information Criterion ($\text{AIC} = 325.4$ vs Exponential $374.2$).
+- **Finding:** Fitted outage inter-arrivals from synthetic traces using MLE. Kolmogorov-Smirnov test confirmed Poisson goodness-of-fit ($p = 0.8527 \ge 0.05$). Outage duration survival curves selected Weibull distribution via Akaike Information Criterion ($\text{AIC} = 325.4$ vs Exponential $374.2$). Monte Carlo validation predicts C1 success rate of 82.00% vs C2 78.06% at $\lambda=20/\text{hr}$ (87.71% mean across $\lambda \in [2, 30]$/hr, 95% CI [85.61%, 89.81%]).
 - **Provenance:** Correctly labeled as mathematical Monte Carlo simulation (`modelled`).
 
 ### N3 — Network Trace Replay
@@ -97,7 +97,7 @@
 
 ### N8 — Fleet Scalability
 - **Status:** `Fixed` (`modelled`).
-- **Finding:** Modelled 3 to 15 robots under time-varying MIMIC-IV emergency department arrival patterns. 10-robot latency ratio was $1.084\times \le 1.50\times$, and 15-robot latency ratio was $1.125\times \le 1.50\times$.
+- **Finding:** Modelled 3 to 15 robots under time-varying MIMIC-IV emergency department arrival patterns. 10-robot latency ratio was $1.13\times [0.98\times, 1.32\times] \le 1.50\times$, and 15-robot latency ratio was $1.10\times [0.94\times, 1.23\times] \le 1.50\times$.
 
 ### N9 — Cost Accounting Breakdown
 - **Status:** `Fixed` (`modelled`).

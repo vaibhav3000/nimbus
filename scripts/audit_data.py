@@ -42,7 +42,7 @@ def audit(root: Path = ROOT) -> list[str]:
             problems.append(f"{d['path']}: listed but not found")
     for base in ("evaluation", "traces"):
         for f in sorted((root / base).rglob("*")) if (root / base).exists() else []:
-            rel = str(f.relative_to(root))
+            rel = f.relative_to(root).as_posix()
             if f.is_file() and rel not in listed and f.name != "manifest.json":
                 problems.append(f"{rel}: not listed in the manifest")
     for path in sorted(listed):

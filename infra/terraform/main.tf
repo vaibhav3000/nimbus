@@ -600,8 +600,7 @@ resource "aws_iot_policy" "edge_cluster" {
         Action = ["iot:Publish"]
         Resource = [
           "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/escalation",
-          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/checkin",
-          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/probe"
+          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/checkin"
         ]
       },
       {
@@ -610,6 +609,7 @@ resource "aws_iot_policy" "edge_cluster" {
         Resource = [
           "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/lease",
           "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/renewal",
+          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/probe",
           "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/notice"
         ]
       },
@@ -619,6 +619,7 @@ resource "aws_iot_policy" "edge_cluster" {
         Resource = [
           "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/lease",
           "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/renewal",
+          "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/probe",
           "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/notice"
         ]
       }

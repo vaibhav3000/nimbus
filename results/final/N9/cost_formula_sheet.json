@@ -17,10 +17,6 @@
     "cloudwatch_ecs_metrics_active": 2,
     "cost_explorer_records": [
       {
-        "date": "2026-10-31",
-        "unblended_cost_usd": -3.61e-08
-      },
-      {
         "date": "2026-11-01",
         "unblended_cost_usd": -3.43e-08
       },
@@ -42,7 +38,11 @@
       },
       {
         "date": "2026-11-06",
-        "unblended_cost_usd": -4.2e-08
+        "unblended_cost_usd": -4.38e-08
+      },
+      {
+        "date": "2026-11-07",
+        "unblended_cost_usd": -1.08e-08
       }
     ]
   },

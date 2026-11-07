@@ -24,12 +24,20 @@ def api_call(method, path, body=None, timeout=10, token=None):
     url = f"{API_BASE}{path}"
     data = json.dumps(body).encode() if body is not None else None
     headers = {"Content-Type": "application/json"}
-    auth_token = (
-        token
-        or os.environ.get("NIMBUS_AUTH_TOKEN")
-        or os.environ.get("NIMBUS_OPERATOR_TOKEN")
-        or os.environ.get("NIMBUS_REQUESTER_TOKEN")
-    )
+    if token:
+        auth_token = token
+    elif path.startswith("/requests"):
+        auth_token = os.environ.get("NIMBUS_REQUESTER_TOKEN") or os.environ.get("NIMBUS_AUTH_TOKEN")
+    elif path.startswith("/tasks") and ("/control" in path or "/replan" in path):
+        auth_token = os.environ.get("NIMBUS_OPERATOR_TOKEN") or os.environ.get("NIMBUS_AUTH_TOKEN")
+    elif path in ("/checkins", "/escalations", "/results/upload-url") or path.startswith("/results/upload/"):
+        auth_token = os.environ.get("NIMBUS_EDGE_TOKEN") or os.environ.get("NIMBUS_AUTH_TOKEN")
+    else:
+        auth_token = (
+            os.environ.get("NIMBUS_OPERATOR_TOKEN")
+            or os.environ.get("NIMBUS_REQUESTER_TOKEN")
+            or os.environ.get("NIMBUS_AUTH_TOKEN")
+        )
     if auth_token:
         headers["Authorization"] = f"Bearer {auth_token}"
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
@@ -61,12 +69,19 @@ def run_n10():
                 f"!! Deployed target at {API_BASE} is not reachable ({exc}). "
                 "Refusing silent fallback to local testbed in deployed mode."
             )
-        print(f"Target server not reachable at {API_BASE}; launching local server testbed...")
+        print(f"Target server not reachable at {API_BASE}; launching local server testbed with authentication...")
         import tempfile
         import threading
         from pathlib import Path
         import server
-        os.environ["NIMBUS_AUTH_DISABLED"] = "1"
+        # Ensure auth is ENABLED with role-appropriate tokens (not bypassed)
+        os.environ.pop("NIMBUS_AUTH_DISABLED", None)
+        os.environ["NIMBUS_TEST_AUTH_CHECK"] = "1"
+        os.environ["NIMBUS_REQUESTER_TOKEN"] = "tok-req-n10-local"
+        os.environ["NIMBUS_OPERATOR_TOKEN"] = "tok-op-n10-local"
+        os.environ["NIMBUS_EDGE_TOKEN"] = "tok-edge-n10-local"
+        os.environ["NIMBUS_ADMIN_TOKEN"] = "tok-adm-n10-local"
+
         tmp_dir = Path(tempfile.mkdtemp(prefix="nimbus-n10-"))
         httpd = server.make_server("127.0.0.1", 0, tmp_dir)
         server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -219,9 +234,9 @@ def run_n10():
     # 5.0 s pass bar
     ax.axvline(5.0, color=COLOR_PASS_BAR, linestyle="--", linewidth=2.0, label="PRD Pass Bar (5.0 s)")
 
-    ax.set_xlabel("Latency to Robot Stop (seconds)")
+    ax.set_xlabel("Cloud Control API Round-Trip Latency (seconds)")
     ax.set_ylabel("Empirical Cumulative Probability")
-    ax.set_title("N10: Operator Console Cancel & Override Latency CDF (FR-22)")
+    ax.set_title("N10: Operator Console Cancel & Override Cloud Control Latency CDF (FR-22)")
     ax.set_xlim(0, 6.0)
     ax.set_ylim(0, 1.05)
     ax.grid(True, linestyle=":", alpha=0.6)
@@ -344,7 +359,16 @@ def run_n10():
 
     # 4. Write env.json and README.md
     print("[4/4] Writing env.json and README.md...")
-    write_env_json(out_dir, prd="FR-21, FR-22", source="measured_real_system", target=target_mode)
+    source_val = "measured_real_system" if is_explicit_deployed else "measured"
+    write_env_json(
+        out_dir,
+        prd="FR-21, FR-22",
+        source=source_val,
+        target=target_mode,
+        target_url=API_BASE,
+        execution_mode="deployed" if is_explicit_deployed else "local",
+        backend="aws" if is_explicit_deployed else "local",
+    )
 
     p95_c = float(np.percentile(all_cancels, 95))
     p95_o = float(np.percentile(all_overrides, 95))
@@ -353,7 +377,10 @@ def run_n10():
     claim = "Operator console cancels and urgent overrides execute cloud API round-trip control within 5 seconds."
     pass_bar = "PRD Pass Bar: SC-1 completes from app; cancel or override reaches robots within 5 s (FR-21, FR-22)."
     command = "python results/final/N10/run_n10.py"
-    verdict = f"PASS: Cloud API round-trip cancel p95={p95_c:.3f}s <= 5.0s, override p95={p95_o:.3f}s <= 5.0s, max={max_lat:.3f}s; SC-1 verified (simulated OUTPUT_READY path)"
+    verdict = (
+        f"PASS: Cloud API round-trip cancel p95={p95_c:.3f}s <= 5.0s, override p95={p95_o:.3f}s <= 5.0s, max={max_lat:.3f}s; "
+        "SC-1 verified (simulated OUTPUT_READY path; physical robot stop acknowledgement not measured)"
+    )
 
     write_readme(out_dir, claim, pass_bar, command, GIT_COMMIT, verdict)
     print("Completed N10 experiment package successfully.")
