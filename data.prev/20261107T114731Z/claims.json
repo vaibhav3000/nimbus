@@ -5,8 +5,8 @@
     "lease_id": "lease-task-000001-v1",
     "version": 1,
     "priority": "urgent",
-    "deadline_ts": "2026-11-07T10:11:03Z",
-    "expiry_ts": "2026-11-07T10:14:03Z",
+    "deadline_ts": "2026-11-07T11:49:14Z",
+    "expiry_ts": "2026-11-07T11:52:14Z",
     "allowed_zones": [
      "south_equipment_approach",
      "east_south_hall_corner",

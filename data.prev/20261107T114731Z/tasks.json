@@ -1,0 +1,216 @@
+{
+ "task-000001": {
+  "task_id": "task-000001",
+  "message_id": "t1-C2-1794051434-1094025",
+  "request_text": "Need a pediatric infusion pump at 2B-12, urgent.",
+  "status": "completed",
+  "question": null,
+  "lease": {
+   "lease_id": "lease-task-000001-v1",
+   "version": 1,
+   "priority": "urgent",
+   "deadline_ts": "2026-11-07T11:49:14Z",
+   "expiry_ts": "2026-11-07T11:52:14Z",
+   "allowed_zones": [
+    "south_equipment_approach",
+    "east_south_hall_corner",
+    "east_south_hall",
+    "east_mid_hall",
+    "east_waiting_approach"
+   ],
+   "forbidden_zones": [],
+   "speed_limit": 1.0,
+   "assigned_robots": [
+    "R3"
+   ],
+   "task_sequence": [
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "south_equipment_approach",
+      "via": [
+       "east_waiting_approach",
+       "east_mid_hall",
+       "east_south_hall",
+       "east_south_hall_corner",
+       "south_equipment_approach"
+      ],
+      "purpose": "pickup"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "wait",
+     "params": {
+      "seconds": 30,
+      "reason": "load"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "go_to",
+     "params": {
+      "to": "east_waiting_approach",
+      "via": [
+       "south_equipment_approach",
+       "east_south_hall_corner",
+       "east_south_hall",
+       "east_mid_hall",
+       "east_waiting_approach"
+      ]
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "beep",
+     "params": {},
+     "robot": "R3"
+    },
+    {
+     "cmd": "photo",
+     "params": {
+      "purpose": "delivery_proof"
+     },
+     "robot": "R3"
+    },
+    {
+     "cmd": "report",
+     "params": {},
+     "robot": "R3"
+    }
+   ],
+   "cluster_id": "east-wing",
+   "when_to_escalate": [
+    "door_closed",
+    "deadline_at_risk",
+    "robot_failed",
+    "route_blocked_no_alternative"
+   ]
+  },
+  "result_ref": "storage://results/task-000001/delivery-proof.jpg",
+  "notice": null,
+  "spec": {
+   "item": "infusion_pump_paediatric",
+   "destination": "east_waiting_approach",
+   "priority": "urgent",
+   "deadline_minutes": 12,
+   "constraints": [],
+   "rationale": "infusion_pump_paediatric to east_waiting_approach (urgent); offline model stand-in",
+   "destination_anchor": "east_waiting_approach",
+   "requested_at": "2026-11-07T11:37:14Z"
+  },
+  "reason": null,
+  "reservation": {
+   "cluster": "east-wing",
+   "item": "infusion_pump_paediatric"
+  },
+  "stock_released": false,
+  "stock_settled": true,
+  "summary": "Done: infusion_pump_paediatric to east_waiting_approach for task task-000001.",
+  "archive_ref": "file://logs/task-000001.json"
+ },
+ "_seen_message_ids": [
+  "msg-ci-1794051436589-d5cd6c",
+  "msg-ci-1794051441735-22bc33",
+  "msg-ci-1794051448115-4c805a",
+  "msg-ci-1794051454460-59fb9b",
+  "msg-ci-1794051460933-986cb1",
+  "msg-ci-1794051467315-b0346e",
+  "msg-ci-1794051473707-2a2c25",
+  "msg-ci-1794051480121-2c4358",
+  "msg-ci-1794051486441-12d3e4",
+  "msg-ci-1794051492701-bade27",
+  "msg-ci-1794051499031-733e72",
+  "msg-ci-1794051505350-d85f7b",
+  "msg-ci-1794051511697-614bc3",
+  "msg-ci-1794051517984-e11bd1",
+  "msg-ci-1794051524340-8c2e4c",
+  "msg-ci-1794051530734-4f973b",
+  "msg-ci-1794051537094-8933e1",
+  "msg-ci-1794051543376-928839",
+  "msg-ci-1794051549708-d08b2c",
+  "msg-ci-1794051556164-5ae98e",
+  "msg-ci-1794051562483-0ae9d4",
+  "msg-ci-1794051568826-979e79",
+  "msg-ci-1794051575248-e478cb",
+  "msg-ci-1794051581652-407c11",
+  "msg-ci-1794051587947-f37d57",
+  "msg-ci-1794051594350-2be94e",
+  "msg-ci-1794051600781-a586d7",
+  "msg-ci-1794051607044-f44441",
+  "msg-ci-1794051613438-14508b",
+  "msg-ci-1794051619779-33813e",
+  "msg-ci-1794051626088-8ea6a0",
+  "msg-ci-1794051632409-b7863c",
+  "msg-ci-1794051638898-029ea4",
+  "msg-ci-1794051645229-e0da1b",
+  "msg-ci-1794051651582-4b5d08",
+  "msg-ci-1794051657904-59a8ef",
+  "msg-ci-1794051664290-badecc",
+  "msg-ci-1794051670736-908561",
+  "msg-ci-1794051677052-a4cbb1",
+  "msg-ci-1794051683425-a7a55b",
+  "msg-ci-1794051688841-609f34",
+  "msg-ci-1794051689743-fd7a94",
+  "msg-ci-1794051694684-a20f6f",
+  "msg-ci-1794051696115-290580",
+  "msg-ci-1794051702379-f57c0a",
+  "msg-ci-1794051708829-48fec5",
+  "msg-ci-1794051715178-0b02e2",
+  "msg-ci-1794051721562-8e1e55",
+  "msg-ci-1794051727860-fe0dd2",
+  "msg-ci-1794051734274-99de8f",
+  "msg-ci-1794051740528-0b7d45",
+  "msg-ci-1794051746866-320cdc",
+  "msg-ci-1794051753165-453da2",
+  "msg-ci-1794051759509-11799a",
+  "msg-ci-1794051765867-26928c",
+  "msg-ci-1794051772309-7b0cab",
+  "msg-ci-1794051778621-4dd403",
+  "msg-ci-1794051785068-8aaf93",
+  "msg-ci-1794051791358-f38192",
+  "msg-ci-1794051797709-61d3a4",
+  "msg-ci-1794051803994-e7ef11",
+  "msg-ci-1794051810388-88a356",
+  "msg-ci-1794051816768-898c14",
+  "msg-ci-1794051823263-42f503",
+  "msg-ci-1794051829568-4bb55e",
+  "msg-ci-1794051835885-1f229e",
+  "msg-ci-1794051842217-9739d1",
+  "msg-ci-1794051848572-a14c11",
+  "msg-ci-1794051854842-45a3dc",
+  "msg-ci-1794051861316-baf888",
+  "msg-ci-1794051867658-edc9b0",
+  "msg-ci-1794051874029-c5f75f",
+  "msg-ci-1794051880458-896d58",
+  "msg-ci-1794051886861-d058fd",
+  "msg-ci-1794051893192-671f66",
+  "msg-ci-1794051899593-127d66",
+  "msg-ci-1794051905980-285459",
+  "msg-ci-1794051912328-23ff92",
+  "msg-ci-1794051918741-5db240",
+  "msg-ci-1794051925041-756630",
+  "msg-ci-1794051931419-50f1e0",
+  "msg-ci-1794051937659-edc2d7",
+  "msg-ci-1794051944077-39e967",
+  "msg-ci-1794051950503-d1beba",
+  "msg-ci-1794051956998-475974",
+  "msg-ci-1794051963390-c59b04",
+  "msg-ci-1794051969645-fe273b",
+  "msg-ci-1794051975917-0feed5",
+  "msg-ci-1794051982311-abacf0",
+  "msg-ci-1794051988553-301006",
+  "msg-ci-1794051994858-bb07b7",
+  "msg-ci-1794052001341-17931f",
+  "msg-ci-1794052007619-d0a6f4",
+  "msg-ci-1794052013928-4ad88d",
+  "msg-ci-1794052020283-cee52b",
+  "msg-ci-1794052026634-0a0c35",
+  "msg-ci-1794052032994-048863",
+  "msg-ci-1794052039329-c828c3",
+  "msg-ci-1794052041634-0d2c81",
+  "msg-ci-1794052045672-c3bcfd",
+  "msg-out-1794052045130",
+  "t1-C2-1794051434-1094025"
+ ]
+}
