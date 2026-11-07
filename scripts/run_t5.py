@@ -130,8 +130,8 @@ def run_trial(mode: str, seed: int) -> dict:
             base = f"http://127.0.0.1:{port}"
             env = dict(os.environ)
             env.update(NIMBUS_MODE="C3", NIMBUS_PACK=os.environ.get("NIMBUS_PACK", "hospital_sim6"),
-                       NIMBUS_LLM="fake", NIMBUS_BACKEND="local", PORT=str(port), DATA_DIR=str(data_dir),
-                       NIMBUS_TICK_S="1")
+                       NIMBUS_LLM="fake", NIMBUS_BACKEND="local", NIMBUS_AUTH_DISABLED="1",
+                       PORT=str(port), DATA_DIR=str(data_dir), NIMBUS_TICK_S="1")
             log = (data_dir / "cloud.log").open("w")
             cloud_proc = subprocess.Popen([sys.executable, "-u", "server.py"], cwd=str(ROOT), env=env,
                                           stdout=log, stderr=subprocess.STDOUT)

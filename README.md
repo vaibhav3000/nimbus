@@ -339,7 +339,7 @@ endpoint cannot provide — noted per row.
 | **T5** | **Gate closed → cross-wing hand-over** | hand-over planned (LLM) | hand-over planned (LLM) | rules fallback | Cross-wing hand-over demonstrated live (west carries to the hand-off, east finishes); the recorded sweep is non-deterministic — re-run after a memory reset. *(real cloud)* |
 | **T6** | **Ward declared infectious** (2C isolation) | re-prioritises: 2C held, routine **queued**, urgent **leased**, pumps evacuated, operator/ward informed | same | run failed to start (fixed since) | C1/C2 carry out the natural-language re-prioritisation; C3 (no LLM) cannot. |
 | **T7** | **Inventory sweep** — WAN bandwidth | **49 B/place** (edge-filtered digest) | 4264 B/place (raw observations) | 107 B/place (structured counts) | **C1 least** — the edge filters, so little crosses the WAN. |
-| **T8** | 3 requests, 2 robots — **scheduling** | — | — | EDF **meets** (urgent done 10 min < 13), FIFO **misses** (15 min) | A classical baseline's success under contention depends on how it is engineered. |
+| **T8** | **3 simultaneous requests, 2 robots** (contention) | prioritises the urgent request | prioritises the urgent request | serves in classical scheduler order | `T8.sh` runs this on the real cloud (C1/C2 deployed, C3 local); C1/C2 orchestrate under contention, C3 follows its fixed scheduler. *(results pending a clean run)* |
 
 Per-test detail:
 
@@ -357,8 +357,11 @@ Per-test detail:
 - **T6** — `T6_results/`: C1/C2 show `restriction=yes:west_waiting_approach`, routine→2C `queued`, urgent→2C `leased`;
   C3's local cloud startup failed in the logged run and is fixed (`NIMBUS_AUTH_DISABLED=1`) — re-run C3 to complete the row.
 - **T7** — `results/final/T7/`: all three sweep 3 places; report sizes C1 148 B ≪ C3 322 B ≪ C2 12 791 B.
-- **T8** — `T8_results/`: deterministic EDF-vs-FIFO scheduling contrast (two C3 variants); `T8.sh` also has a
-  real-cloud 3-request/2-robot variant.
+- **T8** — `T8.sh` (canonical): 3 simultaneous requests to ward 2B with 2 robots available (the deployed
+  two-cluster profile), on the real cloud for C1/C2 and a local cloud for C3 — C1/C2 prioritise the urgent request
+  under contention; C3 serves in its fixed scheduler order. Results are written to `T8_results/<C1,C2,C3>/`; a clean
+  run is still pending. A separate deterministic **EDF-vs-FIFO** scheduler study (`scripts/run_t8.py`) remains as
+  supporting evidence that a classical baseline's success depends on how its scheduler is engineered.
 
 ---
 

@@ -108,7 +108,8 @@ wait_cloud_up() {
 }
 
 start_local_c3() {
-  local port=8000
+  # pick a free port (avoid colliding with a lingering cloud on 8000 or between suite runs)
+  local port; port="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()' 2>/dev/null || echo 8000)"
   CLOUD="$(normalize_url "127.0.0.1:$port")"
   say "C3: starting LOCAL classical cloud (NIMBUS_MODE=C3, real hospital_sim6 pack) on $CLOUD"
   # NIMBUS_AUTH_DISABLED=1: the local dev cloud fails closed on auth (GET /fleet, /tasks,

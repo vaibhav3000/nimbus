@@ -136,12 +136,12 @@ sys.path.insert(0, str(root))
 from edge.mock.sim_robot import SimRobot
 
 CASES = {
-    "R1": ("forward_50m_direct", 50.0, 120.0),
-    "R2": ("forward_50m_direct", 50.0, 120.0),
-    "R3": ("forward_50m_direct", 50.0, 120.0),
-    "R4": ("forward_50m_direct", 50.0, 120.0),
-    "R5": ("forward_50m_direct", 50.0, 120.0),
-    "R6": ("forward_50m_direct", 50.0, 120.0),
+    "R1": ("forward_50m_direct", 50.0),
+    "R2": ("forward_50m_direct", 50.0),
+    "R3": ("forward_50m_direct", 50.0),
+    "R4": ("forward_50m_direct", 50.0),
+    "R5": ("forward_50m_direct", 50.0),
+    "R6": ("forward_50m_direct", 50.0),
 }
 
 # These are local wrapper commands.  They do not call EdgeSupervisor,
@@ -152,6 +152,8 @@ SPEED = 0.50
 CONTROL_PERIOD = 0.12
 MIN_TRAVEL_FOR_REFLEX = 0.05
 COMPLETION_TOLERANCE = 0.35
+PROGRESS_WINDOW_SECONDS = 10.0
+MIN_PROGRESS_PER_WINDOW = 0.50
 
 def snapshot(robot):
     state = robot.runtime.state()
@@ -193,7 +195,7 @@ def settled(robot, timeout=5.0):
     return False, samples[-1] if samples else None
 
 def direct_local_motion(rid):
-    scenario, requested_distance, timeout = CASES[rid]
+    scenario, requested_distance = CASES[rid]
     robot = robots[rid]
     start = snapshot(robot)
     if start is None or not (start["range_fresh"] and start["odom_fresh"]):
@@ -201,18 +203,30 @@ def direct_local_motion(rid):
                 "failure_reason": "live_gazebo_sensor_or_ground_truth_unavailable"}
 
     start_reflex_count = start["reflex_count"]
-    started_at = time.monotonic()
+    progress_started_at = time.monotonic()
+    progress_origin = start
     accepted = False
     moved = False
     last_detail = ""
     try:
-        while time.monotonic() - started_at < timeout:
+        while True:
             current = snapshot(robot)
             if current is None or not (current["range_fresh"] and current["odom_fresh"]):
                 return {"run": run, "robot": rid, "scenario": scenario, "success": "false",
                         "failure_reason": "live_gazebo_sensor_or_ground_truth_became_stale"}
             travelled = math.hypot(current["x"] - start["x"], current["y"] - start["y"])
             moved = moved or travelled >= MIN_TRAVEL_FOR_REFLEX
+
+            # There is deliberately no wall-clock trial deadline. A slow
+            # Gazebo instance may continue as long as its actual ground-truth
+            # position advances by >0.5 m in each 10-second observation window.
+            if time.monotonic() - progress_started_at >= PROGRESS_WINDOW_SECONDS:
+                progress = math.hypot(current["x"] - progress_origin["x"], current["y"] - progress_origin["y"])
+                if progress <= MIN_PROGRESS_PER_WINDOW:
+                    return {"run": run, "robot": rid, "scenario": scenario, "success": "false",
+                            "failure_reason": f"insufficient_progress; {progress:.3f}m_in_{PROGRESS_WINDOW_SECONDS:.0f}s"}
+                progress_started_at = time.monotonic()
+                progress_origin = current
 
             # A reflex stop is valid only when it was caused by the live front
             # obstacle guard, after an accepted local forward command and
@@ -250,10 +264,10 @@ def direct_local_motion(rid):
                 continue
             time.sleep(CONTROL_PERIOD)
     finally:
-        robot.runtime.motion.stop(source="r1_timeout_cleanup")
+        robot.runtime.motion.stop(source="r1_terminal_cleanup")
 
     return {"run": run, "robot": rid, "scenario": scenario, "success": "false",
-            "failure_reason": f"direct_local_motion_timeout; accepted={accepted}; moved={moved}; last={last_detail}"}
+            "failure_reason": f"direct_local_motion_ended; accepted={accepted}; moved={moved}; last={last_detail}"}
 
 robots = {rid: SimRobot(rid, use_gazebo=True, validation_source="ground_truth", pose_source="gazebo") for rid in CASES}
 rows = []

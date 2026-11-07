@@ -175,6 +175,18 @@ run_config() {
   [ "$rc" = 0 ]
 }
 
+# Reset FR-19 long-term memory (learned habits/closures/restrictions) on BOTH deployed
+# clouds first, so persistent state can't bias allocation/scheduling between runs.
+say "resetting long-term memory on deployed C1 and C2"
+for url in "$CLOUD_C1" "$CLOUD_C2"; do
+  u="$(normalize_url "$url")"
+  if curl -fsS -m 25 -X POST "$u/reset-memory" -H 'Content-Type: application/json' -d '{}' >/dev/null 2>&1; then
+    printf '    reset ok   : %s\n' "$u"
+  else
+    printf '    reset FAILED: %s (continuing)\n' "$u"
+  fi
+done
+
 declare -A RESULT
 overall=0
 for mode in "${CONFIGS[@]}"; do

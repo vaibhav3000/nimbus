@@ -212,6 +212,7 @@ def launch_cloud(mode: str, port: int, data_dir: Path) -> subprocess.Popen:
     env = dict(os.environ)
     env.update(NIMBUS_MODE=mode, NIMBUS_PACK=T2_PACK,
                NIMBUS_LLM=env.get("NIMBUS_LLM", "fake"), NIMBUS_BACKEND="local",
+               NIMBUS_AUTH_DISABLED="1",   # local dev cloud: fail-closed auth would 401 /fleet,/tasks,...
                PORT=str(port), DATA_DIR=str(data_dir), NIMBUS_TICK_S=env.get("NIMBUS_TICK_S", "1"))
     log = (data_dir / "cloud.log").open("w")
     return subprocess.Popen([sys.executable, "-u", "server.py"], cwd=str(ROOT), env=env, stdout=log, stderr=log)

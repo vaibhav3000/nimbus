@@ -208,6 +208,10 @@ fi
 # --- 2. cloud ------------------------------------------------------------------------------------
 if [ "$USE_LOCAL_CLOUD" = 1 ]; then
   echo "== starting local cloud"
+  # Local dev cloud: fail-closed auth (P4 security) would 401 /fleet,/tasks,/checkins,... with no
+  # token configured, breaking the readiness wait and the edge. Disable auth for local runs only
+  # (exactly its intended use); the deployed-cloud branch below is untouched.
+  export NIMBUS_AUTH_DISABLED="${NIMBUS_AUTH_DISABLED:-1}"
   start cloud python3 -u server.py
   waitfor "$CLOUD/fleet" cloud 30 || exit 1
 else
