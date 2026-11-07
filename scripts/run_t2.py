@@ -24,9 +24,28 @@ Design choices forced by this host and by reproducibility (documented in the
 generated README so nothing is silently substituted):
 
 * Cloud: a LOCAL cloud this script launches (server.py) in the requested
-  NIMBUS_MODE.  Running it locally is what lets the outage cut the cloud<->edge
-  link precisely (SIGSTOP) and safely.  C2 is a real C2 cloud (NIMBUS_MODE=C2,
-  /relay/decide live) -- relay requests never silently go to a C1 endpoint.
+  NIMBUS_MODE.  C2 is a real C2 cloud (NIMBUS_MODE=C2, /relay/decide live) --
+  relay requests never silently go to a C1 endpoint.
+
+  WHY T2 CANNOT USE THE DEPLOYED (AWS) ENDPOINT -- unlike T1 and T8, which do:
+    1. The whole experiment IS a precisely-timed WAN cut.  T2 creates the outage
+       by SIGSTOP-ing the cloud *process* the instant the lease is ingested and
+       SIGCONT-ing it at mission end.  The deployed cloud is a managed service
+       (API Gateway v2 + Fargate); you cannot pause its process, and you cannot
+       sever only the cloud<->edge link at a chosen millisecond without it.  A
+       local cloud is the only way to own that process and cut it deterministically.
+    2. The contrast needs a short lease so C2's offline stall reaches a terminal
+       state in ~15 s instead of ~15 min.  T2 uses a compressed-timing pack
+       (packs/hospital_sim6_t2: 1 min urgent deadline + 8 s grace); the deployed
+       cloud is fixed to the production pack and timing, which we must not mutate.
+    3. T2 must drive the REAL edge supervisor in-process (to inject the obstacle
+       and read the EXPIRED_PARKED / ESCALATED outcome directly); that supervisor
+       must point at a cloud whose process this script controls.
+    4. The run would otherwise write dozens of throwaway urgent tasks and a forced
+       outage onto the shared deployed cloud other configs (T1/T8) depend on.
+  T1 and T8 have no outage and no timing compression, so they DO use the deployed
+  C1/C2 endpoints (requests show in the operator GUI); T2 is the one experiment
+  whose mechanism is incompatible with a managed endpoint.
 * Edge: the REAL edge supervisor (edge/supervisor/supervisor.py) driven in-process
   -- it reads leases, checks in, renews, runs tactical autonomy (C1 SLM / C2 relay
   / C3 rules), and safe-parks on lease expiry.  Not a scripted walker.  The robot
@@ -447,6 +466,15 @@ def aggregate_and_plot() -> int:
            "git_commit": _git_commit(), "host": os.uname().nodename if hasattr(os, "uname") else "?",
            "pack": T2_PACK, "obstacle_zone": OBSTACLE_ZONE,
            "tc_available": bool(shutil.which("tc")), "ping_available": bool(shutil.which("ping")),
+           "uses_deployed_endpoint": False,
+           "why_local_cloud": ("T2 cannot use the deployed AWS endpoint (unlike T1/T8). The experiment IS a "
+                    "precisely-timed WAN cut: the outage is created by SIGSTOP-ing the cloud PROCESS the instant "
+                    "the lease is ingested and SIGCONT-ing it at mission end. A managed service (API Gateway + "
+                    "Fargate) cannot be paused, and its cloud<->edge link cannot be severed at a chosen instant. "
+                    "T2 also needs a short lease (compressed-timing pack) so C2's offline stall reaches a "
+                    "terminal state in seconds, and must drive the real supervisor in-process against a cloud "
+                    "whose process it controls. So T2 owns a LOCAL cloud; T1/T8 (no outage, no compression) use "
+                    "the deployed C1/C2 endpoints."),
            "note": ("Edge = the real supervisor (C1 SLM / C2 relay / C3 rules) driven in-process. "
                     "Outage = the cloud<->edge link cut by pausing the local cloud right after the lease "
                     "is granted, held to end of mission. A persistent corridor obstacle forces a tactical "
@@ -533,6 +561,23 @@ def _readme(trials: list, env: dict) -> None:
              "- Edge: the real `edge/supervisor/supervisor.py` driven in-process (C1 edge SLM / C2 cloud relay / C3 local rules).",
              "- Outage: cloud<->edge link cut (local cloud paused) the instant the lease is ingested, held to end of mission.",
              "- A persistent corridor obstacle forces a tactical decision mid-route while the WAN is down.", "",
+             "## Why T2 uses a local cloud, not the deployed AWS endpoint", "",
+             "T1 and T8 point C1/C2 at the deployed clouds (and requests show in the operator GUI). **T2 cannot**, "
+             "because its entire mechanism is a precisely-timed WAN cut:", "",
+             "1. The outage is created by **`SIGSTOP`-ing the cloud process** the instant the lease is ingested and "
+             "`SIGCONT`-ing it at mission end. A managed service (API Gateway v2 + Fargate) cannot be paused, and "
+             "its cloud<->edge link cannot be severed at a chosen millisecond and held. Owning the cloud process "
+             "locally is the only way to cut it deterministically.",
+             "2. The C1-vs-C2 contrast needs a **short lease** so C2's offline stall reaches a terminal state in "
+             "~15 s rather than ~15 min. T2 uses a compressed-timing pack (`packs/hospital_sim6_t2`: 1 min urgent "
+             "deadline + 8 s grace); the deployed cloud is fixed to the production pack, which must not be mutated.",
+             "3. T2 drives the **real edge supervisor in-process** to inject the obstacle and read the "
+             "`EXPIRED_PARKED`/`ESCALATED` outcome directly; that supervisor must target a cloud whose process this "
+             "script controls.",
+             "4. Running it against the deployed cloud would also push dozens of throwaway urgent tasks and a forced "
+             "outage onto the shared endpoint that T1/T8 depend on.", "",
+             "The local cloud still runs the **real** orchestrator, allocator, rule checker, lease repo and "
+             "`/relay/decide` in the requested `NIMBUS_MODE` -- only its host and timing differ from the deployment.", "",
              "## Expected contrast", "",
              "- **C1**: edge SLM detours locally, no cloud needed -> **delivered**.",
              "- **C2**: cloud-only relay can't reach the cloud to decide -> a thin relay has no local brain, so it "

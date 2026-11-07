@@ -1,0 +1,21 @@
+{
+ "task-000001": {
+  "task_id": "task-000001",
+  "message_id": "t3-C3-1794055898-1133458",
+  "request_text": "C3 structured request",
+  "status": "needs_clarification",
+  "question": {
+   "question": "ward 2B is a paediatric ward. Do you need a paediatric pump?",
+   "possible_readings": [
+    "paediatric infusion pump",
+    "standard infusion pump"
+   ]
+  },
+  "lease": null,
+  "result_ref": null,
+  "notice": null
+ },
+ "_seen_message_ids": [
+  "t3-C3-1794055898-1133458"
+ ]
+}

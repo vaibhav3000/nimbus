@@ -22,6 +22,8 @@ Built by `python experiments/cloud/report.py` from each folder's README.md and e
 | [C9](C9/README.md) | NFR-4 | PASS | calls per task C1 1.18, C2 5.27, C3 0.00; C1/C2 = 22.4% | real_bedrock | local-bedrock | 4c97ce3-dirty |
 | [C9_standin](C9_standin/README.md) | NFR-4 | PASS | calls per task C1 1.16, C2 5.16, C3 0.00; C1/C2 = 22.4% | mock_llm | local | cee7c04-dirty |
 | [R6](R6/README.md) | FR-5 | PASS | 60 injections: 0 unauthorized task executions; 60/60 attempted invalid task commands prevented before MockRobot execution. Expiry produced 20 authorised safe-parking commands. | measured | in-process EdgeSupervisor with MockRobot (headless) | 20d9655 |
+| [R7](R7/README.md) | FR-6, FR-10 | FAIL | 17/30 trials passed; inspect parking.csv and raw pose/event logs. | measured |  | 52730e6 |
+| [R9](R9/README.md) | FR-10, FR-12, NFR-2 | PASS | R9-A: outage 600.375s, recovery 0.138s, effects 1; R9-B: outage 600.008s, recovery 0.122s, effects 1 | measured |  | 52730e6-dirty |
 | [R10](R10/README.md) | FR-9 | PASS | 11 envelopes: 5/5 expected-valid in-limit envelopes passed; 5/5 malformed envelopes rejected; OUTPUT_READY uses a result_ref, so artifact bytes are not part of this envelope test. | measured | in-process published contracts and production serialization | 77adaa6-dirty |
 | [N2](N2/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
 | [N3](N3/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
@@ -32,6 +34,8 @@ Built by `python experiments/cloud/report.py` from each folder's README.md and e
 | [N8](N8/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
 | [N9](N9/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
 | [N10](N10/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [T2](T2/README.md) |  |  |  |  |  | 52730e6 |
+| [T4](T4/README.md) |  |  |  |  |  | 3b4d96f |
 
 Pass bars:
 
@@ -53,6 +57,8 @@ Pass bars:
 - **C9**: C1 cloud LLM calls per task <= 50% of C2 (NFR-4).
 - **C9_standin**: C1 cloud LLM calls per task <= 50% of C2 (NFR-4).
 - **R6**: Zero lease violations across 20 forbidden-zone, 20 expired-lease, and 20 outdated-version injections (FR-5).
+- **R7**: No unsafe park, no post-expiry task motion, buffered WAN events delivered.
+- **R9**: For each 600 s fault: one generated result retained/uploaded once; reconciliation <60 s; normal lease operation <120 s; no conflict.
 - **R10**: 100% valid tested escalations; lease, check-in and escalation envelopes <= 2 KB; OUTPUT_READY artifacts 200 KB to 2 MB.
 - **N2**: 
 - **N3**: 
@@ -63,3 +69,5 @@ Pass bars:
 - **N8**: 
 - **N9**: 
 - **N10**: 
+- **T2**: 
+- **T4**: 
