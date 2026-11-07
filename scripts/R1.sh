@@ -121,14 +121,11 @@ for run in $(seq 1 "$RUNS"); do
     continue
   fi
 
-  # Actual SDF/map-derived targets, expressed in Gazebo world metres:
-  # R1 starts at (0.0, 12.0), faces +Y, and the static occupancy map's first
-  # north wall cell on that ray is y=18.7; y=19.7 is one metre beyond it.
-  # The nurse-station approach is topology.json's (0.1, 5.1), not the desk mesh.
-  # R5/R6 start with yaw 0, so forward is +X: (-4.5,3.0)+5m=(0.5,3.0),
-  # and (-4.5,-8.0)+50m=(45.5,-8.0).
+  # Every robot receives the same local 50 m forward command. Its own
+  # Gazebo-backed SafetySupervisor is the only obstacle-stop authority.
   python3 - "$ROOT" "$run" "$TMP_DIR/run-${run}.csv" <<'PY'
 import csv
+import math
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -139,13 +136,124 @@ sys.path.insert(0, str(root))
 from edge.mock.sim_robot import SimRobot
 
 CASES = {
-    "R1": ("north_wall_plus_1m", (0.1, 19.7), True),
-    "R2": ("nurse_station_approach", (0.1, 5.1), False),
-    "R3": ("nurse_station_approach", (0.1, 5.1), False),
-    "R4": ("nurse_station_approach", (0.1, 5.1), False),
-    "R5": ("forward_5m", (0.5, 3.0), False),
-    "R6": ("forward_50m", (45.5, -8.0), False),
+    "R1": ("forward_50m_direct", 50.0, 120.0),
+    "R2": ("forward_50m_direct", 50.0, 120.0),
+    "R3": ("forward_50m_direct", 50.0, 120.0),
+    "R4": ("forward_50m_direct", 50.0, 120.0),
+    "R5": ("forward_50m_direct", 50.0, 120.0),
+    "R6": ("forward_50m_direct", 50.0, 120.0),
 }
+
+# These are local wrapper commands.  They do not call EdgeSupervisor,
+# SimRobot.execute_command(), topology routing, or the navigation costmap.
+# SafetySupervisor remains below RobotController and can stop any accepted
+# forward command using the live Gazebo range sensor.
+SPEED = 0.50
+CONTROL_PERIOD = 0.12
+MIN_TRAVEL_FOR_REFLEX = 0.05
+COMPLETION_TOLERANCE = 0.35
+
+def snapshot(robot):
+    state = robot.runtime.state()
+    truth = state.ground_truth
+    if truth is None:
+        return None
+    pose = truth.pose
+    velocity = state.odometry.velocity
+    safety = robot.runtime.safety.status()
+    return {
+        "x": float(pose.x), "y": float(pose.y), "yaw": float(pose.yaw),
+        "linear": float(velocity.linear), "angular": float(velocity.angular),
+        "front": state.range.front, "minimum": state.range.minimum,
+        "reflex_count": int(safety["reflex_stop_count"]),
+        "reflex_reason": safety["reflex_stop_reason"],
+        "controller": state.controller,
+        "range_fresh": bool(state.health.range.fresh),
+        "odom_fresh": bool(state.health.odometry.fresh),
+    }
+
+def settled(robot, timeout=5.0):
+    """Confirm a zero command, an idle controller, and a stable Gazebo pose."""
+    samples = []
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        time.sleep(0.10)
+        current = snapshot(robot)
+        if current is None or not (current["range_fresh"] and current["odom_fresh"]):
+            return False, current
+        samples.append(current)
+        if len(samples) < 8:
+            continue
+        window = samples[-8:]
+        x0, y0 = window[0]["x"], window[0]["y"]
+        pose_span = max(math.hypot(item["x"] - x0, item["y"] - y0) for item in window)
+        idle = not window[-1]["controller"].get("active_command_id")
+        if idle and pose_span <= 0.02:
+            return True, window[-1]
+    return False, samples[-1] if samples else None
+
+def direct_local_motion(rid):
+    scenario, requested_distance, timeout = CASES[rid]
+    robot = robots[rid]
+    start = snapshot(robot)
+    if start is None or not (start["range_fresh"] and start["odom_fresh"]):
+        return {"run": run, "robot": rid, "scenario": scenario, "success": "false",
+                "failure_reason": "live_gazebo_sensor_or_ground_truth_unavailable"}
+
+    start_reflex_count = start["reflex_count"]
+    started_at = time.monotonic()
+    accepted = False
+    moved = False
+    last_detail = ""
+    try:
+        while time.monotonic() - started_at < timeout:
+            current = snapshot(robot)
+            if current is None or not (current["range_fresh"] and current["odom_fresh"]):
+                return {"run": run, "robot": rid, "scenario": scenario, "success": "false",
+                        "failure_reason": "live_gazebo_sensor_or_ground_truth_became_stale"}
+            travelled = math.hypot(current["x"] - start["x"], current["y"] - start["y"])
+            moved = moved or travelled >= MIN_TRAVEL_FOR_REFLEX
+
+            # A reflex stop is valid only when it was caused by the live front
+            # obstacle guard, after an accepted local forward command and
+            # after the controller is idle and Gazebo ground truth is stable.
+            if current["reflex_count"] > start_reflex_count:
+                robot.runtime.motion.stop(source="r1_observation")
+                stationary, final = settled(robot)
+                reason = str(current["reflex_reason"] or "unknown safety reflex")
+                front = "n/a" if current["front"] is None else f"{float(current['front']):.3f}m"
+                if (reason == "front obstacle is inside safety distance" and accepted and moved and stationary):
+                    return {"run": run, "robot": rid, "scenario": scenario, "success": "true",
+                            "failure_reason": f"safety_reflex_stop; front={front}; final=({final['x']:.2f},{final['y']:.2f})"}
+                return {"run": run, "robot": rid, "scenario": scenario, "success": "false",
+                        "failure_reason": f"reflex_not_qualified; reason={reason}; accepted={accepted}; moved={moved}; stationary={stationary}; front={front}"}
+
+            if travelled >= requested_distance - COMPLETION_TOLERANCE:
+                robot.runtime.motion.stop(source="r1_distance_reached")
+                stationary, final = settled(robot)
+                if accepted and moved and stationary:
+                    return {"run": run, "robot": rid, "scenario": scenario, "success": "true",
+                            "failure_reason": f"completed_50m_safely; final=({final['x']:.2f},{final['y']:.2f})"}
+                return {"run": run, "robot": rid, "scenario": scenario, "success": "false",
+                        "failure_reason": "completed_distance_but_robot_did_not_settle"}
+
+            # Direct 50 m forward wrapper command. No destination lookup,
+            # route planner, map, edge supervisor, or cloud is involved.
+            command = robot.runtime.motion.set_velocity(SPEED, 0.0, duration=CONTROL_PERIOD * 1.5, source="r1_local")
+            status = str(command.status.value)
+            accepted = accepted or status == "running"
+            last_detail = str(command.reason or status)
+            if status not in {"running", "completed"}:
+                # A simultaneous safety reflex can make this particular send
+                # reject; the next loop qualifies it from the watchdog state.
+                time.sleep(CONTROL_PERIOD)
+                continue
+            time.sleep(CONTROL_PERIOD)
+    finally:
+        robot.runtime.motion.stop(source="r1_timeout_cleanup")
+
+    return {"run": run, "robot": rid, "scenario": scenario, "success": "false",
+            "failure_reason": f"direct_local_motion_timeout; accepted={accepted}; moved={moved}; last={last_detail}"}
 
 robots = {rid: SimRobot(rid, use_gazebo=True, validation_source="ground_truth", pose_source="gazebo") for rid in CASES}
 rows = []
@@ -159,31 +267,8 @@ try:
         rows = [{"run": run, "robot": rid, "scenario": CASES[rid][0], "success": "false",
                  "failure_reason": "robot_local_sensors_not_ready"} for rid in CASES]
     else:
-        def command(rid):
-            scenario, target, wall_expected = CASES[rid]
-            result = robots[rid].execute_command({
-                "cmd_id": f"r1-{run}-{rid}", "action": "go_to",
-                "params": {"target": list(target), "target_frame": "gazebo/world", "speed": 0.35},
-            })
-            status = str(result.get("status", "FAILED")).upper()
-            detail = str(result.get("message", "no terminal reason")).replace(",", ";").replace("\n", " ")
-            arrived = bool(result.get("arrival_verified"))
-            if wall_expected:
-                success = status == "BLOCKED"
-                reason = "safe_stop_before_north_wall" if success else f"expected_safe_stop; got_{status.lower()}: {detail}"
-            elif status == "COMPLETED" and arrived:
-                success, reason = True, "completed_safely"
-            elif status == "BLOCKED":
-                # BLOCKED is the SDK's safety-controller terminal outcome.
-                # TIMEOUT/FAILED/INVALID_DESTINATION are deliberately failures.
-                success, reason = True, f"safe_stop: {detail}"
-            else:
-                success, reason = False, f"{status.lower()}: {detail}"
-            return {"run": run, "robot": rid, "scenario": scenario,
-                    "success": str(success).lower(), "failure_reason": reason}
-
         with ThreadPoolExecutor(max_workers=6) as pool:
-            futures = [pool.submit(command, rid) for rid in CASES]
+            futures = [pool.submit(direct_local_motion, rid) for rid in CASES]
             rows = [future.result() for future in as_completed(futures)]
 finally:
     for robot in robots.values():

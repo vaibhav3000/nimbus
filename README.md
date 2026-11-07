@@ -324,8 +324,41 @@ To be filled: one row per experiment, with a link to its results folder ([how](d
 
 ### Joint experiment E3 (T1 to T8 across C1, C2 and C3)
 
-To be filled once the C2 relay is wired into the edge and the navigation fixes are in: success rate, deadlines met,
-completion time, model calls and cost per task, for each task and configuration.
+Each test has a one-touch script (`T1.sh` … `T8.sh`) and, where it writes a ResultDir, raw records + plots under
+`results/final/T<n>/` (or `T<n>_results/`). **C1 and C2 always run against the deployed AWS clouds** (C1
+`qrgdidp9te…`, C2 `xkczmnuqla…`, with real Bedrock); **C3 runs on a local classical cloud** (no cloud LLM). Three
+tests own a *local* cloud for C1/C2 as well, because the scenario needs a controlled condition that a managed
+endpoint cannot provide — noted per row.
+
+| Test | Scenario | C1 | C2 | C3 | Headline |
+|---|---|---|---|---|---|
+| **T1** | Urgent delivery (paediatric pump → 2B-12) | COMPLETED | COMPLETED | COMPLETED | Baseline — all three deliver. |
+| **T2** | Urgent delivery under a **sustained WAN outage** | **delivered**, deadline met | **FAILED** — halts, escalates to an operator it can't reach | **delivered** | Edge autonomy wins: C1/C3 ride out the cut; the thin C2 relay cannot. *(local cloud: network-disruption simulation)* |
+| **T3** | **Vague** request ("a pump to 2B") | clarifies → delivers | clarifies → delivers | **dead-ends** at the structured form | The LLM resolves ambiguity by asking; C3's form cannot. |
+| **T4** | Blocked corridor, in-lease detour, **bad link** | **fastest** — 15 ms local decision, delivered | **stalls** — 1711 ms relay over the bad link → escalates | delivered — 1.5 ms local rules | Decision latency: C1/C3 decide on the edge; C2 pays the link. *(local cloud: test-scoped map + uninjectable bad link)* |
+| **T5** | **Gate closed → cross-wing hand-over** | hand-over planned (LLM) | hand-over planned (LLM) | rules fallback | Cross-wing hand-over demonstrated live (west carries to the hand-off, east finishes); the recorded sweep is non-deterministic — re-run after a memory reset. *(real cloud)* |
+| **T6** | **Ward declared infectious** (2C isolation) | re-prioritises: 2C held, routine **queued**, urgent **leased**, pumps evacuated, operator/ward informed | same | run failed to start (fixed since) | C1/C2 carry out the natural-language re-prioritisation; C3 (no LLM) cannot. |
+| **T7** | **Inventory sweep** — WAN bandwidth | **49 B/place** (edge-filtered digest) | 4264 B/place (raw observations) | 107 B/place (structured counts) | **C1 least** — the edge filters, so little crosses the WAN. |
+| **T8** | 3 requests, 2 robots — **scheduling** | — | — | EDF **meets** (urgent done 10 min < 13), FIFO **misses** (15 min) | A classical baseline's success under contention depends on how it is engineered. |
+
+Per-test detail:
+
+- **T1** — `T1_results/<C1,C2,C3>/`: each reaches `Final Mission Status: COMPLETED`.
+- **T2** — `results/final/T2/`: C1 completed 12.6 s (deadline met); C2 `ESCALATED_UNEXPECTED` ("cloud unreachable; a
+  cloud-only relay cannot decide locally"); C3 completed 13.0 s. Outage = a precisely-timed cloud↔edge cut, which is
+  why T2 owns a local cloud (see that dir's README).
+- **T3** — `T3_results/`: C1 and C2 complete after one clarifying turn; C3's structured form reaches
+  `needs_clarification` with no way forward.
+- **T4** — `results/final/T4/`: obstacle decision latency C1 = 15 ms (edge SLM), C3 = 1.5 ms (edge rules), C2 = 1711 ms
+  (cloud round-trip over the degraded link, then escalates). Link degraded via an in-process FaultProxy.
+- **T5** — `results/final/T5/`: real deployed cloud. A live probe showed the full hand-over (west leg → east leg); the
+  scripted sweep is sensitive to deployed-cloud allocation/learned state, so `T5.sh` resets both clouds' memory first;
+  a clean deterministic pass is still pending.
+- **T6** — `T6_results/`: C1/C2 show `restriction=yes:west_waiting_approach`, routine→2C `queued`, urgent→2C `leased`;
+  C3's local cloud startup failed in the logged run and is fixed (`NIMBUS_AUTH_DISABLED=1`) — re-run C3 to complete the row.
+- **T7** — `results/final/T7/`: all three sweep 3 places; report sizes C1 148 B ≪ C3 322 B ≪ C2 12 791 B.
+- **T8** — `T8_results/`: deterministic EDF-vs-FIFO scheduling contrast (two C3 variants); `T8.sh` also has a
+  real-cloud 3-request/2-robot variant.
 
 ---
 

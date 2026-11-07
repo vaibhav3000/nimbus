@@ -1,0 +1,3 @@
+{"mode": "C1", "seed": 1, "task_id": "task-000765", "wan_bytes": 148, "report_kind": "edge_filtered_digest", "n_places": 3}
+{"mode": "C2", "seed": 1, "task_id": "task-000015", "wan_bytes": 12791, "report_kind": "raw_observations", "n_places": 3}
+{"mode": "C3", "seed": 1, "task_id": "task-000001", "wan_bytes": 322, "report_kind": "structured_counts", "n_places": 3}

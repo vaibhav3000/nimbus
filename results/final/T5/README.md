@@ -1,6 +1,6 @@
 # T5: Gate closed -- cross-wing hand-over (real cloud)
 
-- Trials: 3  |  generated 2026-11-07T15:50:38Z  |  commit 9b38f34
+- Trials: 3  |  generated 2026-11-07T16:08:25Z  |  commit a32c832
 - Closed corner: `east_south_hall_corner`
 
 ## Scenario
@@ -28,7 +28,7 @@ REAL run: C1/C2 use the deployed AWS endpoints (real Bedrock); C3 uses a local c
 
 | mode | cloud | outcome | cross-wing | wing sequence | decided by | llm | completion (s) | deadline |
 |---|---|---|---|---|---|---|---|---|
-| C1 | deployed | delivered via cross-wing hand-over | yes | west-wing -> east-wing | None | 4 | 74.014 | met |
+| C1 | deployed | NOT delivered (queued) | yes | - | None | 1 | None | FAIL |
 | C2 | deployed | NOT delivered (queued) | yes | - | None | 2 | None | FAIL |
 | C3 | local | None | no | - | None | None | None | FAIL |
 
