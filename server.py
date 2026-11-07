@@ -294,12 +294,12 @@ class Handler(BaseHTTPRequestHandler):
         pytest_bypass = "PYTEST_CURRENT_TEST" in os.environ and not os.environ.get("NIMBUS_TEST_AUTH_CHECK")
         if (auth_disabled or pytest_bypass) and not os.environ.get("NIMBUS_TEST_AUTH_CHECK") and not is_production:
             edge_token = os.environ.get("NIMBUS_EDGE_TOKEN")
-            if edge_token and path in EDGE_PATHS:
+            if edge_token and (path in EDGE_PATHS or path.startswith("/results/upload/")):
                 pass
             else:
                 return True
 
-        # Public endpoints that do not require auth
+        # Public endpoints that do not require auth (P4 A1: task details require authentication)
         if method == "GET":
             if path in (
                 "/",
@@ -313,7 +313,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/ui-config",
                 "/health",
                 "/favicon.ico",
-            ) or path.startswith("/schemas/") or (path.startswith("/tasks/") and len(path.split("/")) == 3):
+            ) or path.startswith("/schemas/"):
                 return True
 
         # Extract token from Authorization header or X-Nimbus-Token
@@ -324,9 +324,9 @@ class Handler(BaseHTTPRequestHandler):
         elif "X-Nimbus-Token" in self.headers:
             token = self.headers.get("X-Nimbus-Token", "").strip()
 
-        # Determine required role
+        # Determine required role (P4 A1 & A2)
         role = "operator"
-        if path in ("/checkins", "/escalations", "/fleet/heartbeat", "/relay/decide", "/outbox"):
+        if path in ("/checkins", "/escalations", "/fleet/heartbeat", "/relay/decide", "/outbox", "/results/upload-url") or path.startswith("/results/upload/"):
             role = "edge"
         elif path in ("/fault", "/llm/outage"):
             role = "admin"
@@ -334,9 +334,12 @@ class Handler(BaseHTTPRequestHandler):
             role = "requester"
         elif path.startswith("/tasks/") and (path.endswith("/control") or path.endswith("/replan")):
             role = "operator"
+        elif path == "/tasks" or (path.startswith("/tasks/") and (len(path.split("/")) == 3 or path.endswith("/timeline"))):
+            # Accessible to both requesters and operators
+            role = "requester"
         elif path in ("/map/reopen", "/inventory/stock", "/fleet/stock", "/inventory/reset", "/reset-memory", "/memory/reset"):
             role = "operator"
-        elif path in ("/tasks", "/fleet", "/trace", "/notifications", "/cost", "/metrics", "/inventory", "/llm-status"):
+        elif path in ("/fleet", "/trace", "/notifications", "/cost", "/metrics", "/inventory", "/llm-status") or path.endswith("/trace"):
             role = "operator"
 
         # Check token configurations
@@ -370,7 +373,9 @@ class Handler(BaseHTTPRequestHandler):
             adm_tok = os.environ.get("NIMBUS_ADMIN_TOKEN") or os.environ.get("NIMBUS_FAULT_TOKEN")
             if adm_tok:
                 role_tokens.append(adm_tok)
-            if not is_production and os.environ.get("NIMBUS_DEMO_FAULTS", "0").lower() in ("1", "true", "yes"):
+            # Only allow NIMBUS_DEMO_FAULTS=1 if explicitly local development AND request is from loopback
+            is_loopback = getattr(self, "client_address", ("",))[0] in ("127.0.0.1", "::1", "localhost")
+            if not is_production and is_loopback and os.environ.get("NIMBUS_DEMO_FAULTS", "0").lower() in ("1", "true", "yes"):
                 return True
 
         # Fail closed if no token configured for this role
@@ -388,12 +393,23 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(401, {"error": "unauthorized", "detail": "Missing authorization token"})
             return False
 
-        # Constant-time comparison
+        # Constant-time comparison for required role
         for expected in role_tokens:
             if hmac.compare_digest(token.encode("utf-8"), expected.encode("utf-8")):
                 return True
 
-        self._send_json(401, {"error": "unauthorized", "detail": "Invalid credentials"})
+        # Check if caller has valid credentials for a different role (403 Forbidden)
+        all_known_tokens = []
+        for env_key in ("NIMBUS_AUTH_TOKEN", "NIMBUS_EDGE_TOKEN", "NIMBUS_REQUESTER_TOKEN", "NIMBUS_OPERATOR_TOKEN", "NIMBUS_ADMIN_TOKEN"):
+            val = os.environ.get(env_key)
+            if val:
+                all_known_tokens.append(val)
+
+        is_valid_user = any(hmac.compare_digest(token.encode("utf-8"), t.encode("utf-8")) for t in all_known_tokens)
+        if is_valid_user:
+            self._send_json(403, {"error": "forbidden", "detail": f"Forbidden: role '{role}' required"})
+        else:
+            self._send_json(401, {"error": "unauthorized", "detail": "Invalid credentials"})
         return False
 
     def _edge_authorised(self, path: str) -> bool:
@@ -875,10 +891,30 @@ class Handler(BaseHTTPRequestHandler):
     def _post_upload_url(self, body: dict):
         """FR-10: where the edge sends a result file before it reports OUTPUT_READY (a presigned S3 PUT, or this
         server's own upload route when running locally). The task must exist; names are plain file names."""
-        task_id, name = body.get("task_id"), body.get("name")
-        if not isinstance(task_id, str) or self.store.get_task(task_id) is None:
+        if not isinstance(body, dict):
+            self._send_json(400, {"error": "body must be a json object"})
+            return
+        task_id = body.get("task_id")
+        name = body.get("name") or body.get("filename")
+        if not isinstance(task_id, str) or not task_id:
+            self._send_json(400, {"error": "task_id is required"})
+            return
+        task = self.store.get_task(task_id)
+        if task is None:
             self._send_json(404, {"error": f"unknown task {task_id}"})
             return
+
+        # Cluster association validation: prevent one cluster from uploading against another's task
+        task_cluster = task.get("cluster_id") or (task.get("lease") or {}).get("cluster_id")
+        req_cluster = body.get("cluster_id") or self.headers.get("X-Nimbus-Cluster")
+        if req_cluster and task_cluster and req_cluster != task_cluster:
+            self._send_json(403, {"error": "forbidden", "detail": f"cluster '{req_cluster}' does not own task '{task_id}'"})
+            return
+
+        if not isinstance(name, str) or not name or ".." in name or "/" in name or "\\" in name:
+            self._send_json(400, {"error": "name must be a plain file name (letters, digits, . _ -)"})
+            return
+
         ctype = body.get("content_type") if isinstance(body.get("content_type"), str) else "application/octet-stream"
         target = self.orch.results.presign_put(task_id, name, ctype)
         if target is None:
@@ -893,20 +929,42 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) != 5 or parts[1:3] != ["results", "upload"]:
             self._send_json(404, {"error": f"no route for {path}"})
             return
-        if not self._edge_authorised("/results/upload-url"):
+        if not self._edge_authorised(path):
             return
         task_id, name = parts[3], parts[4]
+        if not isinstance(name, str) or not name or ".." in name or "/" in name or "\\" in name:
+            self._send_json(400, {"error": "name must be a plain file name (letters, digits, . _ -)"})
+            return
+
+        task = self.store.get_task(task_id)
+        if task is None:
+            self._send_json(404, {"error": f"unknown task {task_id}"})
+            return
+
+        # Cluster association validation
+        task_cluster = task.get("cluster_id") or (task.get("lease") or {}).get("cluster_id")
+        req_cluster = self.headers.get("X-Nimbus-Cluster")
+        if req_cluster and task_cluster and req_cluster != task_cluster:
+            self._send_json(403, {"error": "forbidden", "detail": f"cluster '{req_cluster}' does not own task '{task_id}'"})
+            return
+
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             length = -1
-        if length < 0 or length > MAX_UPLOAD_BYTES:
+        if length <= 0:
+            self._send_json(400, {"error": "upload body empty or invalid Content-Length"})
+            return
+        if length > MAX_UPLOAD_BYTES:
             self._send_json(413, {"error": "file too large"})
             return
-        if self.store.get_task(task_id) is None:
-            self._send_json(404, {"error": f"unknown task {task_id}"})
+
+        payload = self.rfile.read(length)
+        if len(payload) != length:
+            self._send_json(400, {"error": "upload payload truncated"})
             return
-        ref = self.orch.results.save_upload(task_id, name, self.rfile.read(length))
+
+        ref = self.orch.results.save_upload(task_id, name, payload)
         if ref is None:
             self._send_json(400, {"error": "upload refused"})
             return
@@ -1608,6 +1666,17 @@ class NimbusServer(ThreadingHTTPServer):
 
 
 def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
+    # Fail-closed network isolation (P4 A4): If auth is disabled for local testing,
+    # refuse to bind to public non-loopback network interfaces.
+    is_production = os.environ.get("NIMBUS_BACKEND") == "aws" or os.environ.get("ENVIRONMENT") == "production"
+    auth_disabled = os.environ.get("NIMBUS_AUTH_DISABLED", "0").lower() in ("1", "true", "yes")
+    if auth_disabled and not is_production:
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            logging.getLogger("nimbus.security").warning(
+                "NIMBUS_AUTH_DISABLED=1: Clamping bind host from '%s' to '127.0.0.1' (loopback only for unauthenticated local development)", host
+            )
+            host = "127.0.0.1"
+
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)  # cost counters live here even when the store is DynamoDB
     if os.environ.get("NIMBUS_BACKEND", "local") == "aws":

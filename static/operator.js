@@ -10,11 +10,110 @@ function esc(s) {
   }[c]));
 }
 
+// Scoped session storage token helper (P4 A3).
+// Security trade-off: sessionStorage scopes token lifetime strictly to the active browser
+// tab session. Tokens are never persisted across browser restarts or written to disk,
+// preventing token leakage while allowing refresh without re-prompting.
+function getOperatorToken() {
+  try {
+    return sessionStorage.getItem("nimbus_operator_token") || window.__NIMBUS_OPERATOR_TOKEN || "";
+  } catch (e) {
+    return window.__NIMBUS_OPERATOR_TOKEN || "";
+  }
+}
+
+function setOperatorToken(tok) {
+  const clean = String(tok || "").trim();
+  window.__NIMBUS_OPERATOR_TOKEN = clean;
+  try {
+    if (clean) sessionStorage.setItem("nimbus_operator_token", clean);
+    else sessionStorage.removeItem("nimbus_operator_token");
+  } catch (e) {}
+}
+
+function clearOperatorToken() {
+  setOperatorToken("");
+  showAuthError("Logged out. Please enter a valid operator token.");
+}
+
+function showAuthError(msg) {
+  let bar = $("operator-auth-banner");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "operator-auth-banner";
+    bar.className = "notice";
+    bar.style.borderColor = "var(--status-urgent)";
+    bar.style.backgroundColor = "rgba(196, 85, 74, 0.15)";
+    bar.style.margin = "12px 24px";
+    bar.style.padding = "10px 14px";
+    bar.style.border = "1px solid #c4554a";
+    bar.style.borderRadius = "4px";
+    const header = document.querySelector("header");
+    if (header && header.parentNode) {
+      header.parentNode.insertBefore(bar, header.nextSibling);
+    } else {
+      document.body.prepend(bar);
+    }
+  }
+  bar.innerHTML = `<strong>Operator Authentication Required (401/403):</strong> ${esc(msg)}
+    <div style="margin-top: 8px;">
+      <input type="password" id="operator-token-input" placeholder="Enter Operator Bearer token…" style="width: 260px; padding: 4px 8px; font-size: 13px;">
+      <button id="save-operator-token-btn" style="padding: 4px 10px; font-size: 13px;">Set Token</button>
+      <button id="clear-operator-token-btn" class="secondary" style="padding: 4px 10px; font-size: 13px;">Clear</button>
+    </div>`;
+  const saveBtn = $("save-operator-token-btn");
+  if (saveBtn) {
+    saveBtn.onclick = () => {
+      const val = ($("operator-token-input") || {}).value;
+      if (val) {
+        setOperatorToken(val);
+        bar.remove();
+        if (typeof renderAll === "function") renderAll().catch(() => {});
+      }
+    };
+  }
+  const clearBtn = $("clear-operator-token-btn");
+  if (clearBtn) {
+    clearBtn.onclick = () => clearOperatorToken();
+  }
+}
+
+function hideAuthError() {
+  const bar = $("operator-auth-banner");
+  if (bar) bar.remove();
+}
+
+// Ingest token from URL parameter if present, then sanitize URL
+try {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has("token")) {
+    setOperatorToken(urlParams.get("token"));
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+  }
+} catch (e) {}
+
 async function api(method, path, body) {
   const opts = { method, headers: { "Content-Type": "application/json" } };
+  const tok = getOperatorToken();
+  if (tok) {
+    opts.headers["Authorization"] = `Bearer ${tok}`;
+  }
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(path, opts);
-  return { status: res.status, data: await res.json() };
+  const status = res.status;
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (e) {
+    data = {};
+  }
+  if (status === 401 || status === 403) {
+    const detail = (data && (data.detail || data.error)) || `HTTP ${status} Unauthorized`;
+    showAuthError(detail);
+  } else if (status >= 200 && status < 300) {
+    hideAuthError();
+  }
+  return { status, data };
 }
 
 const msgId = () => "op-" + Math.random().toString(36).slice(2, 12);

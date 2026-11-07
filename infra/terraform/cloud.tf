@@ -107,6 +107,12 @@ resource "aws_iam_role_policy" "task_p3" {
         ]
       },
       {
+        Sid      = "IotConnect"
+        Effect   = "Allow"
+        Action   = ["iot:Connect"]
+        Resource = ["arn:aws:iot:${var.aws_region}:${data.aws_caller_identity.current.account_id}:client/${local.name_prefix}-*"]
+      },
+      {
         Sid    = "IotPublish"
         Effect = "Allow"
         Action = ["iot:Publish"]
@@ -144,12 +150,21 @@ resource "aws_iam_role_policy" "task_p3" {
         Resource = "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:knowledge-base/*"
       },
       {
-        Sid    = "IotSubscribe"
+        Sid    = "IotReceive"
         Effect = "Allow"
-        Action = ["iot:Subscribe", "iot:Receive"]
+        Action = ["iot:Receive"]
         Resource = [
           for t in ["escalation", "checkin"] :
           "arn:aws:iot:${var.aws_region}:${data.aws_caller_identity.current.account_id}:topic/nimbus/*/${t}"
+        ]
+      },
+      {
+        Sid    = "IotSubscribe"
+        Effect = "Allow"
+        Action = ["iot:Subscribe"]
+        Resource = [
+          for t in ["escalation", "checkin"] :
+          "arn:aws:iot:${var.aws_region}:${data.aws_caller_identity.current.account_id}:topicfilter/nimbus/*/${t}"
         ]
       },
       {

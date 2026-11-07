@@ -23,17 +23,19 @@ provider "aws" {
 }
 
 locals {
-  name_prefix = "nimbus-${var.project_name}"
+  name_prefix      = "nimbus-${var.project_name}"
+  assign_public_ip = var.assign_public_ip != null ? var.assign_public_ip : (var.egress_mode == "public_ip")
 
-  # Cloud-edge messaging (PRD Fig 4, component 6/7). Five topic patterns
+  # Cloud-edge messaging (PRD Fig 4, component 6/7). Topic patterns
   # connecting the cloud and edge clusters per contracts/topics.md.
+  # IAM resource ARNs require '*' wildcard instead of MQTT '+' wildcard.
   iot_topics = {
-    lease      = "nimbus/+/lease"
-    escalation = "nimbus/+/escalation"
-    checkin    = "nimbus/+/checkin"
-    renewal    = "nimbus/+/renewal"
-    probe      = "nimbus/+/probe"
-    notice     = "nimbus/+/notice"
+    lease      = "nimbus/*/lease"
+    escalation = "nimbus/*/escalation"
+    checkin    = "nimbus/*/checkin"
+    renewal    = "nimbus/*/renewal"
+    probe      = "nimbus/*/probe"
+    notice     = "nimbus/*/notice"
   }
 }
 
@@ -118,9 +120,9 @@ resource "aws_ecs_task_definition" "app" {
       ]
       secrets = [
         { name = "NIMBUS_REQUESTER_TOKEN", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:NIMBUS_REQUESTER_TOKEN::" },
-        { name = "NIMBUS_OPERATOR_TOKEN",  valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:NIMBUS_OPERATOR_TOKEN::" },
-        { name = "NIMBUS_EDGE_TOKEN",      valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:NIMBUS_EDGE_TOKEN::" },
-        { name = "NIMBUS_ADMIN_TOKEN",     valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:NIMBUS_ADMIN_TOKEN::" },
+        { name = "NIMBUS_OPERATOR_TOKEN", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:NIMBUS_OPERATOR_TOKEN::" },
+        { name = "NIMBUS_EDGE_TOKEN", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:NIMBUS_EDGE_TOKEN::" },
+        { name = "NIMBUS_ADMIN_TOKEN", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:NIMBUS_ADMIN_TOKEN::" },
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -249,7 +251,7 @@ resource "aws_ecs_service" "app" {
   network_configuration {
     subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
     security_groups  = [aws_security_group.app.id]
-    assign_public_ip = var.assign_public_ip # gated behind variable; defaults to false for security
+    assign_public_ip = local.assign_public_ip # derived from egress_mode or explicit override
   }
 
   load_balancer {
@@ -403,6 +405,40 @@ resource "aws_s3_bucket" "outputs" {
   force_destroy = false
 }
 
+resource "aws_s3_bucket_public_access_block" "outputs" {
+  bucket = aws_s3_bucket.outputs.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "outputs" {
+  bucket = aws_s3_bucket.outputs.id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "outputs" {
+  bucket = aws_s3_bucket.outputs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "outputs" {
+  bucket = aws_s3_bucket.outputs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 # ---------------------------------------------------------------------------
 # IAM: least privilege (NFR-5). The task role can touch exactly the tables,
 # queue, bucket and topics created above, plus Bedrock invoke. No wildcards
@@ -470,13 +506,39 @@ resource "aws_iam_role_policy" "task_least_privilege" {
         Resource = "arn:aws:bedrock:${var.aws_region}::foundation-model/*"
       },
       {
-        Sid    = "IotTopics"
+        Sid      = "IotConnect"
+        Effect   = "Allow"
+        Action   = ["iot:Connect"]
+        Resource = ["arn:aws:iot:${var.aws_region}:*:client/${local.name_prefix}-*"]
+      },
+      {
+        Sid    = "IotPublish"
         Effect = "Allow"
-        Action = ["iot:Connect", "iot:Publish", "iot:Subscribe"]
-        Resource = concat(
-          [for pattern in values(local.iot_topics) : "arn:aws:iot:${var.aws_region}:*:topic/${pattern}"],
-          ["arn:aws:iot:${var.aws_region}:*:client/${local.name_prefix}-*"]
-        )
+        Action = ["iot:Publish"]
+        Resource = [
+          "arn:aws:iot:${var.aws_region}:*:topic/${local.iot_topics.lease}",
+          "arn:aws:iot:${var.aws_region}:*:topic/${local.iot_topics.renewal}",
+          "arn:aws:iot:${var.aws_region}:*:topic/${local.iot_topics.probe}",
+          "arn:aws:iot:${var.aws_region}:*:topic/${local.iot_topics.notice}"
+        ]
+      },
+      {
+        Sid    = "IotReceive"
+        Effect = "Allow"
+        Action = ["iot:Receive"]
+        Resource = [
+          "arn:aws:iot:${var.aws_region}:*:topic/${local.iot_topics.escalation}",
+          "arn:aws:iot:${var.aws_region}:*:topic/${local.iot_topics.checkin}"
+        ]
+      },
+      {
+        Sid    = "IotSubscribe"
+        Effect = "Allow"
+        Action = ["iot:Subscribe"]
+        Resource = [
+          "arn:aws:iot:${var.aws_region}:*:topicfilter/${local.iot_topics.escalation}",
+          "arn:aws:iot:${var.aws_region}:*:topicfilter/${local.iot_topics.checkin}"
+        ]
       },
     ])
   })
@@ -544,11 +606,17 @@ resource "aws_iot_policy" "edge_cluster" {
       },
       {
         Effect = "Allow"
-        Action = ["iot:Receive", "iot:Subscribe"]
+        Action = ["iot:Receive"]
         Resource = [
           "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/lease",
           "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/renewal",
-          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/notice",
+          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/notice"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = ["iot:Subscribe"]
+        Resource = [
           "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/lease",
           "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/renewal",
           "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/notice"
@@ -565,6 +633,58 @@ resource "aws_iot_policy" "edge_cluster" {
 resource "aws_s3_bucket" "static_app" {
   bucket        = "${local.name_prefix}-static-app"
   force_destroy = false
+}
+
+resource "aws_s3_bucket_public_access_block" "static_app" {
+  bucket = aws_s3_bucket.static_app.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "static_app" {
+  bucket = aws_s3_bucket.static_app.id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "static_app" {
+  bucket = aws_s3_bucket.static_app.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+data "aws_iam_policy_document" "static_app_oac" {
+  statement {
+    sid       = "AllowCloudFrontOAC"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.static_app.arn}/*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.static_app.arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "static_app" {
+  bucket = aws_s3_bucket.static_app.id
+  policy = data.aws_iam_policy_document.static_app_oac.json
 }
 
 resource "aws_cloudfront_origin_access_control" "static_app" {

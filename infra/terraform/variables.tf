@@ -64,9 +64,9 @@ variable "ecs_target_url" {
 }
 
 variable "assign_public_ip" {
-  description = "Whether to assign public IP to Fargate tasks. Defaults to false for security; API Gateway or internal load balancer should be used for access."
+  description = "Whether to assign public IP to Fargate tasks. When null, it is automatically derived from egress_mode (true for public_ip egress, false for none). In awsvpc mode, tasks in public subnets require assign_public_ip=true to route outbound traffic through an Internet Gateway."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "allowed_ingress_cidr_blocks" {

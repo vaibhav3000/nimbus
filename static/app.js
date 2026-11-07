@@ -11,11 +11,107 @@ let selectedTaskId = null;
 let demoControls = false;
 let c3StructuredForms = false;
 
+// Scoped session storage token helper (P4 A3).
+// Security trade-off: sessionStorage scopes token lifetime strictly to the active browser
+// tab session. Tokens are never persisted across browser restarts or written to disk,
+// preventing token leakage while allowing refresh without re-prompting.
+function getRequesterToken() {
+  try {
+    return sessionStorage.getItem("nimbus_requester_token") || window.__NIMBUS_REQUESTER_TOKEN || "";
+  } catch (e) {
+    return window.__NIMBUS_REQUESTER_TOKEN || "";
+  }
+}
+
+function setRequesterToken(tok) {
+  const clean = String(tok || "").trim();
+  window.__NIMBUS_REQUESTER_TOKEN = clean;
+  try {
+    if (clean) sessionStorage.setItem("nimbus_requester_token", clean);
+    else sessionStorage.removeItem("nimbus_requester_token");
+  } catch (e) {}
+}
+
+function clearRequesterToken() {
+  setRequesterToken("");
+  showAuthError("Logged out. Please enter a valid requester token to access tasks.");
+}
+
+function showAuthError(msg) {
+  let bar = $("auth-banner");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "auth-banner";
+    bar.className = "notice";
+    bar.style.borderColor = "var(--status-urgent)";
+    bar.style.backgroundColor = "rgba(196, 85, 74, 0.15)";
+    bar.style.margin = "12px 18px";
+    const header = document.querySelector("header");
+    if (header && header.parentNode) {
+      header.parentNode.insertBefore(bar, header.nextSibling);
+    } else {
+      document.body.prepend(bar);
+    }
+  }
+  bar.innerHTML = `<strong>Authentication Required (401/403):</strong> ${esc(msg)}
+    <div style="margin-top: 8px;">
+      <input type="password" id="auth-token-input" placeholder="Enter Requester Bearer token…" style="width: 260px; padding: 4px 8px; font-size: 13px;">
+      <button id="save-token-btn" style="padding: 4px 10px; font-size: 13px;">Set Token</button>
+      <button id="clear-token-btn" class="secondary" style="padding: 4px 10px; font-size: 13px;">Clear</button>
+    </div>`;
+  const saveBtn = $("save-token-btn");
+  if (saveBtn) {
+    saveBtn.onclick = () => {
+      const val = ($("auth-token-input") || {}).value;
+      if (val) {
+        setRequesterToken(val);
+        bar.remove();
+        refreshTasks().catch(() => {});
+      }
+    };
+  }
+  const clearBtn = $("clear-token-btn");
+  if (clearBtn) {
+    clearBtn.onclick = () => clearRequesterToken();
+  }
+}
+
+function hideAuthError() {
+  const bar = $("auth-banner");
+  if (bar) bar.remove();
+}
+
+// Ingest token from URL parameter if present, then sanitize URL
+try {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has("token")) {
+    setRequesterToken(urlParams.get("token"));
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+  }
+} catch (e) {}
+
 async function api(method, path, body) {
   const opts = { method, headers: { "Content-Type": "application/json" } };
+  const tok = getRequesterToken();
+  if (tok) {
+    opts.headers["Authorization"] = `Bearer ${tok}`;
+  }
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(path, opts);
-  return { status: res.status, data: await res.json() };
+  const status = res.status;
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (e) {
+    data = {};
+  }
+  if (status === 401 || status === 403) {
+    const detail = (data && (data.detail || data.error)) || `HTTP ${status} Unauthorized`;
+    showAuthError(detail);
+  } else if (status >= 200 && status < 300) {
+    hideAuthError();
+  }
+  return { status, data };
 }
 
 function msgId() {
@@ -39,7 +135,8 @@ function esc(s) {
 }
 
 async function refreshTasks() {
-  const { data } = await api("GET", "/tasks");
+  const { status, data } = await api("GET", "/tasks");
+  if (status >= 400 || !data || !Array.isArray(data.tasks)) return;
   $("task-count").textContent = `(${data.tasks.length})`;
   const list = $("task-list");
   list.innerHTML = "";

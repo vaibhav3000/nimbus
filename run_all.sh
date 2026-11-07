@@ -207,16 +207,23 @@ fi
 
 # --- 2. cloud ------------------------------------------------------------------------------------
 if [ "$USE_LOCAL_CLOUD" = 1 ]; then
-  echo "== starting local cloud"
-  # Local dev cloud: fail-closed auth (P4 security) would 401 /fleet,/tasks,/checkins,... with no
-  # token configured, breaking the readiness wait and the edge. Disable auth for local runs only
-  # (exactly its intended use); the deployed-cloud branch below is untouched.
+  echo "== starting local cloud (isolated loopback development mode)"
+  # Local dev cloud: Isolated unauthenticated loopback server.
+  # Security rule: Local bypass is strictly limited to 127.0.0.1.
+  export HOST="${HOST:-127.0.0.1}"
   export NIMBUS_AUTH_DISABLED="${NIMBUS_AUTH_DISABLED:-1}"
   start cloud python3 -u server.py
   waitfor "$CLOUD/fleet" cloud 30 || exit 1
 else
   echo "== using deployed cloud: $CLOUD"
-  waitfor "$CLOUD/fleet" deployed-cloud 30 || exit 1
+  # Deployed mode MUST be authentication-aware. Require explicitly configured credentials.
+  if [ -z "${NIMBUS_EDGE_TOKEN:-}" ] && [ -z "${NIMBUS_AUTH_TOKEN:-}" ]; then
+    echo "!! Deployed cloud mode requires configured credentials." >&2
+    echo "   Please set NIMBUS_EDGE_TOKEN (or NIMBUS_AUTH_TOKEN) to your deployed Secrets Manager token." >&2
+    echo "   (For isolated unauthenticated local testing, run with NIMBUS_LOCAL_CLOUD=1)" >&2
+    exit 2
+  fi
+  waitfor "$CLOUD/health" deployed-cloud 30 || exit 1
 fi
 
 # --- 3. edge supervisors (one per wing) -----------------------------------------------------------
