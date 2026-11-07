@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nimbus.example/contracts/notice.schema.json",
+  "title": "Notice (cloud -> edge, nimbus/{cluster_id}/notice)",
+  "type": "object",
+  "required": [
+    "text",
+    "type",
+    "cluster_id",
+    "message_id",
+    "ts"
+  ],
+  "properties": {
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "enum": [
+        "ANSWER",
+        "WARNING",
+        "MAP",
+        "STOP",
+        "BUNDLE"
+      ]
+    },
+    "cluster_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "lease_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "zone": {
+      "type": "string"
+    },
+    "message_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ts": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

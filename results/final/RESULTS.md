@@ -21,6 +21,17 @@ Built by `python experiments/cloud/report.py` from each folder's README.md and e
 | [C8_local](C8_local/README.md) | NFR-1 (cloud) | PASS | at 0.5 req/s: p95 0.042 s, errors 0.0; worst p95 over all levels 2.38 s; p95 first above 30 s at N=None; fitted S=0.02 s, c=2 -> capacity about 83.3 req/s | mock_llm | local-C1 | 81f0b93-dirty |
 | [C9](C9/README.md) | NFR-4 | PASS | calls per task C1 1.18, C2 5.27, C3 0.00; C1/C2 = 22.4% | real_bedrock | local-bedrock | 4c97ce3-dirty |
 | [C9_standin](C9_standin/README.md) | NFR-4 | PASS | calls per task C1 1.16, C2 5.16, C3 0.00; C1/C2 = 22.4% | mock_llm | local | cee7c04-dirty |
+| [R6](R6/README.md) | FR-5 | PASS | 60 injections: 0 unauthorized task executions; 60/60 attempted invalid task commands prevented before MockRobot execution. Expiry produced 20 authorised safe-parking commands. | measured | in-process EdgeSupervisor with MockRobot (headless) | 20d9655 |
+| [R10](R10/README.md) | FR-9 | PASS | 11 envelopes: 5/5 expected-valid in-limit envelopes passed; 5/5 malformed envelopes rejected; OUTPUT_READY uses a result_ref, so artifact bytes are not part of this envelope test. | measured | in-process published contracts and production serialization | 77adaa6-dirty |
+| [N2](N2/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N3](N3/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N4](N4/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N5](N5/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N6](N6/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N7](N7/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N8](N8/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N9](N9/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
+| [N10](N10/README.md) |  |  |  |  |  | a87763fa837e38648a1c83ed5ae3b15fc28f5456 |
 
 Pass bars:
 
@@ -41,3 +52,14 @@ Pass bars:
 - **C8_local**: Request to lease p95 <= 30 s on a good network (NFR-1).
 - **C9**: C1 cloud LLM calls per task <= 50% of C2 (NFR-4).
 - **C9_standin**: C1 cloud LLM calls per task <= 50% of C2 (NFR-4).
+- **R6**: Zero lease violations across 20 forbidden-zone, 20 expired-lease, and 20 outdated-version injections (FR-5).
+- **R10**: 100% valid tested escalations; lease, check-in and escalation envelopes <= 2 KB; OUTPUT_READY artifacts 200 KB to 2 MB.
+- **N2**: 
+- **N3**: 
+- **N4**: 
+- **N5**: 
+- **N6**: 
+- **N7**: 
+- **N8**: 
+- **N9**: 
+- **N10**: 

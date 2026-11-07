@@ -1,0 +1,274 @@
+{
+  "clusters": {
+    "east-wing": "east",
+    "west-wing": "west"
+  },
+  "edges": [
+    [
+      "lift_lobby",
+      "north_hall",
+      5.8
+    ],
+    [
+      "north_hall",
+      "west_north_gate",
+      5.02
+    ],
+    [
+      "north_hall",
+      "east_north_gate",
+      4.83
+    ],
+    [
+      "west_north_gate",
+      "west_waiting_approach",
+      6.0
+    ],
+    [
+      "east_north_gate",
+      "east_waiting_approach",
+      6.0
+    ],
+    [
+      "west_waiting_approach",
+      "west_mid_hall",
+      5.0
+    ],
+    [
+      "east_waiting_approach",
+      "east_mid_hall",
+      5.0
+    ],
+    [
+      "west_mid_hall",
+      "nurse_station_approach",
+      5.02
+    ],
+    [
+      "east_mid_hall",
+      "nurse_station_approach",
+      4.83
+    ],
+    [
+      "west_mid_hall",
+      "west_south_hall",
+      11.0
+    ],
+    [
+      "east_mid_hall",
+      "east_south_hall",
+      11.0
+    ],
+    [
+      "west_south_hall",
+      "west_south_hall_corner",
+      7.0
+    ],
+    [
+      "west_south_hall_corner",
+      "south_equipment_approach",
+      4.6
+    ],
+    [
+      "east_south_hall",
+      "east_south_hall_corner",
+      7.0
+    ],
+    [
+      "east_south_hall_corner",
+      "south_equipment_approach",
+      4.4
+    ]
+  ],
+  "nodes": {
+    "east_mid_hall": {
+      "area": "east",
+      "kind": "corridor",
+      "pos": [
+        4.5,
+        3.1
+      ],
+      "speed_cap": 1.0,
+      "wing": "east"
+    },
+    "east_north_gate": {
+      "area": "east",
+      "exclusive": true,
+      "kind": "gate",
+      "pos": [
+        4.5,
+        14.1
+      ],
+      "reservation_id": "gate:east_north_gate",
+      "speed_cap": 1.0,
+      "wing": "east"
+    },
+    "east_south_hall": {
+      "area": "east",
+      "kind": "corridor",
+      "pos": [
+        4.5,
+        -7.9
+      ],
+      "speed_cap": 1.0,
+      "wing": "east"
+    },
+    "east_south_hall_corner": {
+      "area": "east",
+      "kind": "corridor",
+      "pos": [
+        4.5,
+        -14.9
+      ],
+      "speed_cap": 1.0,
+      "wing": "east"
+    },
+    "east_waiting_approach": {
+      "aliases": [
+        "2B",
+        "ward-2b",
+        "ward 2b"
+      ],
+      "area": "east",
+      "beds": 20,
+      "kind": "ward",
+      "label": "ward 2B",
+      "paediatric": true,
+      "pos": [
+        4.5,
+        8.1
+      ],
+      "speed_cap": 1.0,
+      "wing": "east"
+    },
+    "lift_lobby": {
+      "area": "shared",
+      "exclusive": true,
+      "kind": "gate",
+      "pos": [
+        0.1,
+        17.9
+      ],
+      "reservation_id": "gate:lift_lobby",
+      "speed_cap": 1.0,
+      "wing": "shared"
+    },
+    "north_hall": {
+      "area": "shared",
+      "kind": "corridor",
+      "pos": [
+        0.1,
+        12.1
+      ],
+      "speed_cap": 1.0,
+      "wing": "shared"
+    },
+    "nurse_station_approach": {
+      "aliases": [
+        "nurse-station",
+        "nurse station"
+      ],
+      "area": "shared",
+      "kind": "corridor",
+      "pos": [
+        0.1,
+        5.1
+      ],
+      "speed_cap": 1.0,
+      "wing": "shared"
+    },
+    "south_equipment_approach": {
+      "aliases": [
+        "equipment-store",
+        "equipment store"
+      ],
+      "area": "shared",
+      "kind": "store",
+      "label": "equipment store",
+      "pos": [
+        0.1,
+        -14.9
+      ],
+      "speed_cap": 1.0,
+      "wing": "shared"
+    },
+    "south_room_approach": {
+      "aliases": [
+        "ward-3",
+        "3",
+        "ward 3"
+      ],
+      "area": "shared",
+      "beds": 30,
+      "kind": "ward",
+      "label": "ward 3",
+      "pos": [
+        0.1,
+        -27.9
+      ],
+      "speed_cap": 1.0,
+      "wing": "shared"
+    },
+    "west_mid_hall": {
+      "area": "west",
+      "kind": "corridor",
+      "pos": [
+        -4.5,
+        3.1
+      ],
+      "speed_cap": 1.0,
+      "wing": "west"
+    },
+    "west_north_gate": {
+      "area": "west",
+      "exclusive": true,
+      "kind": "gate",
+      "pos": [
+        -4.5,
+        14.1
+      ],
+      "reservation_id": "gate:west_north_gate",
+      "speed_cap": 1.0,
+      "wing": "west"
+    },
+    "west_south_hall": {
+      "area": "west",
+      "kind": "corridor",
+      "pos": [
+        -4.5,
+        -7.9
+      ],
+      "speed_cap": 1.0,
+      "wing": "west"
+    },
+    "west_south_hall_corner": {
+      "area": "west",
+      "kind": "corridor",
+      "pos": [
+        -4.5,
+        -14.9
+      ],
+      "speed_cap": 1.0,
+      "wing": "west"
+    },
+    "west_waiting_approach": {
+      "aliases": [
+        "2C",
+        "ward-2c",
+        "ward 2c"
+      ],
+      "area": "west",
+      "beds": 20,
+      "kind": "ward",
+      "label": "ward 2C",
+      "pos": [
+        -4.5,
+        8.1
+      ],
+      "speed_cap": 1.0,
+      "wing": "west"
+    }
+  },
+  "note": "GENERATED by scripts/build_sim_topology.py from simulation/hospital_world/topology/hospital_topology.json and packs/hospital_sim/overlay.json. Do not edit by hand: change the overlay and rebuild.",
+  "version": "sim-v0"
+}

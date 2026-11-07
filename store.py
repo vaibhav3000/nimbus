@@ -27,6 +27,7 @@ class Store:
         self.decisions_path = self.data_dir / "decisions.jsonl"
         self.tasks: dict = {}
         self.seen_message_ids: set[str] = set()
+        self._inflight: set[str] = set()      # ids being processed right now (not yet in seen_message_ids)
         if self.tasks_path.exists():
             blob = json.loads(self.tasks_path.read_text(encoding="utf-8"))
             self.seen_message_ids = set(blob.get(_SEEN_KEY, []))
@@ -62,6 +63,21 @@ class Store:
             if task.get("message_id"):
                 self.seen_message_ids.add(task["message_id"])
             self._save_tasks()
+
+    def reserve_message_id(self, message_id: str) -> bool:
+        """FR-8 under concurrency: claim an id before the (slow) work starts. False if it is already seen or being
+        processed by another request, so two simultaneous deliveries of one message create one task, not two."""
+        with _LOCK:
+            if message_id in self.seen_message_ids or message_id in self._inflight:
+                return False
+            self._inflight.add(message_id)
+            return True
+
+    def release_message_id(self, message_id: str) -> None:
+        """Give the claim back. If the message was accepted its id is already in seen_message_ids; if it failed,
+        an honest retry may go through."""
+        with _LOCK:
+            self._inflight.discard(message_id)
 
     def see_message_id(self, message_id: str) -> None:
         with _LOCK:

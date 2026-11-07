@@ -258,7 +258,7 @@ The plan (PRD) defines requirements (FR-1 to FR-22, NFR-1 to NFR-7), task scenar
 | Group | Area | What it covers | Code | Results |
 | --- | --- | --- | --- | --- |
 | C1 to C9 | Cloud | understanding, rules, memory, checker, scheduling, re-planning, model outage, load, model calls | `experiments/cloud/` | `results/final/C*` |
-| R1 to R10 | Robot and edge | safety stop, navigation, map, edge model, edge decisions, lease limits, parking, takeover, store-and-forward, message format | `experiments/robot_edge/` (to be added) | `results/final/R*` (to be added) |
+| R1 to R10 | Robot and edge | safety stop, navigation, map, edge model, edge decisions, lease limits, parking, takeover, store-and-forward, message format | `experiments/robot_edge/` | `results/final/R*` |
 | N1 to N10 | Network and infrastructure | network traces, outage model, trace replay, duplicate messages, selective sharing, replay, security audit, scale, cost, apps | `experiments/network_infra/` (to be added) | `results/final/N*` (to be added) |
 
 Every experiment writes a folder in `results/final/` containing:
@@ -299,11 +299,11 @@ To be filled: one row per experiment, with a link to its results folder ([how](d
 | R3, map and localisation check | FR-2, FR-5 | to be filled |
 | R4, edge model benchmark | E1, NFR-1, FR-3 | to be filled |
 | R5, edge handles locally or asks | FR-4 | to be filled |
-| R6, stay within the lease | FR-5 | to be filled |
+| R6, stay within the lease | FR-5 | [MockRobot supervisor result](results/final/R6/README.md): 60/60 invalid task commands were prevented before execution (20 forbidden-zone, 20 expired-lease, 20 stale-version); 0 unauthorized task executions. The 20 expiry cases executed only the authorised safe-park command. PASS; this is not physical Gazebo validation. |
 | R7, safe parking on expiry or link cut | FR-6 | to be filled |
 | R8, edge node takeover | FR-7 | to be filled |
 | R9, store-and-forward and reconnection | FR-10, FR-12, NFR-2 | to be filled |
-| R10, escalation format and message sizes | FR-9 | to be filled |
+| R10, escalation format and message sizes | FR-9 | [Fixture-level result](results/final/R10/README.md): all 5 expected-valid envelopes were schema-valid and under 2 KB; all 5 malformed envelopes were rejected. PASS: `OUTPUT_READY` carries a result reference rather than embedded artifact bytes, so the 200 KB–2 MB artifact range is not a wire-envelope criterion. |
 
 ### Network and infrastructure experiments
 

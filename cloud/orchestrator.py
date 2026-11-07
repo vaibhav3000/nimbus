@@ -50,7 +50,7 @@ from .leases import Conflict, MemoryLeaseRepo, _task_of, claim_keys_for
 from .llm import CircuitBreakerLLM, LLMError, RuleBasedLLM
 from .pack import Pack
 from .policy import PolicyBook
-from .scheduler import Scheduler
+from .scheduler import FifoScheduler, Scheduler
 from .tools import ToolRegistry
 from .topology import Topology
 
@@ -92,6 +92,8 @@ class Orchestrator:
                  allow_unknown: bool = True, publish=None, probe_timeout_s: float = 0.0, durable=None, results=None):
         self.pack, self.topo, self.fleet, self.policies, self.repo = pack, topo, fleet, policies, repo
         self.scheduler, self.llm, self.clock = scheduler, llm, clock
+        if getattr(scheduler, "now", None) is None:
+            scheduler.now = clock.now        # lets the scheduler promote overdue tasks (starvation guard)
         self.tools = ToolRegistry(pack)
         self.durable = durable
         self.mapstate = MapState(topo, durable)
@@ -149,7 +151,8 @@ class Orchestrator:
         orch = cls(pack=pack, topo=topo, fleet=FleetRegistry.load(clock, pack, stock_store=stock_store),
                    policies=_with_kb(PolicyBook(pack, durable=durable)), repo=repo, durable=durable,
                    results=ResultStore.from_env(data_dir),
-                   scheduler=Scheduler(pack.ranks), llm=llm, clock=clock,
+                   scheduler=(FifoScheduler if os.environ.get("NIMBUS_SCHEDULER", "edf").lower() == "fifo"
+                              else Scheduler)(pack.ranks), llm=llm, clock=clock,
                    mode=os.environ.get("NIMBUS_MODE", "C1"),
                    allow_unknown=os.environ.get("NIMBUS_ALLOW_UNKNOWN", "1") == "1",
                    publish=publish, probe_timeout_s=float(os.environ.get("NIMBUS_PROBE_TIMEOUT", "0")))

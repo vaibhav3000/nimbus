@@ -24,6 +24,7 @@ from typing import Any, Callable
 import contracts
 from cloud.clock import iso
 from cloud.notify import Notice
+from cloud.results import MAX_UPLOAD_BYTES
 from cloud.trace import wire_store
 from cloud.orchestrator import InvalidLeaseError, Orchestrator, StaleVersion
 from cost import CostBook
@@ -117,7 +118,7 @@ def make_decision_row(orch: Orchestrator, who: str, inputs: dict, output: dict, 
 _EMF_STATE = {"last": 0.0, "calls": 0}
 
 
-def emit_metrics(orch, tasks: list) -> None:
+def emit_metrics(orch, tasks: list, cost=None) -> None:
     """CloudWatch Embedded Metric Format line every NIMBUS_EMF_EVERY_S seconds (default 60) when NIMBUS_EMF=1."""
     if os.environ.get("NIMBUS_EMF") != "1" or time.time() - _EMF_STATE["last"] < float(os.environ.get("NIMBUS_EMF_EVERY_S", "60")):
         return
@@ -134,6 +135,8 @@ def emit_metrics(orch, tasks: list) -> None:
     if llm:
         values["LlmLatencyP95"] = (llm["p95"], "Milliseconds")
     print(emf_line("Nimbus", {"Service": "nimbus-cloud", "Pack": orch.pack.name}, values, int(time.time() * 1000)), flush=True)
+    if cost is not None:
+        cost.record(cloudwatch_metrics=len(values))     # K: only metrics that were really emitted
     _EMF_STATE["last"], _EMF_STATE["calls"] = time.time(), calls
 
 
@@ -197,8 +200,7 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
             output_tokens=outcome.tokens_out,
             iot_messages=len(outcome.publish),
             dynamodb_ops=len(outcome.rows) + 2,
-            fargate_gbs=round(fargate_slice_s * 1.0, 4),
-            cloudwatch_metrics=1,
+
         )
     # Planning can call the model (seconds): never while holding the lock that every check-in and heartbeat needs.
     for child, spec in spawned:
@@ -208,7 +210,7 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
             apply_outcome(orch, store, cost, publish, queued, out)
 
 
-EDGE_PATHS = ("/checkins", "/escalations", "/fleet/heartbeat", "/outbox", "/relay/decide")
+EDGE_PATHS = ("/checkins", "/escalations", "/fleet/heartbeat", "/outbox", "/relay/decide", "/results/upload-url")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -236,13 +238,15 @@ class Handler(BaseHTTPRequestHandler):
         # G: one API Gateway request; D: response bytes crossing the wire.
         self.cost.record(apigw_requests=1, data_transfer_bytes=len(data))
 
+    MAX_BODY_BYTES = 1_000_000
+
     def _read_json(self) -> dict:
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except (ValueError, TypeError):
-            raise ValueError("invalid Content-Length header")
-        if length > MAX_CONTENT_LENGTH:
-            raise ValueError(f"request body exceeds limit of {MAX_CONTENT_LENGTH} bytes")
+            raise ValueError("Content-Length is not a number")
+        if length < 0 or length > self.MAX_BODY_BYTES:
+            raise ValueError(f"request body exceeds limit of {self.MAX_BODY_BYTES} bytes")
         if length == 0:
             return {}
         try:
@@ -441,8 +445,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, snap)
         elif path == "/trace":
             q = parse_qs(urlparse(self.path).query)
-            self._send_json(200, {"events": self.orch.trace.events(after=int((q.get("after") or ["0"])[0]),
-                                                                   limit=int((q.get("limit") or ["200"])[0]))})
+            try:
+                after, limit = int((q.get("after") or ["0"])[0]), int((q.get("limit") or ["200"])[0])
+            except ValueError:
+                self._send_json(400, {"error": "after and limit must be whole numbers"})
+                return
+            self._send_json(200, {"events": self.orch.trace.events(after=after, limit=limit)})
         elif path == "/cost":
             self._send_json(
                 200,
@@ -454,6 +462,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/fleet":
             self._send_json(200, {"fleet": self.orch.fleet.snapshot(), "places": self.orch.fleet.place_snapshot(),
                                   "mode": self.orch.mode,
+                                  "scheduler": getattr(self.orch.scheduler, "kind", "edf"),
                                   "llm": getattr(self.orch.llm, "model_id", "?"), "pack": self.orch.pack.id})
         elif path == "/notifications":
             q = parse_qs(urlparse(self.path).query)
@@ -571,6 +580,17 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, schema)
 
     def do_POST(self):
+        self._reserved: list[str] = []
+        try:
+            self._do_post()
+        finally:
+            with _STATE_LOCK:
+                for message_id in self._reserved:
+                    _IN_FLIGHT_MESSAGES.pop(message_id, None)
+                    if hasattr(self.store, "release_message_id"):
+                        self.store.release_message_id(message_id)
+
+    def _do_post(self):
         path = urlparse(self.path).path
         if not self._is_authorized(path, "POST"):
             return
@@ -616,6 +636,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(201, {"reopened": node})
         elif path == "/relay/decide":
             self._post_relay_decide(body)
+        elif path == "/results/upload-url":
+            self._post_upload_url(body)
         elif path.startswith("/tasks/") and path.endswith("/control"):
             self._post_control(path.split("/")[2], body)
         elif path == "/fault":
@@ -633,6 +655,11 @@ class Handler(BaseHTTPRequestHandler):
         """FR-8 shape: a repeated message_id is acknowledged, not acted on.
         Deduplication race fix (H1): In-flight reservation prevents concurrent
         duplicate requests from creating multiple tasks.
+
+        The id is *reserved* while the message is processed (processing can take seconds when the model is called),
+        so a second delivery of the same id arriving meanwhile is acknowledged as a duplicate instead of racing the
+        first. The caller records the id once the message is accepted; the reservation is released when the request
+        ends (do_POST), so a delivery that fails validation never burns its id and an honest retry still goes through.
         """
         with _STATE_LOCK:
             message_id = body.get("message_id")
@@ -646,10 +673,12 @@ class Handler(BaseHTTPRequestHandler):
             expired = [mid for mid, ts in _IN_FLIGHT_MESSAGES.items() if now - ts > _IN_FLIGHT_TIMEOUT]
             for mid in expired:
                 _IN_FLIGHT_MESSAGES.pop(mid, None)
-            if message_id in _IN_FLIGHT_MESSAGES:
+            if message_id in _IN_FLIGHT_MESSAGES or (hasattr(self.store, "reserve_message_id") and not self.store.reserve_message_id(message_id)):
                 self._send_json(409, {"error": "message_id is in-flight", "duplicate": True})
                 return True, message_id
             _IN_FLIGHT_MESSAGES[message_id] = now
+            if hasattr(self, "_reserved"):
+                self._reserved.append(message_id)
             return False, message_id
 
     def _post_request(self, body: dict):
@@ -843,6 +872,46 @@ class Handler(BaseHTTPRequestHandler):
             with _STATE_LOCK:
                 _IN_FLIGHT_MESSAGES.pop(message_id, None)
 
+    def _post_upload_url(self, body: dict):
+        """FR-10: where the edge sends a result file before it reports OUTPUT_READY (a presigned S3 PUT, or this
+        server's own upload route when running locally). The task must exist; names are plain file names."""
+        task_id, name = body.get("task_id"), body.get("name")
+        if not isinstance(task_id, str) or self.store.get_task(task_id) is None:
+            self._send_json(404, {"error": f"unknown task {task_id}"})
+            return
+        ctype = body.get("content_type") if isinstance(body.get("content_type"), str) else "application/octet-stream"
+        target = self.orch.results.presign_put(task_id, name, ctype)
+        if target is None:
+            self._send_json(400, {"error": "name must be a plain file name (letters, digits, . _ -)"})
+            return
+        self._send_json(201, target)
+
+    def do_PUT(self):
+        """Local-mode receiver for result files (the cloud deployment uses presigned S3 URLs instead)."""
+        path = urlparse(self.path).path
+        parts = path.split("/")      # ['', 'results', 'upload', <task_id>, <name>]
+        if len(parts) != 5 or parts[1:3] != ["results", "upload"]:
+            self._send_json(404, {"error": f"no route for {path}"})
+            return
+        if not self._edge_authorised("/results/upload-url"):
+            return
+        task_id, name = parts[3], parts[4]
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = -1
+        if length < 0 or length > MAX_UPLOAD_BYTES:
+            self._send_json(413, {"error": "file too large"})
+            return
+        if self.store.get_task(task_id) is None:
+            self._send_json(404, {"error": f"unknown task {task_id}"})
+            return
+        ref = self.orch.results.save_upload(task_id, name, self.rfile.read(length))
+        if ref is None:
+            self._send_json(400, {"error": "upload refused"})
+            return
+        self._send_json(201, {"ref": ref})
+
     def _relay_edge_answer(self, task: dict, text: str, message_id: str) -> None:
         """P3: the requester answered a question the edge asked. Log it, tell the cluster, resume the task."""
         lease = task.get("lease") or {}
@@ -931,7 +1000,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.store.append_decision(self._row(r["who"], r["inputs"], r["output"], r["lease_version"], task_id))
             self.store.see_message_id(message_id)
             self.cost.record(llm_calls=res["calls"], input_tokens=res["tokens_in"], output_tokens=res["tokens_out"],
-                             iot_messages=2, dynamodb_ops=len(res["rows"]), fargate_gbs=0.001, cloudwatch_metrics=1)
+                             iot_messages=2, dynamodb_ops=len(res["rows"]))
         self._send_json(201, {"duplicate": False, **res["decision"]})
 
     def _post_stock(self, body: dict):
@@ -1340,15 +1409,30 @@ def process_escalation(
         if body["lease_version"] < current:
             return 409, {"error": "outdated lease_version", "current": current}
 
-        # Idempotent OUTPUT_READY: if task is already completed, return immediately without re-triggering finish/summary
-        if esc_type == "OUTPUT_READY" and task["status"] == "completed":
+        if esc_type == "OUTPUT_READY" and (task["status"] == "completed"
+                                           or body["payload"]["result_ref"] in task.get("leg_results", [])):
+            # The same result again under a fresh message id (an edge replaying after a restart): acknowledge it, run
+            # none of the completion side effects twice (no second summary, notice, archive upload or leg advance).
+            store.see_message_id(message_id)
             return 200, {
+                "duplicate": True,
+                "already_completed": task["status"] == "completed",
                 "status": "already_completed",
                 "task_id": task_id,
                 "result_ref": task.get("result_ref"),
-                "duplicate": True,
             }
 
+        # Log row first, then the state it explains (FR-20 replay order).
+        store.append_decision(
+            make_decision_row(
+                orch,
+                "edge",
+                dict(body["payload"]),
+                {"event": esc_type},
+                body["lease_version"],
+                task_id,
+            )
+        )
         next_leg = esc_type == "OUTPUT_READY" and task["status"] != "cancelled" and orch.has_next_leg(task)
         if next_leg:
             task.setdefault("leg_results", []).append(body["payload"]["result_ref"])
@@ -1360,22 +1444,13 @@ def process_escalation(
             store.put_task(task)
 
         store.see_message_id(message_id)  # accepted: record for FR-8 dedup
-        store.append_decision(
-            make_decision_row(
-                orch,
-                "edge",
-                dict(body["payload"]),
-                {"event": esc_type},
-                body["lease_version"],
-                task_id,
-            )
-        )
 
         cost_map = {"sqs_messages": 1, "dynamodb_ops": 1}
         if esc_type == "OUTPUT_READY":
             cost_map["s3_ops"] = 1
         cost.record(**cost_map)
-        reacts = esc_type in ("UNEXPECTED_EVENT", "CLARIFY") and bool(task.get("lease"))
+        reacts = (esc_type in ("UNEXPECTED_EVENT", "CLARIFY") and bool(task.get("lease"))
+                  and task["status"] not in TERMINAL_STATUSES)     # nothing to re-plan once a task is over
         finished = esc_type == "OUTPUT_READY" and not next_leg and task["status"] == "completed"
 
     # What follows can call the model (seconds), so it runs without the lock that check-ins and heartbeats need.
@@ -1492,14 +1567,17 @@ def process_checkin(
 
         digest = {k: body[k] for k in ("robots", "stock") if k in body}
         orch.fleet.heartbeat(body["cluster_id"], digest)  # alive, whatever the lease says
-        try:
-            renewed = orch.renew(task_id, body["lease_version"])
-        except StaleVersion as exc:
-            return 409, {"error": "outdated lease_version", "current": exc.current}
+        if live and body["lease_version"] < live["version"]:
+            return 409, {"error": "outdated lease_version", "current": live["version"]}
 
+        # Log row first, then the renewal it causes (FR-20 replay order: a cause never appears after its effect).
         store.see_message_id(message_id)  # accepted: record for FR-8 dedup
         store.append_decision(row)
         cost.record(sqs_messages=1, dynamodb_ops=1)  # queue delivery + log row
+        try:
+            renewed = orch.renew(task_id, body["lease_version"])
+        except StaleVersion as exc:      # the lease moved on between the check above and the renewal
+            return 409, {"error": "outdated lease_version", "current": exc.current}
         reply = {"duplicate": False, "accepted": True}
         if renewed:
             task = store.get_task(task_id)
@@ -1613,11 +1691,18 @@ def make_server(host: str, port: int, data_dir: Path) -> NimbusServer:
     server_inst.orch = orch
     server_inst.data_dir = data_dir
 
+    meter = {"last": time.monotonic()}
+    task_gb = float(os.environ.get("NIMBUS_FARGATE_GB", "1"))   # the task definition's memory (infra/terraform/main.tf)
+
     def tick_once():
         """One pass of the time-driven work (cloud/ticker.py): expiries, deadlines, silent clusters, queue."""
+        mono = time.monotonic()
+        # F: GB-seconds the container really ran since the last pass (not a constant added per decision).
+        cost.record(fargate_gbs=(mono - meter["last"]) * task_gb)
+        meter["last"] = mono
         tasks = store.all_tasks()
         res = orch.ticker.tick(tasks)                      # may plan (model calls): outside the lock
-        emit_metrics(orch, tasks)
+        emit_metrics(orch, tasks, cost)
         for task, outcome in res.apply:
             apply_fn(task, outcome)
         with _STATE_LOCK:

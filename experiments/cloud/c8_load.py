@@ -14,8 +14,8 @@ Queueing model: service time S = mean decision time at N = 1; for the closed loo
 R(N) = max(S, N S / c) is fitted for c (effective parallel servers); for the open loop the M/M/c (Erlang C)
 mean response with that S and c is drawn over the measured points.
 
-This needs the deployed infrastructure (API Gateway, the container service, Bedrock):
-    python experiments/cloud/c8_load.py --target deployed
+By default it runs against a local server with real Bedrock (--target local-bedrock). The shared deployment is only
+used when asked for (--target deployed with NIMBUS_CLOUD_URL set), and only when no edge is connected to it.
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ def erlang_c_response(lam, s, c):
 
 
 def main(argv=None) -> int:
-    ap = lib.common_args(argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter), "deployed")
+    ap = lib.common_args(argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter), "local-bedrock")
     ap.add_argument("--levels", type=int, nargs="+", default=[1, 2, 4, 8, 16, 32, 64])
     ap.add_argument("--per-level", type=int, default=100)
     ap.add_argument("--rates", type=float, nargs="+", default=[0.5, 1, 2, 4])

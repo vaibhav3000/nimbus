@@ -339,6 +339,23 @@ be added. They can reuse `ResultDir` from `experiments/cloud/lib.py` so their fo
 
 ---
 
+### Changes from the team review (cloud side)
+
+- A message id is reserved while its request is processed (`Store.reserve_message_id`), so parallel deliveries of one
+  id make one task. The reservation is released when the request ends; a failed delivery does not burn its id.
+- A repeated `OUTPUT_READY` (new message id, same result) is acknowledged without running completion again.
+  Events for a finished task are logged but not re-planned.
+- A check-in is logged before the renewal it causes; a stale check-in is rejected before it is logged.
+- The scheduler promotes a task whose deadline has passed to the most urgent class (earliest deadline first), so
+  routine work cannot wait for ever behind new urgent work.
+- Cost counters: Fargate time is metered from the clock in the tick loop (`NIMBUS_FARGATE_GB`, default 1), not as a
+  constant per decision; the CloudWatch metric count only grows when metrics are emitted.
+- `POST /results/upload-url` and `PUT /results/upload/<task>/<name>` (local) / presigned S3 PUT (cloud) for result files.
+- `contracts/notice.schema.json` and the `notice` topic are documented in `contracts/topics.md`.
+- SQS: receive with a 120 s visibility timeout, bounded client timeouts; `infra/terraform/cloud.tf` adds a dead-letter
+  queue (5 receives) and the `dynamodb:TransactWriteItems` permission the lease transactions need.
+- `GET /trace` with a bad number answers 400; request bodies are limited to 1 MB.
+
 ## 12. How to extend
 
 | Goal | Where to change |
@@ -355,7 +372,7 @@ be added. They can reuse `ResultDir` from `experiments/cloud/lib.py` so their fo
 
 ## Known issues
 
-- **15 failing tests on this branch.** They came in with the latest merge from `main` (navigation and map changes).
+- **19 failing tests on this branch.** They came in with the latest merges from `main` (navigation, map and topology changes).
   The robot map dropped the corridor that ran through a wall into ward 3. This was correct for the robots, but ward
   3 (`south_room_approach`) is now unreachable in the robot map and in the `hospital_sim` pack, while
   `hospital_sim6/topology.json` still has the edge. The ward needs a route through its real doorway in
@@ -365,6 +382,17 @@ be added. They can reuse `ResultDir` from `experiments/cloud/lib.py` so their fo
   turn in `ground_robot_sdk/navigation.py`, checked against the occupancy map, would fix it.
 - **C2 relay.** The cloud's `POST /relay/decide` exists and the C9 experiment drives it, but the edge supervisor in
   C2 mode still forwards events as `UNEXPECTED_EVENT` instead of calling it per step.
-- **Deployed experiments.** The deployment is shared. Experiments default to a local cloud. C8 (load) needs the
-  deployment, and refuses to start while real edges are connected. An interrupted C8 run on 6 Nov left queued test
-  tasks; `experiments/cloud/cleanup_deployed_c8.py` cancels exactly those.
+- **Deployed experiments.** The deployment is shared. Experiments default to a local cloud and never contain the
+  deployment's address: to use it, set `NIMBUS_CLOUD_URL` (or pass `--target <url>`). The harness refuses to start
+  while real edges are connected. An interrupted C8 run on 6 Nov left queued test tasks;
+  `experiments/cloud/cleanup_deployed_c8.py` cancels exactly those.
+- **Not yet protected: the requester and operator routes.** Only the edge routes (`EDGE_PATHS`) check a token.
+  `POST /requests`, `/tasks/<id>/control`, `/map/reopen`, `/inventory/*` and `/reset-memory` rely on the API Gateway
+  in front of the service, and `static/operator.js` calls the last two directly. Closing this needs a role-based
+  check in `server.py` plus a token in the web apps (infrastructure and web app work).
+- **Task records are shared objects.** `Store.get_task` returns the live dictionary, and the ticker changes tasks
+  outside the state lock. Writes go through `put_task` under the lock, so no lost update has been seen, but a
+  reader can see a task halfway through an edit. Returning copies needs the callers that mutate-then-`put_task` to
+  be changed together.
+- **Result files and the edge.** The cloud now hands out upload targets (`POST /results/upload-url`), but the edge
+  does not call it yet, so a `storage://` result is still only a pointer.

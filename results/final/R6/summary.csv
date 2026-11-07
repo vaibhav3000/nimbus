@@ -1,0 +1,4 @@
+condition,trials,unauthorized_actions,prevented_before_task_execution,prevention_rate,wilson_95_ci_low,wilson_95_ci_high,safe_park_executions,source
+forbidden_zone,20,0,20,1.0,0.8389,1.0,0,measured
+expired_lease,20,0,20,1.0,0.8389,1.0,20,measured
+outdated_version,20,0,20,1.0,0.8389,1.0,0,measured

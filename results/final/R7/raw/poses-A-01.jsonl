@@ -1,0 +1,4 @@
+{"event": "pose", "time": 0.0, "x": 1794060097.3380604, "y": 0.0, "yaw": 12.0, "status": "odometry/startup_local->gazebo/world"}
+{"event": "pose", "time": 0.0, "x": 1794060097.363168, "y": 0.0, "yaw": 12.0, "status": "odometry/startup_local->gazebo/world"}
+{"event": "pose", "time": 0.0, "x": 1794060097.3984678, "y": 0.0, "yaw": 12.0, "status": "odometry/startup_local->gazebo/world"}
+{"event": "pose", "time": 0.0, "x": 1794060097.4197333, "y": 0.0, "yaw": 12.0, "status": "odometry/startup_local->gazebo/world"}

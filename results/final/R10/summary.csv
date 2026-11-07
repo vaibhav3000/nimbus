@@ -1,0 +1,13 @@
+category,condition,number_tested,number_valid,number_correctly_rejected,validation_success_rate,positive_valid,positive_tested,negative_correctly_rejected,negative_tested,min_bytes,median_bytes,p95_bytes,max_bytes,exceeding_2kb,source
+CHECKIN,negative_preflight,1,0,1,1.0,0,0,1,1,203,203.0,203.0,203,0,measured
+CHECKIN,positive,1,1,0,1.0,1,1,0,0,239,239.0,239.0,239,0,measured
+CLARIFY,negative_schema,1,0,1,1.0,0,0,1,1,169,169.0,169.0,169,0,measured
+CLARIFY,positive,1,1,0,1.0,1,1,0,0,238,238.0,238.0,238,0,measured
+ESCALATION,negative_schema,1,0,1,1.0,0,0,1,1,193,193.0,193.0,193,0,measured
+LEASE,negative_schema,1,0,1,1.0,0,0,1,1,518,518.0,518.0,518,0,measured
+LEASE,positive,1,1,0,1.0,1,1,0,0,538,538.0,538.0,538,0,measured
+OUTPUT_READY,negative_schema,1,0,1,1.0,0,0,1,1,181,181.0,181.0,181,0,measured
+OUTPUT_READY,oversized_envelope,1,1,0,1.0,1,1,0,0,2342,2342.0,2342.0,2342,1,measured
+OUTPUT_READY,positive,1,1,0,1.0,1,1,0,0,191,191.0,191.0,191,0,measured
+UNEXPECTED_EVENT,positive,1,1,0,1.0,1,1,0,0,335,335.0,335.0,335,0,measured
+OUTPUT_READY_ARTIFACT,observed_artifacts,0,0,0,n/a,n/a,n/a,n/a,n/a,n/a,n/a,n/a,n/a,n/a,measured
