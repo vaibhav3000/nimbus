@@ -7,22 +7,17 @@
     [
       "lift_lobby",
       "north_hall",
-      6.0
+      5.8
     ],
     [
       "north_hall",
       "west_north_gate",
-      4.92
+      5.02
     ],
     [
       "north_hall",
       "east_north_gate",
-      4.92
-    ],
-    [
-      "north_hall",
-      "nurse_station_approach",
-      7.0
+      4.83
     ],
     [
       "west_north_gate",
@@ -47,12 +42,12 @@
     [
       "west_mid_hall",
       "nurse_station_approach",
-      4.92
+      5.02
     ],
     [
       "east_mid_hall",
       "nurse_station_approach",
-      4.92
+      4.83
     ],
     [
       "west_mid_hall",
@@ -72,7 +67,7 @@
     [
       "west_south_hall_corner",
       "south_equipment_approach",
-      4.5
+      4.6
     ],
     [
       "east_south_hall",
@@ -82,7 +77,7 @@
     [
       "east_south_hall_corner",
       "south_equipment_approach",
-      4.5
+      4.4
     ]
   ],
   "nodes": {
@@ -91,7 +86,7 @@
       "kind": "corridor",
       "pos": [
         4.5,
-        3.0
+        3.1
       ],
       "speed_cap": 1.0,
       "wing": "east"
@@ -102,7 +97,7 @@
       "kind": "gate",
       "pos": [
         4.5,
-        14.0
+        14.1
       ],
       "reservation_id": "gate:east_north_gate",
       "speed_cap": 1.0,
@@ -113,7 +108,7 @@
       "kind": "corridor",
       "pos": [
         4.5,
-        -8.0
+        -7.9
       ],
       "speed_cap": 1.0,
       "wing": "east"
@@ -123,7 +118,7 @@
       "kind": "corridor",
       "pos": [
         4.5,
-        -15.0
+        -14.9
       ],
       "speed_cap": 1.0,
       "wing": "east"
@@ -141,7 +136,7 @@
       "paediatric": true,
       "pos": [
         4.5,
-        8.0
+        8.1
       ],
       "speed_cap": 1.0,
       "wing": "east"
@@ -151,8 +146,8 @@
       "exclusive": true,
       "kind": "gate",
       "pos": [
-        0.0,
-        18.0
+        0.1,
+        17.9
       ],
       "reservation_id": "gate:lift_lobby",
       "speed_cap": 1.0,
@@ -162,8 +157,8 @@
       "area": "shared",
       "kind": "corridor",
       "pos": [
-        0.0,
-        12.0
+        0.1,
+        12.1
       ],
       "speed_cap": 1.0,
       "wing": "shared"
@@ -176,8 +171,8 @@
       "area": "shared",
       "kind": "corridor",
       "pos": [
-        0.0,
-        5.0
+        0.1,
+        5.1
       ],
       "speed_cap": 1.0,
       "wing": "shared"
@@ -191,8 +186,8 @@
       "kind": "store",
       "label": "equipment store",
       "pos": [
-        0.0,
-        -14.5
+        0.1,
+        -14.9
       ],
       "speed_cap": 1.0,
       "wing": "shared"
@@ -208,8 +203,8 @@
       "kind": "ward",
       "label": "ward 3",
       "pos": [
-        0.0,
-        -28.0
+        0.1,
+        -27.9
       ],
       "speed_cap": 1.0,
       "wing": "shared"
@@ -219,7 +214,7 @@
       "kind": "corridor",
       "pos": [
         -4.5,
-        3.0
+        3.1
       ],
       "speed_cap": 1.0,
       "wing": "west"
@@ -230,7 +225,7 @@
       "kind": "gate",
       "pos": [
         -4.5,
-        14.0
+        14.1
       ],
       "reservation_id": "gate:west_north_gate",
       "speed_cap": 1.0,
@@ -241,7 +236,7 @@
       "kind": "corridor",
       "pos": [
         -4.5,
-        -8.0
+        -7.9
       ],
       "speed_cap": 1.0,
       "wing": "west"
@@ -251,7 +246,7 @@
       "kind": "corridor",
       "pos": [
         -4.5,
-        -15.0
+        -14.9
       ],
       "speed_cap": 1.0,
       "wing": "west"
@@ -268,7 +263,7 @@
       "label": "ward 2C",
       "pos": [
         -4.5,
-        8.0
+        8.1
       ],
       "speed_cap": 1.0,
       "wing": "west"

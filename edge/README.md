@@ -73,15 +73,21 @@ labelled as simulated and is never physical verification. For live Gazebo use:
 
 ```bash
 python3 edge/run_supervisor.py --cluster east-wing --system-mode C1 \
-  --robot-backend sim --gazebo-validation ground_truth
+  --robot-backend sim --sim-mode gazebo --pose-source gazebo
 ```
+
+`--pose-source gazebo` makes Gazebo's authoritative model pose the single
+source for localization, A* tracking/replanning, geofence position checks,
+progress, and arrival detection. It fails closed if that stream is stale or
+missing; it never falls back to odometry. `odometry` is the real-robot default.
+`controller` is accepted as an alias for `odometry`, because the controller
+does not maintain an independent localization source.
 
 `sim` has no automatic mock fallback. Startup prints each robot's
 `INITIALIZING`, `READY`, `DEGRADED`, or `DISCONNECTED` state. Navigation is
-accepted only while odometry and the obstacle scan are fresh; ground truth is
-also required when `--gazebo-validation ground_truth` is selected. A missing
-required stream stops motion and produces a detailed failure rather than task
-completion.
+accepted only while the selected pose stream and obstacle scan are fresh;
+Gazebo pose is required for `--pose-source gazebo`. A missing required stream
+stops motion and produces a detailed failure rather than task completion.
 Modes: `--system-mode C1` (Edge SLM, default), `C2` (Cloud-Only Relay Baseline), or `C3` (Deterministic Rules Baseline).
 By default, the daemon streams detailed real-time execution steps for each ingested lease (use `--quiet` to suppress step traces). Use `--once` for a single poll pass.
 

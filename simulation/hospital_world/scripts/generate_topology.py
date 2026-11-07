@@ -33,28 +33,29 @@ NODES = {
 
 # x, y world coordinates; all node positions are in accessible circulation area.
 WAYPOINTS = {
-    "lift_lobby": [0.0, 18.0],
-    "north_hall": [0.0, 12.0],
-    "west_north_gate": [-4.5, 14.0],
-    "east_north_gate": [4.5, 14.0],
-    "west_waiting_approach": [-4.5, 8.0],
-    "east_waiting_approach": [4.5, 8.0],
-    "west_mid_hall": [-4.5, 3.0],
-    "east_mid_hall": [4.5, 3.0],
-    "nurse_station_approach": [0.0, 5.0],
-    "west_south_hall": [-4.5, -8.0],
-    "east_south_hall": [4.5, -8.0],
-    "south_equipment_approach": [0.0, -15.0],
-    "south_room_approach": [0.0, -28.0],
-    "east_south_hall_corner": [4.5, -15.0],
-    "west_south_hall_corner": [-4.5, -15.0],
+    # Snapped to 0.20 m SDF collision-grid cell centres with >=0.45 m static
+    # clearance.  These are Gazebo-world coordinates, not visual estimates.
+    "lift_lobby": [0.1, 17.9],
+    "north_hall": [0.1, 12.1],
+    "west_north_gate": [-4.5, 14.1],
+    "east_north_gate": [4.5, 14.1],
+    "west_waiting_approach": [-4.5, 8.1],
+    "east_waiting_approach": [4.5, 8.1],
+    "west_mid_hall": [-4.5, 3.1],
+    "east_mid_hall": [4.5, 3.1],
+    "nurse_station_approach": [0.1, 5.1],
+    "west_south_hall": [-4.5, -7.9],
+    "east_south_hall": [4.5, -7.9],
+    "south_equipment_approach": [0.1, -14.9],
+    "south_room_approach": [0.1, -27.9],
+    "east_south_hall_corner": [4.5, -14.9],
+    "west_south_hall_corner": [-4.5, -14.9],
 }
 
 EDGE_PAIRS = (
     ("lift_lobby", "north_hall"),
     ("north_hall", "west_north_gate"),
     ("north_hall", "east_north_gate"),
-    ("north_hall", "nurse_station_approach"),
     ("west_north_gate", "west_waiting_approach"),
     ("east_north_gate", "east_waiting_approach"),
     ("west_waiting_approach", "west_mid_hall"),

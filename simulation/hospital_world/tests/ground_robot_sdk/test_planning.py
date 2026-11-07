@@ -149,6 +149,46 @@ def test_navigation_rejects_goal_outside_costmap_without_motion():
         runtime.close()
 
 
+def test_navigation_uses_a_map_checked_forward_uturn_for_a_goal_behind_it():
+    adapter=MockAdapter()
+    runtime=RobotRuntime(
+        adapter,
+        safety_config=SafetyConfig(True,.25),
+        navigation_config=NavigationConfig(
+            enable_path_planning=True,enable_dynamic_avoidance=True,
+            require_obstacle_feedback=True,obstacle_timeout=.3,
+            control_period=.01,uturn_speed=.12,
+        ),
+    ).start()
+    runtime.navigation.configure_costmap(OccupancyGrid(60,60,.1,-3.,-3.))
+    try:
+        now=time.time()
+        adapter.set_odometry(Odometry(Pose2D(),timestamp=now))
+        adapter.set_range_scan(RangeScan((2.,2.,2.),2.,2.,now,-.1,.1,.02,4.))
+        task=runtime.commands.goto(-1.,0.,speed=.2)
+        time.sleep(.06)
+        result=runtime.commands.status(task.command_id)
+        assert result.status == CommandStatus.RUNNING
+        assert result.details["map_checked_uturns"] == 1
+        assert adapter.last_command.linear > 0
+        assert abs(adapter.last_command.angular) > 0
+    finally:
+        runtime.close()
+
+
+def test_navigation_prefers_a_forward_first_astar_detour_before_a_uturn():
+    adapter=MockAdapter()
+    runtime=RobotRuntime(adapter,navigation_config=NavigationConfig(enable_path_planning=True)).start()
+    runtime.navigation.configure_costmap(OccupancyGrid(100,100,.1,-5.,-5.))
+    try:
+        pose=Pose2D()
+        assert runtime.navigation._replan_forward_first(pose,Pose2D(-2.,0.),time.monotonic())
+        first=runtime.navigation.path[1]
+        assert first[0] >= -.05
+    finally:
+        runtime.close()
+
+
 def test_closed_loop_replans_and_drives_around_static_obstacle():
     adapter=MockAdapter()
     runtime=RobotRuntime(

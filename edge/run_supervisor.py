@@ -43,6 +43,7 @@ def main():
     parser.add_argument("--waypoints", default=None, help="Path to custom topology_waypoints.json")
     parser.add_argument("--robot-backend", choices=["mock", "sim"], default="mock", help="Robot backend: mock (in-memory) or sim (Person 1 ground_robot_sdk/Gazebo)")
     parser.add_argument("--gazebo-validation",choices=["odometry","ground_truth"],default="odometry",help="Final-arrival validation source for the sim backend")
+    parser.add_argument("--pose-source", choices=["gazebo", "odometry", "controller"], default=os.environ.get("NIMBUS_POSE_SOURCE"), help="Active navigation pose source; Gazebo is the live-simulation default, while controller aliases odometry")
     parser.add_argument("--sim-mode", choices=["auto", "gazebo", "kinematic"], default="auto", help="sim backend only: gazebo (live ROS 2 + Gazebo, fails closed), kinematic (P1's SDK kinematic stand-in, no Gazebo), auto (gazebo if rclpy importable, else kinematic)")
     parser.add_argument("--system-mode", choices=["C1", "C2", "C3"], default="C1", help="System mode: C1 (Edge SLM), C2 (Cloud-Only Relay), C3 (Deterministic Rules)")
     parser.add_argument("--slm-mode", choices=["auto", "ollama", "llama_cpp", "mock", "rules_only"], default=os.environ.get("NIMBUS_SLM_MODE", "auto"), help="Tactical decision engine. Use ollama for a real local model; auto may fall back to mock.")
@@ -67,6 +68,7 @@ def main():
         verbose=verbose_mode,
         robot_backend=args.robot_backend,
         gazebo_validation=args.gazebo_validation,
+        pose_source=args.pose_source,
         system_mode=args.system_mode,
         token=token,
         sim_mode=args.sim_mode,
@@ -78,6 +80,7 @@ def main():
     print(f"  Cluster ID       : {args.cluster}")
     print(f"  Robot Backend    : {args.robot_backend.upper()} ({'SDK sim, mode=' + args.sim_mode if args.robot_backend == 'sim' else 'SIMULATED IN-MEMORY; not physical verification'})")
     if args.robot_backend == "sim":
+        print(f"  Navigation Pose   : {supervisor.pose_source}")
         print(f"  Arrival Validation: {args.gazebo_validation}")
         states={rid:getattr(robot,"connection_state","UNKNOWN") for rid,robot in supervisor.robots.items()}
         print(f"  Gazebo Readiness : {states}")

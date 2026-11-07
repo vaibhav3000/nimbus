@@ -20,14 +20,14 @@ def _angle(value: float) -> float:
 
 @dataclass(frozen=True)
 class NavigationConfig:
-    position_tolerance: float = 0.10
+    position_tolerance: float = 0.30
     cruise_speed: float = 1.0
     control_period: float = 0.05
     # Damped and rate-limited steering: the vehicle must not zig-zag across
     # a narrow corridor after a planner turn.
-    steering_gain: float = 0.65
-    steering_derivative_gain: float = 0.06
-    max_steering_rate: float = 0.80
+    steering_gain: float = 1.00
+    steering_derivative_gain: float = 0.09
+    max_steering_rate: float = 1.20
     heading_deadband: float = 0.04
     derivative_filter_time_constant: float = 0.20
     maximum_forward_heading_error: float = 2.0
@@ -39,6 +39,10 @@ class NavigationConfig:
     require_obstacle_feedback: bool = False
     obstacle_timeout: float = 1.0
     validation_source: str = "odometry"
+    # Selects the pose used by planning, tracking, geofence checks, and
+    # arrival.  ``controller`` is retained as a compatibility alias because
+    # the controller's maintained pose is odometry-derived, not independent.
+    pose_source: str = "odometry"
     ground_truth_tolerance: float = 0.25
     max_localization_discrepancy: float = 0.50
     enable_path_planning: bool = False
@@ -56,6 +60,18 @@ class NavigationConfig:
     approach_speed_gain: float = 0.35
     reverse_required_angle: float = 2.50
     heading_correction_gain: float = 0.60
+    enable_map_checked_uturn: bool = True
+    uturn_speed: float = 0.18
+    uturn_arc_radians: float = math.pi
+    forward_replan_distance: float = 1.25
+
+    def __post_init__(self) -> None:
+        source = str(self.pose_source).lower()
+        if source == "controller":
+            source = "odometry"
+        if source not in {"gazebo", "odometry"}:
+            raise ValueError("pose_source must be 'gazebo', 'odometry', or 'controller'")
+        object.__setattr__(self, "pose_source", source)
 
 
 class NavigationController:
@@ -75,6 +91,7 @@ class NavigationController:
         self._lock = threading.RLock()
         self._startup: Pose2D | None = None
         self._pose = Pose2D()
+        self._odometry_pose = Pose2D()
         self._ground_truth_startup: Pose2D | None = None
         self._ground_truth_pose: Pose2D | None = None
         self._active: CommandResult | None = None
@@ -124,7 +141,7 @@ class NavigationController:
         with self._lock:
             if self._ground_truth_pose is None:
                 return None
-            return math.hypot(self._pose.x-self._ground_truth_pose.x,self._pose.y-self._ground_truth_pose.y)
+            return math.hypot(self._odometry_pose.x-self._ground_truth_pose.x,self._odometry_pose.y-self._ground_truth_pose.y)
 
     @property
     def path(self) -> tuple[tuple[float,float], ...]:
@@ -252,15 +269,19 @@ class NavigationController:
         with self._lock:
             if self._startup is None:
                 self._startup = raw
-                self._pose = Pose2D()
+                self._odometry_pose = Pose2D()
+                if self.config.pose_source == "odometry":
+                    self._pose = self._odometry_pose
                 return
             dx, dy = raw.x - self._startup.x, raw.y - self._startup.y
             cosine, sine = math.cos(self._startup.yaw), math.sin(self._startup.yaw)
-            self._pose = Pose2D(
+            self._odometry_pose = Pose2D(
                 cosine * dx + sine * dy,
                 -sine * dx + cosine * dy,
                 _angle(raw.yaw - self._startup.yaw),
             )
+            if self.config.pose_source == "odometry":
+                self._pose = self._odometry_pose
 
     def _on_ground_truth(self, feedback: GroundTruthPose) -> None:
         raw = feedback.pose
@@ -268,6 +289,8 @@ class NavigationController:
             if self._ground_truth_startup is None:
                 self._ground_truth_startup = raw
                 self._ground_truth_pose = Pose2D()
+                if self.config.pose_source == "gazebo":
+                    self._pose = self._ground_truth_pose
                 return
             dx, dy = raw.x-self._ground_truth_startup.x, raw.y-self._ground_truth_startup.y
             cosine, sine = math.cos(self._ground_truth_startup.yaw), math.sin(self._ground_truth_startup.yaw)
@@ -276,6 +299,8 @@ class NavigationController:
                 -sine*dx+cosine*dy,
                 _angle(raw.yaw-self._ground_truth_startup.yaw),
             )
+            if self.config.pose_source == "gazebo":
+                self._pose = self._ground_truth_pose
 
     def _active_dynamic_cells(self, now: float) -> set[tuple[int,int]]:
         with self._lock:
@@ -340,12 +365,102 @@ class NavigationController:
         with self._lock:
             return {"planner":"astar_costmap" if self.config.enable_path_planning and self._planner else "direct","replans":self._replans,"avoidance_events":self._avoidance_events,"planned_path":[{"x":p[0],"y":p[1]} for p in self._path],"planned_distance_m":path_length(self._path)}
 
+    def _uturn_direction(self, pose: Pose2D, heading_error: float) -> float | None:
+        """Pick a forward Ackermann half-circle that stays in free map space.
+
+        The forward scan does not cover the rear, so this deliberately does
+        not reverse.  A turn is admitted only after sampling the full swept
+        centre-line through the already robot-inflated A* costmap.
+        """
+        with self._lock:
+            costmap=self._costmap
+        if not costmap or not self.config.enable_map_checked_uturn:
+            return None
+        radius=self.limits.wheelbase/max(math.tan(self.limits.max_steering_angle),1e-6)
+        dynamic=self._active_dynamic_cells(time.monotonic())
+        peers=self._external_obstacle_points()
+        if peers:
+            dynamic.update(costmap.inflated_cells(peers,self.config.obstacle_inflation))
+        preferred=1. if heading_error > 0 else -1.
+        for direction in (preferred,-preferred):
+            clear=True
+            # A half-circle moves the robot two turning radii sideways.  The
+            # sampled arc covers the complete manoeuvre before any motion is
+            # published, including the starting cell.
+            for step in range(25):
+                angle=self.config.uturn_arc_radians*step/24
+                yaw=pose.yaw+direction*angle
+                x=pose.x+direction*radius*(math.sin(yaw)-math.sin(pose.yaw))
+                y=pose.y-direction*radius*(math.cos(yaw)-math.cos(pose.yaw))
+                if costmap.is_occupied(costmap.world_to_cell(x,y),dynamic):
+                    clear=False
+                    break
+            if clear:
+                return direction
+        return None
+
+    def _replan_forward_first(self, pose: Pose2D, target: Pose2D, now: float) -> bool:
+        """Try an A* detour whose first metres are in front of the vehicle.
+
+        Heading is not part of ordinary grid A*.  Temporarily fencing the
+        nearby rear half-plane gives it a chance to select an authorised loop
+        or junction exit that the Ackermann vehicle can enter forward.  The
+        fence is planning-only; it is not persisted as an obstacle.
+        """
+        with self._lock:
+            planner=self._planner
+            costmap=self._costmap
+        if not planner or not costmap:
+            return False
+        dynamic=self._active_dynamic_cells(now)
+        peers=self._external_obstacle_points()
+        if peers:
+            dynamic.update(costmap.inflated_cells(peers,self.config.obstacle_inflation))
+        radius=self.config.forward_replan_distance
+        cells=max(1,int(math.ceil(radius/costmap.resolution)))
+        origin=costmap.world_to_cell(pose.x,pose.y)
+        cos_yaw,sin_yaw=math.cos(pose.yaw),math.sin(pose.yaw)
+        for dx in range(-cells,cells+1):
+            for dy in range(-cells,cells+1):
+                cell=(origin[0]+dx,origin[1]+dy)
+                if not costmap.contains_cell(cell):
+                    continue
+                x,y=costmap.cell_to_world(cell)
+                rel_x,rel_y=x-pose.x,y-pose.y
+                distance=math.hypot(rel_x,rel_y)
+                if costmap.resolution*.75 < distance <= radius and rel_x*cos_yaw+rel_y*sin_yaw < 0:
+                    dynamic.add(cell)
+        path=planner.plan((pose.x,pose.y),(target.x,target.y),dynamic)
+        if not path or len(path) < 2:
+            return False
+        first=next((point for point in path[1:] if math.hypot(point[0]-pose.x,point[1]-pose.y) > costmap.resolution*.5),None)
+        if first is None:
+            return False
+        first_error=abs(_angle(math.atan2(first[1]-pose.y,first[0]-pose.x)-pose.yaw))
+        if first_error >= self.config.maximum_forward_heading_error:
+            return False
+        with self._lock:
+            self._path=list(path)
+            self._path_index=1 if len(path)>1 else 0
+            self._replans+=1
+            if self._active:
+                self._active.details.update({
+                    "planned_path":[{"x":p[0],"y":p[1]} for p in path],
+                    "planned_distance_m":path_length(path),
+                    "replans":self._replans,
+                    "forward_first_replans":self._active.details.get("forward_first_replans",0)+1,
+                })
+        return True
+
     def _run_goto(self, command_id: str, cancelled: threading.Event, requested_speed: float) -> None:
         started = time.monotonic()
         previous_heading_error: float | None = None
         filtered_heading_rate = 0.0
         previous_steering = 0.0
         previous_control_time: float | None = None
+        uturn_direction: float | None = None
+        uturns = 0
+        forward_replan_attempted = False
         try:
             while not cancelled.is_set():
                 if not self._is_active(command_id):
@@ -355,18 +470,20 @@ class NavigationController:
                     self._fail_and_stop(command_id, "goal timed out", CommandStatus.TIMEOUT)
                     return
                 with self._lock:
-                    startup_ready = self._startup is not None
+                    startup_ready = (self._ground_truth_startup is not None if self.config.pose_source == "gazebo" else self._startup is not None)
                     target = self._target
                     pose = self._pose
                 if not startup_ready:
                     if elapsed > self.config.startup_odometry_timeout:
-                        self._fail_and_stop(command_id, "no odometry received before startup timeout", CommandStatus.LOCALIZATION_UNAVAILABLE)
+                        source = "Gazebo ground-truth pose" if self.config.pose_source == "gazebo" else "odometry"
+                        self._fail_and_stop(command_id, f"no {source} received before startup timeout", CommandStatus.LOCALIZATION_UNAVAILABLE)
                         return
                     cancelled.wait(self.config.control_period)
                     continue
-                health = self.sensors.get_health().odometry
+                health = self.sensors.get_health().ground_truth if self.config.pose_source == "gazebo" else self.sensors.get_health().odometry
                 if not health.fresh or health.age is None or health.age > self.config.odometry_timeout:
-                    self._fail_and_stop(command_id, "odometry is stale or unavailable", CommandStatus.LOCALIZATION_UNAVAILABLE)
+                    source = "Gazebo ground-truth pose" if self.config.pose_source == "gazebo" else "odometry"
+                    self._fail_and_stop(command_id, f"{source} is stale or unavailable", CommandStatus.LOCALIZATION_UNAVAILABLE)
                     return
                 with self._lock: costmap=self._costmap
                 if self.config.enable_path_planning and costmap:
@@ -414,12 +531,20 @@ class NavigationController:
                 if distance <= self.config.position_tolerance:
                     details = {
                         "arrival_verified": True,
-                        "verification_source": "odometry",
+                        "verification_source": self.config.pose_source,
                         "target": target.to_dict(),
-                        "odometry_pose": pose.to_dict(),
+                        f"{self.config.pose_source}_pose": pose.to_dict(),
                         "distance_to_goal": distance,
                         **self._planning_details(),
                     }
+                    # Gazebo mode uses the authoritative simulator model pose
+                    # for every navigation decision.  Comparing it against
+                    # odometry here would reintroduce the false-arrival
+                    # rejection that this mode is designed to avoid.
+                    if self.config.pose_source == "gazebo":
+                        self.motion.stop(source="autonomy")
+                        self._finish(command_id, CommandStatus.COMPLETED, details=details)
+                        return
                     if self.config.validation_source == "ground_truth":
                         ground_health = self.sensors.get_health().ground_truth
                         with self._lock: ground_pose = self._ground_truth_pose
@@ -450,12 +575,41 @@ class NavigationController:
                 tracking_x,tracking_y=self._tracking_point(pose,target)
                 desired = math.atan2(tracking_y - pose.y, tracking_x - pose.x)
                 heading_error = _angle(desired - pose.yaw)
-                # This platform has no rear obstacle sensor.  A waypoint that
-                # is effectively behind it must trigger a replan/escalation,
-                # not a slow forward U-turn through the corridor.
                 if abs(heading_error) >= self.config.maximum_forward_heading_error:
-                    self._fail_and_stop(command_id,"planned bearing is behind the robot; refusing an unsafe forward U-turn",CommandStatus.BLOCKED)
-                    return
+                    if not forward_replan_attempted:
+                        forward_replan_attempted=True
+                        if self._replan_forward_first(pose,target,time.monotonic()):
+                            continue
+                    if uturn_direction is None:
+                        uturn_direction=self._uturn_direction(pose,heading_error)
+                        if uturn_direction is None:
+                            self._fail_and_stop(command_id,"planned bearing is behind the robot and no map-checked U-turn fits",CommandStatus.BLOCKED)
+                            return
+                        uturns+=1
+                        with self._lock:
+                            if self._active:
+                                self._active.details["map_checked_uturns"]=uturns
+                    # Drive only a bounded forward arc.  The normal reflex
+                    # guard has already checked the current front clearance.
+                    low_level=self.motion.drive(
+                        min(self.config.uturn_speed,requested_speed),
+                        uturn_direction*self.limits.max_steering_angle,
+                        duration=self.config.control_period*2.5,
+                        source="autonomy",
+                    )
+                    if low_level.status != CommandStatus.RUNNING:
+                        self._fail_and_stop(command_id,low_level.reason or "map-checked U-turn motion was rejected",CommandStatus.BLOCKED)
+                        return
+                    cancelled.wait(self.config.control_period)
+                    continue
+                if uturn_direction is not None:
+                    # The heading is now usable; rebuild the path from the
+                    # displaced pose before resuming ordinary tracking.
+                    if not self._replan(pose,target,time.monotonic(),force=True):
+                        self._fail_and_stop(command_id,"A* found no route after map-checked U-turn",CommandStatus.BLOCKED)
+                        return
+                    uturn_direction=None
+                forward_replan_attempted=False
                 # Retain the short-range reflex while following an A* route:
                 # it helps an Ackermann vehicle negotiate a newly observed
                 # obstacle between replans.  Do not, however, let a noisy

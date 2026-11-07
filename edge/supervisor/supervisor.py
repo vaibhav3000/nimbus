@@ -70,8 +70,8 @@ class EdgeSupervisor:
     ROBOT_START_ZONES = {
         "robot_1": "north_hall",
         "R1": "north_hall",
-        "robot_2": "nurse_station_approach",
-        "R2": "nurse_station_approach",
+        "robot_2": "north_hall",
+        "R2": "north_hall",
         "robot_3": "east_waiting_approach",
         "R3": "east_waiting_approach",
         "robot_4": "west_waiting_approach",
@@ -94,6 +94,7 @@ class EdgeSupervisor:
         verbose: bool = True,
         robot_backend: str = "mock",
         gazebo_validation: str = "odometry",
+        pose_source: Optional[str] = None,
         system_mode: str = "C1",
         token: Optional[str] = None,
         sim_mode: str = "auto",
@@ -118,6 +119,12 @@ class EdgeSupervisor:
         self._local_to_cloud_robot = {local: cloud for cloud, local in self._cloud_to_local_robot.items()}
         self.robot_backend = (robot_backend or "mock").lower()
         self.gazebo_validation = gazebo_validation
+        requested_pose_source = pose_source or os.environ.get("NIMBUS_POSE_SOURCE")
+        if requested_pose_source is None:
+            requested_pose_source = "gazebo" if self.robot_backend in ("sim", "simulator", "gazebo") and self.sim_mode != "kinematic" else "odometry"
+        self.pose_source = "odometry" if str(requested_pose_source).lower() == "controller" else str(requested_pose_source).lower()
+        if self.pose_source not in {"gazebo", "odometry"}:
+            raise ValueError("pose_source must be 'gazebo', 'odometry', or 'controller'")
         self.system_mode = (system_mode or "C1").upper()
         if self.system_mode == "C3":
             slm_mode = "rules_only"
@@ -179,7 +186,7 @@ class EdgeSupervisor:
         if self.cluster_id == "east-wing":
             self.robots: Dict[str, Any] = {
                 "R1": self._create_robot("R1", current_zone="north_hall"),
-                "R2": self._create_robot("R2", current_zone="nurse_station_approach"),
+                "R2": self._create_robot("R2", current_zone="north_hall"),
                 "R3": self._create_robot("R3", current_zone="east_waiting_approach"),
             }
         else:
@@ -234,6 +241,7 @@ class EdgeSupervisor:
                 waypoints=self.waypoints,
                 use_gazebo={"gazebo": True, "kinematic": False}.get(getattr(self, "sim_mode", "auto")),
                 validation_source=self.gazebo_validation,
+                pose_source=self.pose_source,
             ))
         return self._log_robot_commands(MockRobot(
             robot_id=robot_id,

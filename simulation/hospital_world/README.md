@@ -168,6 +168,21 @@ odometry as Gazebo world-frame ground truth.
 
 ## Python SDK
 
+## Static SDF occupancy map
+
+`hospital_static_occupancy.json` is a 0.20 m collision grid generated from
+the static `<collision>` geometry in `hospital.sdf`. Regenerate it after
+editing static world geometry:
+
+```bash
+python3 scripts/generate_occupancy_map.py
+```
+
+To add this layer to the lease-authorized topology costmap in live Gazebo,
+set `NIMBUS_USE_SDF_OCCUPANCY=1` before starting the edge. It is opt-in until
+every topology waypoint has been calibrated against the SDF world frame; the
+layer never permits a path outside the topology/lease mask.
+
 Start Gazebo first, then in another terminal using the same `IGN_PARTITION`:
 
 ```bash
@@ -287,8 +302,8 @@ live in `topology/scenario_locations.json` and map to physical nodes without
 renaming those nodes or inventing bed coordinates.
 
 `robot_1` starts exactly at shared `north_hall` (`[0, 12, 0]`). `robot_2`
-starts on the shared `north_hall`–`nurse_station_approach` edge (`[0, 9.5, 0]`),
-so it intentionally has no arbitrary start node. See
+starts on the shared `north_hall`–`nurse_station_approach` edge (`[0, 10, 0]`)
+and is anchored to its nearest waypoint, `north_hall`, for route planning. See
 [topology/README.md](topology/README.md) for all node, edge, mapping,
 coordinate-conversion, gate, and route-planning details.
 

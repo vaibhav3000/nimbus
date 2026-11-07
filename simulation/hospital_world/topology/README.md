@@ -123,11 +123,12 @@ world.
 | Robot | Namespace | Spawn `[x, y, yaw]` | Physical association | Wing |
 | --- | --- | --- | --- | --- |
 | robot_1 | `/robot_1` | `[0.0, 12.0, 0.0]` | exact `north_hall` waypoint | shared |
-| robot_2 | `/robot_2` | `[0.0, 9.5, 0.0]` | on `north_hall` ↔ `nurse_station_approach` edge | shared |
+| robot_2 | `/robot_2` | `[0.0, 10.0, 0.0]` | on `north_hall` ↔ `nurse_station_approach` edge; route anchor `north_hall` | shared |
 
-`robot_2` deliberately has no `start_node`: its spawn is 2.5 m south of
-`north_hall` on that verified edge. This avoids falsely assigning it to an east
-or west node. Both spawn envelopes are checked by `validate_topology.py`.
+`robot_2` has a physical spawn on that verified edge, but its cloud and Edge
+route anchor is `north_hall`, the nearest topology waypoint (2.10 m away).
+This avoids assigning it to an east or west node while preserving a routable
+initial location. Both spawn envelopes are checked by `validate_topology.py`.
 
 The SDK's `goto(..., frame="world")` uses the startup-local odometry frame,
 not Gazebo's global `world`. For a global world target `(wx, wy)` and configured

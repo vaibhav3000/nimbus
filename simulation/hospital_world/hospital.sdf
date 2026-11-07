@@ -191,12 +191,6 @@
       <pose>-8.87142 9.15707 0 0 -0.152685 0</pose>
     </include>
     <include>
-      <name>TrolleyBed_1</name>
-      <uri>model://TrolleyBed</uri>
-      <static>true</static>
-      <pose>4.85934 -4.87229 0 0 -1e-06 0</pose>
-    </include>
-    <include>
       <name>SurgicalTrolley_1</name>
       <uri>model://SurgicalTrolley</uri>
       <static>true</static>

@@ -14,11 +14,11 @@
     },
     "robot_2": {
       "namespace": "/robot_2",
-      "spawn_pose": [0.0, 9.5, 0.0],
-      "start_node": null,
+      "spawn_pose": [0.0, 10.0, 0.0],
+      "start_node": "north_hall",
       "start_edge": ["north_hall", "nurse_station_approach"],
       "wing": "shared",
-      "association": "on the validated shared corridor edge, 2.5 m south of north_hall (R2, east cluster)"
+      "association": "on the validated shared north_hall--nurse_station_approach corridor edge; anchored to nearest topology node north_hall (2.10 m away) for cloud and edge route planning (R2, east cluster)"
     },
     "robot_3": {
       "namespace": "/robot_3",

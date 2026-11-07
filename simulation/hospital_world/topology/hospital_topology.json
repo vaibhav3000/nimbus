@@ -103,22 +103,17 @@
     [
       "lift_lobby",
       "north_hall",
-      6.0
+      5.8
     ],
     [
       "north_hall",
       "west_north_gate",
-      4.92
+      5.02
     ],
     [
       "north_hall",
       "east_north_gate",
-      4.92
-    ],
-    [
-      "north_hall",
-      "nurse_station_approach",
-      7.0
+      4.83
     ],
     [
       "west_north_gate",
@@ -143,12 +138,12 @@
     [
       "west_mid_hall",
       "nurse_station_approach",
-      4.92
+      5.02
     ],
     [
       "east_mid_hall",
       "nurse_station_approach",
-      4.92
+      4.83
     ],
     [
       "west_mid_hall",
@@ -168,7 +163,7 @@
     [
       "west_south_hall_corner",
       "south_equipment_approach",
-      4.5
+      4.6
     ],
     [
       "east_south_hall",
@@ -178,7 +173,7 @@
     [
       "east_south_hall_corner",
       "south_equipment_approach",
-      4.5
+      4.4
     ]
   ],
   "groups": {

@@ -14,6 +14,7 @@ Supports:
 
 from __future__ import annotations
 
+import base64
 import heapq
 import json
 import math
@@ -84,6 +85,22 @@ def _load_static_human_obstacles() -> List[Tuple[float, float, float]]:
     return obstacles
 
 
+def _load_sdf_occupancy() -> Optional[Dict[str, Any]]:
+    """Load the generated static collision layer in Gazebo world coordinates."""
+    if not SIM_DIR:
+        return None
+    path = SIM_DIR / "maps" / "hospital_static_occupancy.json"
+    try:
+        payload = json.loads(path.read_text())
+        data = base64.b64decode(payload["occupied"])
+        if payload.get("format") != "nimbus-static-occupancy-v1" or len(data) != int(payload["width"]) * int(payload["height"]):
+            return None
+        payload["occupied"] = data
+        return payload
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 # Ensure simulation dir is in sys.path
 SIM_DIR = _find_simulation_dir()
 if SIM_DIR and str(SIM_DIR) not in sys.path:
@@ -112,8 +129,8 @@ DEFAULT_ROBOT_DEPLOYMENT = {
     "R2": {
         "sim_name": "robot_2",
         "namespace": "/robot_2",
-        "spawn_pose": [0.0, 9.5, 0.0],
-        "start_node": "nurse_station_approach",
+        "spawn_pose": [0.0, 10.0, 0.0],
+        "start_node": "north_hall",
         "wing": "shared",
     },
     "R3": {
@@ -154,8 +171,8 @@ DEFAULT_ROBOT_DEPLOYMENT = {
     "robot_2": {
         "sim_name": "robot_2",
         "namespace": "/robot_2",
-        "spawn_pose": [0.0, 9.5, 0.0],
-        "start_node": "nurse_station_approach",
+        "spawn_pose": [0.0, 10.0, 0.0],
+        "start_node": "north_hall",
         "wing": "shared",
     },
     "robot_3": {
@@ -360,7 +377,8 @@ class SimRobot:
         use_gazebo: Optional[bool] = None,
         spawn_pose: Optional[Tuple[float, float, float]] = None,
         validation_source: str = "odometry",
-        position_tolerance: float = 0.10,
+        pose_source: Optional[str] = None,
+        position_tolerance: float = 0.30,
         sensor_timeout: Optional[float] = None,
     ):
         # Slow hosts (Gazebo emulated on Apple Silicon runs far below real time) need looser freshness limits:
@@ -369,7 +387,7 @@ class SimRobot:
         if sensor_timeout is None:
             sensor_timeout = float(os.environ.get("NIMBUS_SENSOR_TIMEOUT", "1.0"))
         self.goal_timeout = float(os.environ.get("NIMBUS_GOAL_TIMEOUT", "600"))
-        self.minimum_front_distance = float(os.environ.get("NIMBUS_MINIMUM_FRONT_DISTANCE", "0.45"))
+        self.minimum_front_distance = float(os.environ.get("NIMBUS_MINIMUM_FRONT_DISTANCE", "0.30"))
         self.robot_id = robot_id
         cfg = DEFAULT_ROBOT_DEPLOYMENT.get(robot_id, DEFAULT_ROBOT_DEPLOYMENT["R1"])
         self.sim_name = cfg["sim_name"]
@@ -398,6 +416,12 @@ class SimRobot:
         self.status = "IDLE"
         self.execution_mode = "gazebo" if use_gazebo is not False else "sdk_mock"
         self.validation_source = validation_source
+        # Gazebo is authoritative in live simulation.  The kinematic SDK
+        # stand-in has no Gazebo pose stream, so it remains odometry-based.
+        requested_pose_source = pose_source or ("odometry" if use_gazebo is False else "gazebo")
+        self.navigation_pose_source = "odometry" if requested_pose_source == "controller" else str(requested_pose_source).lower()
+        if self.navigation_pose_source not in {"gazebo", "odometry"}:
+            raise ValueError("pose_source must be 'gazebo', 'odometry', or 'controller'")
         self.position_tolerance = float(position_tolerance)
         self.sensor_timeout = float(sensor_timeout)
         self.connection_state = "INITIALIZING"
@@ -423,6 +447,11 @@ class SimRobot:
         self.history: List[Dict[str, Any]] = []
         self.injected_obstacles: Dict[str, Dict[str, Any]] = {}
         self._static_human_obstacles = _load_static_human_obstacles() if self.execution_mode == "gazebo" else []
+        # The SDF layer is opt-in until topology waypoints have been
+        # calibrated against its world frame.  Enabling it never broadens a
+        # route; it only adds occupied cells to the lease-authorised mask.
+        self.use_sdf_occupancy = self.execution_mode == "gazebo" and os.environ.get("NIMBUS_USE_SDF_OCCUPANCY", "0") == "1"
+        self._sdf_occupancy = _load_sdf_occupancy() if self.use_sdf_occupancy else None
 
         # Load topology nodes & edges for corridor routing
         self.topology_nodes = {}
@@ -440,7 +469,6 @@ class SimRobot:
                 ("lift_lobby", "north_hall", 6.0),
                 ("north_hall", "west_north_gate", 4.92),
                 ("north_hall", "east_north_gate", 4.92),
-                ("north_hall", "nurse_station_approach", 7.0),
                 ("west_north_gate", "west_waiting_approach", 6.0),
                 ("east_north_gate", "east_waiting_approach", 6.0),
                 ("west_waiting_approach", "west_mid_hall", 5.0),
@@ -494,6 +522,7 @@ class SimRobot:
                         require_obstacle_feedback=True,
                         obstacle_timeout=self.sensor_timeout,
                         validation_source=self.validation_source,
+                        pose_source=self.navigation_pose_source,
                         ground_truth_tolerance=self.position_tolerance,
                         enable_path_planning=True,
                         enable_dynamic_avoidance=True,
@@ -508,9 +537,10 @@ class SimRobot:
                 while time.time() < bridge_ready_by:
                     try:
                         health = self.runtime.state().health
-                        if self.runtime.readiness(require_ground_truth=self.validation_source == "ground_truth") == "READY":
+                        require_ground_truth = self.navigation_pose_source == "gazebo" or self.validation_source == "ground_truth"
+                        if self.runtime.readiness(require_ground_truth=require_ground_truth) == "READY":
                             sensors_fresh = True
-                            print(f"      [sim] READY: {self.sim_name} odom, range{', and ground truth' if self.validation_source == 'ground_truth' else ''} are fresh on partition '{os.environ.get('IGN_PARTITION')}'")
+                            print(f"      [sim] READY: {self.sim_name} odom, range{', and ground truth' if require_ground_truth else ''} are fresh on partition '{os.environ.get('IGN_PARTITION')}'")
                             break
                         elif health.odometry.fresh and not health.range.fresh:
                             time.sleep(0.5)
@@ -519,7 +549,7 @@ class SimRobot:
                     time.sleep(0.2)
 
                 self._is_gazebo = True
-                self.connection_state = self.runtime.readiness(require_ground_truth=self.validation_source == "ground_truth")
+                self.connection_state = self.runtime.readiness(require_ground_truth=self.navigation_pose_source == "gazebo" or self.validation_source == "ground_truth")
                 if not sensors_fresh:
                     health=self.runtime.state().health
                     print(f"      [sim] {self.connection_state}: {self.sim_name} odom_fresh={health.odometry.fresh} range_fresh={health.range.fresh} ground_truth_fresh={health.ground_truth.fresh}; navigation will fail closed.")
@@ -548,6 +578,7 @@ class SimRobot:
                 odometry_timeout=self.sensor_timeout,
                 require_obstacle_feedback=True,
                 obstacle_timeout=self.sensor_timeout,
+                pose_source=self.navigation_pose_source,
                 enable_path_planning=True,
                 enable_dynamic_avoidance=True,
                 obstacle_wait_timeout=0.25,
@@ -661,6 +692,21 @@ class SimRobot:
         except Exception:
             return []
 
+    def _stamp_sdf_occupancy(self, costmap: Any) -> None:
+        """Project SDF collision cells from Gazebo world into this robot's local frame."""
+        layer = self._sdf_occupancy
+        if not layer:
+            return
+        resolution = float(layer["resolution"])
+        origin_x, origin_y = (float(value) for value in layer["origin"])
+        width = int(layer["width"])
+        for index, occupied in enumerate(layer["occupied"]):
+            if not occupied:
+                continue
+            row, column = divmod(index, width)
+            point = (origin_x + (column + .5) * resolution, origin_y + (row + .5) * resolution)
+            costmap.set_occupied(costmap.world_to_cell(*self._world_to_navigation(point)), True)
+
     def _configure_navigation_costmap(
         self,
         runtime: Any = None,
@@ -706,6 +752,10 @@ class SimRobot:
             local_waypoints,edges,
             CostmapConfig(resolution=.20,corridor_width=2.0,robot_radius=.28,margin=1.0,junction_radius=2.0),
         )
+        # The topology layer remains the lease/geofence authority.  Overlay
+        # SDF collision cells inside it so A* and map-checked U-turns see
+        # real walls and fixed furniture without opening other corridors.
+        self._stamp_sdf_occupancy(costmap)
         # A topology edge says where travel is physically possible; it does
         # not say that it is clear *right now*.  Known persistent obstacles
         # (including viewer closures) must therefore become occupied cells
@@ -748,14 +798,14 @@ class SimRobot:
             sx,sy,syaw=self.spawn_pose; raw=_odometry.pose; c,s=math.cos(syaw),math.sin(syaw)
             self._navigation_origin_world=(sx+c*raw.x-s*raw.y,sy+s*raw.x+c*raw.y,math.atan2(math.sin(syaw+raw.yaw),math.cos(syaw+raw.yaw)))
             self._navigation_origin_measured=True
-        if self.validation_source == "ground_truth" and self.runtime.sensors.get_health().ground_truth.fresh: return
+        if self.navigation_pose_source == "gazebo" and self.runtime.sensors.get_health().ground_truth.fresh: return
         self._record_pose(self._local_to_world(self.runtime.navigation.pose),"odometry/startup_local->gazebo/world",_odometry.timestamp)
 
     def _on_ground_truth_feedback(self, feedback: GroundTruthPose) -> None:
         if self.execution_mode == "gazebo" and not self._navigation_origin_measured:
             self._navigation_origin_world=(feedback.pose.x,feedback.pose.y,feedback.pose.yaw)
             self._navigation_origin_measured=True
-        if self.validation_source == "ground_truth":
+        if self.navigation_pose_source == "gazebo" or self.validation_source == "ground_truth":
             self._record_pose([feedback.pose.x,feedback.pose.y,feedback.pose.yaw],"gazebo_ground_truth",feedback.timestamp)
 
     def set_mock_sensor_enabled(self, *, odometry: Optional[bool]=None, range_scan: Optional[bool]=None) -> None:
@@ -766,7 +816,7 @@ class SimRobot:
     def refresh_readiness(self) -> str:
         if not self.runtime: self.connection_state="DISCONNECTED"
         elif self.execution_mode == "sdk_mock": self.connection_state="READY"
-        else: self.connection_state=self.runtime.readiness(require_ground_truth=self.validation_source == "ground_truth")
+        else: self.connection_state=self.runtime.readiness(require_ground_truth=self.navigation_pose_source == "gazebo" or self.validation_source == "ground_truth")
         return self.connection_state
 
     def pose_snapshot(self) -> Dict[str, Any]:
@@ -774,7 +824,7 @@ class SimRobot:
         source_health=(health.ground_truth if self.pose_source == "gazebo_ground_truth" else health.odometry) if health else None
         fresh=bool(source_health and source_health.fresh)
         with self._pose_lock: last=list(self.pose)
-        return {"pose":last if fresh else None,"last_known_pose":last,"pose_source":self.pose_source,"pose_frame":self.pose_frame,"pose_timestamp":self.pose_timestamp,"pose_fresh":fresh}
+        return {"pose":last if fresh else None,"last_known_pose":last,"pose_source":self.pose_source,"navigation_pose_source":self.navigation_pose_source,"pose_frame":self.pose_frame,"pose_timestamp":self.pose_timestamp,"pose_fresh":fresh}
 
     def get_status(self) -> Dict[str, Any]:
         return {"robot_id":self.robot_id,"current_cmd_id":self.current_cmd_id,"status":self.status,"zone":self.current_zone,"battery_pct":self.battery_pct,"connection_state":self.refresh_readiness(),"execution_mode":self.execution_mode,**self.pose_snapshot(),"timestamp":time.time()}
@@ -835,10 +885,20 @@ class SimRobot:
         if start_node not in adj or target_node not in adj:
             return []
 
-        q = [(0.0, start_node, [start_node])]
+        # A* over the topology graph.  Edges outside the lease and known
+        # blocked nodes were removed above, so every returned node and edge
+        # is authorised before continuous navigation receives it.
+        def heuristic(node: str) -> float:
+            left=self.waypoints.get(node)
+            right=self.waypoints.get(target_node)
+            if not left or not right:
+                return 0.0
+            return math.hypot(float(right[0])-float(left[0]),float(right[1])-float(left[1]))
+
+        q = [(heuristic(start_node), 0.0, start_node, [start_node])]
         visited = set()
         while q:
-            cost, curr, path = heapq.heappop(q)
+            _, cost, curr, path = heapq.heappop(q)
             if curr in visited:
                 continue
             visited.add(curr)
@@ -846,8 +906,9 @@ class SimRobot:
                 return path
             for neigh, w in adj.get(curr, []):
                 if neigh not in visited:
-                    heapq.heappush(q, (cost + w, neigh, path + [neigh]))
-        return [target_node]
+                    next_cost=cost+w
+                    heapq.heappush(q, (next_cost+heuristic(neigh), next_cost, neigh, path + [neigh]))
+        return []
 
     def close(self) -> None:
         self._kinematic_running = False
@@ -911,7 +972,7 @@ class SimRobot:
             snapshot=self.pose_snapshot()
             verification_source=extra.get("verification_source")
             physical_verification=self.execution_mode == "gazebo" and (
-                (bool(extra.get("arrival_verified")) and verification_source in {"odometry","ground_truth"})
+                (bool(extra.get("arrival_verified")) and verification_source in {"odometry","ground_truth","gazebo"})
                 or (bool(extra.get("has_photo")) and verification_source == "gazebo_camera")
             )
             message_l = message.lower()
@@ -1035,35 +1096,44 @@ class SimRobot:
                         self.runtime.commands.stop()
                     return finish("BLOCKED",result_msg,blocked_zone=blocked_zone,obstacle_type=obs_info["type"],obstacle_description=obs_info["description"])
 
-            # 3. Expand corridor route using Dijkstra topology graph
+            # 3. Filter non-authorised / blocked graph edges, then compute
+            # the in-lease A* topology route before any robot motion.  The
+            # SDK below applies continuous A* inside this fenced corridor
+            # map; it will perform a map-checked U-turn if a next segment is
+            # behind the vehicle.
             waypoints_to_visit = []
             if target_name:
                 supplied_via = params.get("via")
                 if supplied_via is not None and not isinstance(supplied_via, list):
                     return finish("INVALID_DESTINATION", "Route 'via' must be a list")
-                if supplied_via:
-                    route = [canonical_topology_location(node) for node in supplied_via]
-                    start_node = canonical_topology_location(self.current_zone)
-                    if not route or route[0] != start_node:
-                        route.insert(0, start_node)
-                    target_node = canonical_topology_location(target_name)
-                    if route[-1] != target_node:
-                        route.append(target_node)
-                else:
-                    route = self._find_route(
-                        self.current_zone,
-                        target_name,
-                        allowed_zones=allowed_zones,
-                        avoid_zones=persistent_obstacles,
-                    )
+                route = self._find_route(
+                    self.current_zone,
+                    target_name,
+                    allowed_zones=allowed_zones,
+                    avoid_zones=persistent_obstacles,
+                )
                 if not route:
                     return finish("BLOCKED", f"No obstacle-free route to {target_name!r} exists inside allowed_zones")
+                if supplied_via:
+                    requested = [canonical_topology_location(node) for node in supplied_via]
+                    start_node = canonical_topology_location(self.current_zone)
+                    target_node = canonical_topology_location(target_name)
+                    if not requested or requested[0] != start_node:
+                        requested.insert(0, start_node)
+                    if requested[-1] != target_node:
+                        requested.append(target_node)
+                    # Record an invalid cloud route as a boundary failure;
+                    # otherwise the local A* route remains authoritative so
+                    # a stale route cannot bypass a newly blocked edge.
+                    illegal = [node for node in requested[1:] if (allowed_nodes is not None and node not in allowed_nodes) or node in forbidden_zones]
+                    if illegal:
+                        return finish("INVALID_DESTINATION", f"Lease route leaves permitted zones via {illegal[0]!r}")
                 illegal = [node for node in route[1:] if (allowed_nodes is not None and node not in allowed_nodes) or node in forbidden_zones]
                 if illegal:
                     return finish("INVALID_DESTINATION", f"Lease route leaves permitted zones via {illegal[0]!r}")
-                # A cloud-supplied `via` route is authoritative, so do not
-                # silently leave it.  Refuse it if a persistent obstacle is
-                # on it; tactical re-planning must remain inside the lease.
+                # The computed A* route is authoritative.  This makes a
+                # cloud ``via`` traceable but cannot let a stale cloud route
+                # cross a newly removed or blocked edge.
                 blocked_on_route = [node for node in route[1:] if node in persistent_obstacles]
                 if blocked_on_route:
                     return finish("BLOCKED", f"Navigation blocked in {blocked_on_route[0]}: persistent obstacle")

@@ -3,64 +3,64 @@
   "units": "m",
   "waypoints": {
     "lift_lobby": [
-      0.0,
-      18.0
+      0.1,
+      17.9
     ],
     "north_hall": [
-      0.0,
-      12.0
+      0.1,
+      12.1
     ],
     "west_north_gate": [
       -4.5,
-      14.0
+      14.1
     ],
     "east_north_gate": [
       4.5,
-      14.0
+      14.1
     ],
     "west_waiting_approach": [
       -4.5,
-      8.0
+      8.1
     ],
     "east_waiting_approach": [
       4.5,
-      8.0
+      8.1
     ],
     "west_mid_hall": [
       -4.5,
-      3.0
+      3.1
     ],
     "east_mid_hall": [
       4.5,
-      3.0
+      3.1
     ],
     "nurse_station_approach": [
-      0.0,
-      5.0
+      0.1,
+      5.1
     ],
     "west_south_hall": [
       -4.5,
-      -8.0
+      -7.9
     ],
     "east_south_hall": [
       4.5,
-      -8.0
+      -7.9
     ],
     "south_equipment_approach": [
-      0.0,
-      -15.0
+      0.1,
+      -14.9
     ],
     "south_room_approach": [
-      0.0,
-      -28.0
+      0.1,
+      -27.9
     ],
     "east_south_hall_corner": [
       4.5,
-      -15.0
+      -14.9
     ],
     "west_south_hall_corner": [
       -4.5,
-      -15.0
+      -14.9
     ]
   }
 }

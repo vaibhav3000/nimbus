@@ -79,7 +79,7 @@ export IGN_PARTITION="${IGN_PARTITION:-custom_hospital_world}"; export GZ_PARTIT
 export NIMBUS_SENSOR_TIMEOUT="${NIMBUS_SENSOR_TIMEOUT:-5.0}"
 export NIMBUS_CAMERA_TIMEOUT="${NIMBUS_CAMERA_TIMEOUT:-10.0}"
 export NIMBUS_GOAL_TIMEOUT="${NIMBUS_GOAL_TIMEOUT:-600.0}"
-export NIMBUS_MINIMUM_FRONT_DISTANCE="${NIMBUS_MINIMUM_FRONT_DISTANCE:-0.45}"
+export NIMBUS_MINIMUM_FRONT_DISTANCE="${NIMBUS_MINIMUM_FRONT_DISTANCE:-0.30}"
 export NIMBUS_SLM_MODE="$SLM_MODE"
 export NIMBUS_SLM_MODEL="$SLM_MODEL"
 DEPLOYED_CLOUD_URL="https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com"
@@ -145,12 +145,12 @@ if [ "$MODE" = gazebo ]; then
   ok=0; for _ in $(seq 1 120); do
     n=$(ign topic -l 2>/dev/null | grep -c "/robot_[1-6]/odom"); [ "$n" -ge 6 ] && { ok=1; break; }; sleep 1; done
   [ "$ok" = 1 ] && echo "   Gazebo is publishing all 6 robots." || echo "!! Gazebo topics not seen after 120 s: check logs/gazebo.log (continuing anyway)"
-  SIM_ARGS=(--robot-backend sim --sim-mode gazebo --gazebo-validation ground_truth)
+  SIM_ARGS=(--robot-backend sim --sim-mode gazebo --pose-source gazebo)
 else
   echo "== starting kinematic viewer"
   start viewer python3 simulation/lite/viewer.py --port "${VIEWER_PORT:-8090}" --cloud "$CLOUD"
   export NIMBUS_SIM_VIEWER_URL="http://127.0.0.1:${VIEWER_PORT:-8090}"
-  SIM_ARGS=(--robot-backend sim --sim-mode kinematic)
+  SIM_ARGS=(--robot-backend sim --sim-mode kinematic --pose-source odometry)
 fi
 
 # --- 2. cloud ------------------------------------------------------------------------------------
