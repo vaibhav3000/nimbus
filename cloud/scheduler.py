@@ -36,6 +36,8 @@ class Entry:
 
 
 class Scheduler:
+    kind = "edf"    # priority rank, then earliest deadline, then arrival (FR-14)
+
     def __init__(self, ranks: dict, now: Callable[[], datetime] | None = None):
         self._ranks = ranks
         self.now = now
@@ -70,3 +72,22 @@ class Scheduler:
             if can_run(e):
                 return e
         return None
+
+
+class FifoScheduler(Scheduler):
+    """A deliberately naive classical baseline: arrival order only -- no
+    priority class, no deadline.  It is NOT the PRD's C3 (which specifies an
+    earliest-deadline-first scheduler); it is a separate, weaker C3 variant
+    used to show that a classical baseline's success under contention depends
+    heavily on how well it is engineered.  Selected with NIMBUS_SCHEDULER=fifo.
+
+    Under contention it hands a freed robot to whoever arrived first, so an
+    urgent request that arrives behind routine ones waits and can miss its
+    deadline -- exactly what priority+EDF scheduling (the default) avoids.
+    """
+
+    kind = "fifo"
+
+    def ordered(self) -> list[Entry]:
+        with self._lock:
+            return sorted(self._entries.values(), key=lambda e: e.seq)

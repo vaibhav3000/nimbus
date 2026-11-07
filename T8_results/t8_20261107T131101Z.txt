@@ -1,0 +1,7 @@
+T8: 3 requests to ward 2B, 2 robots, urgent deadline = 12 min
+
+scheduler served next after free    urgent done (min)   deadline  verdict
+EDF  (PRD C3)   t3-urgent             10.0                12        MEETS
+FIFO (naive C3) t2-routine            15.0                12        MISSES
+
+T8 CONFIRMED: EDF serves the urgent request first and meets its deadline; FIFO serves the routine first and the urgent misses.

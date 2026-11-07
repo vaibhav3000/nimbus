@@ -1,0 +1,2 @@
+actor,asset,start_xy,end_xy,yaw_rad,speed_mps,duration_s,minimum_static_clearance_m,minimum_robot_centerline_clearance_m,sdf_valid,seed,world,mission_outcome
+t2_east_corridor_pedestrian,/usr/share/gazebo-11/media/models/walk.dae,"[4.0, -13.0]","[4.0, 13.0]",1.5707963267948966,0.6,43.333333333333336,0.5,0.5,True,1,results/final/T2/raw/t2_background_traffic.sdf,NOT_RUN
