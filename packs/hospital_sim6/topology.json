@@ -83,11 +83,6 @@
       "east_south_hall_corner",
       "south_equipment_approach",
       4.5
-    ],
-    [
-      "south_equipment_approach",
-      "south_room_approach",
-      13.0
     ]
   ],
   "nodes": {
@@ -197,7 +192,7 @@
       "label": "equipment store",
       "pos": [
         0.0,
-        -15.0
+        -14.5
       ],
       "speed_cap": 1.0,
       "wing": "shared"
