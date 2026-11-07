@@ -33,6 +33,7 @@ locals {
     checkin    = "nimbus/+/checkin"
     renewal    = "nimbus/+/renewal"
     probe      = "nimbus/+/probe"
+    notice     = "nimbus/+/notice"
   }
 }
 
@@ -115,6 +116,12 @@ resource "aws_ecs_task_definition" "app" {
         { name = "NIMBUS_EMF", value = "1" },
         { name = "NIMBUS_KB_ID", value = var.knowledge_base_id },
       ]
+      secrets = [
+        { name = "NIMBUS_REQUESTER_TOKEN", valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:NIMBUS_REQUESTER_TOKEN::" },
+        { name = "NIMBUS_OPERATOR_TOKEN",  valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:NIMBUS_OPERATOR_TOKEN::" },
+        { name = "NIMBUS_EDGE_TOKEN",      valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:NIMBUS_EDGE_TOKEN::" },
+        { name = "NIMBUS_ADMIN_TOKEN",     valueFrom = "${aws_secretsmanager_secret.app_secrets.arn}:NIMBUS_ADMIN_TOKEN::" },
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -127,18 +134,58 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
+resource "aws_security_group" "vpc_link" {
+  name        = "${local.name_prefix}-vpc-link-sg"
+  description = "Security group for API Gateway v2 VPC link"
+  vpc_id      = aws_vpc.main.id
+
+  egress {
+    description = "Allow outbound to VPC subnets"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["10.20.0.0/16"]
+  }
+
+  tags = { Name = "${local.name_prefix}-vpc-link-sg" }
+}
+
+resource "aws_security_group" "alb" {
+  name        = "${local.name_prefix}-alb-sg"
+  description = "Security group for internal ALB allowing traffic from VPC link"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "Allow inbound HTTP from API Gateway VPC link"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.vpc_link.id]
+  }
+
+  egress {
+    description = "Allow outbound traffic to ECS tasks on port 8000"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["10.20.0.0/16"]
+  }
+
+  tags = { Name = "${local.name_prefix}-alb-sg" }
+}
+
 resource "aws_security_group" "app" {
   name        = "${local.name_prefix}-app-sg"
   description = "Security group for Nimbus ECS service allowing inbound HTTP on port 8000"
   vpc_id      = aws_vpc.main.id
 
-  # Inbound 8000 is restricted to VPC/internal CIDRs by default. Public client traffic terminates at API Gateway.
+  # Inbound 8000 is restricted to the internal ALB security group, eliminating broad CIDR exposure.
   ingress {
-    description = "Allow inbound port 8000 from VPC and API Gateway"
-    from_port   = 8000
-    to_port     = 8000
-    protocol    = "tcp"
-    cidr_blocks = var.allowed_ingress_cidr_blocks
+    description     = "Allow inbound port 8000 from internal ALB"
+    from_port       = 8000
+    to_port         = 8000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
   }
 
   egress {
@@ -150,6 +197,46 @@ resource "aws_security_group" "app" {
   }
 
   tags = { Name = "${local.name_prefix}-app-sg" }
+}
+
+resource "aws_lb" "internal" {
+  name               = "${local.name_prefix}-alb"
+  internal           = true
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+
+  tags = { Name = "${local.name_prefix}-alb" }
+}
+
+resource "aws_lb_target_group" "app" {
+  name        = "${local.name_prefix}-tg"
+  port        = 8000
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
+
+  health_check {
+    path                = "/health"
+    matcher             = "200"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+
+  tags = { Name = "${local.name_prefix}-tg" }
+}
+
+resource "aws_lb_listener" "app" {
+  load_balancer_arn = aws_lb.internal.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
 }
 
 resource "aws_ecs_service" "app" {
@@ -164,13 +251,27 @@ resource "aws_ecs_service" "app" {
     security_groups  = [aws_security_group.app.id]
     assign_public_ip = var.assign_public_ip # gated behind variable; defaults to false for security
   }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.app.arn
+    container_name   = "nimbus-app"
+    container_port   = 8000
+  }
+
+  depends_on = [aws_lb_listener.app]
 }
 
 # ---------------------------------------------------------------------------
-# API Gateway (HTTP API) in front of the service. PLACEHOLDER integration:
-# Person 3 replaces the MOCK integration with a VPC-link proxy (or an internal
-# ALB) to the Fargate service once networking is sized.
+# API Gateway (HTTP API) with VPC Link private integration to internal ALB
 # ---------------------------------------------------------------------------
+
+resource "aws_apigatewayv2_vpc_link" "main" {
+  name               = "${local.name_prefix}-vpc-link"
+  security_group_ids = [aws_security_group.vpc_link.id]
+  subnet_ids         = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+
+  tags = { Name = "${local.name_prefix}-vpc-link" }
+}
 
 resource "aws_apigatewayv2_api" "main" {
   name          = "${local.name_prefix}-api"
@@ -180,16 +281,10 @@ resource "aws_apigatewayv2_api" "main" {
 resource "aws_apigatewayv2_integration" "app" {
   api_id                 = aws_apigatewayv2_api.main.id
   integration_type       = "HTTP_PROXY"
-  integration_uri        = "${var.ecs_target_url}/{proxy}"
+  integration_uri        = aws_lb_listener.app.arn
   integration_method     = "ANY"
-  payload_format_version = "1.0"
-}
-
-resource "aws_apigatewayv2_integration" "root" {
-  api_id                 = aws_apigatewayv2_api.main.id
-  integration_type       = "HTTP_PROXY"
-  integration_uri        = var.ecs_target_url
-  integration_method     = "ANY"
+  connection_type        = "VPC_LINK"
+  connection_id          = aws_apigatewayv2_vpc_link.main.id
   payload_format_version = "1.0"
 }
 
@@ -197,6 +292,12 @@ resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = "$default"
   auto_deploy = true
+}
+
+resource "aws_apigatewayv2_route" "default" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "$default"
+  target    = "integrations/${aws_apigatewayv2_integration.app.id}"
 }
 
 resource "aws_apigatewayv2_route" "requests" {
@@ -214,7 +315,7 @@ resource "aws_apigatewayv2_route" "proxy" {
 resource "aws_apigatewayv2_route" "root" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "GET /"
-  target    = "integrations/${aws_apigatewayv2_integration.root.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.app.id}"
 }
 
 # ---------------------------------------------------------------------------
@@ -399,6 +500,21 @@ resource "aws_iam_role_policy_attachment" "execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role_policy" "execution_secrets" {
+  name = "${local.name_prefix}-execution-secrets"
+  role = aws_iam_role.execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "SecretsManagerRead"
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = [aws_secretsmanager_secret.app_secrets.arn]
+    }]
+  })
+}
+
 
 # ---------------------------------------------------------------------------
 # AWS IoT Core skeleton: IoT Policy for edge robot clusters.
@@ -432,8 +548,10 @@ resource "aws_iot_policy" "edge_cluster" {
         Resource = [
           "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/lease",
           "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/renewal",
+          "arn:aws:iot:${var.aws_region}:*:topic/nimbus/*/notice",
           "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/lease",
-          "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/renewal"
+          "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/renewal",
+          "arn:aws:iot:${var.aws_region}:*:topicfilter/nimbus/*/notice"
         ]
       }
     ]

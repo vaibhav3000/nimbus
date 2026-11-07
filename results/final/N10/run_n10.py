@@ -29,12 +29,35 @@ def api_call(method, path, body=None, timeout=10):
         return resp.status, json.loads(resp.read().decode())
 
 def run_n10():
+    global API_BASE
     out_dir = os.path.join("results", "final", "N10")
     plot_dir = os.path.join(out_dir, "plots")
     video_dir = os.path.join(out_dir, "videos")
     os.makedirs(plot_dir, exist_ok=True)
     os.makedirs(video_dir, exist_ok=True)
     setup_matplotlib_style()
+
+    httpd = None
+    try:
+        req = urllib.request.Request(f"{API_BASE}/health")
+        with urllib.request.urlopen(req, timeout=1.0):
+            pass
+    except Exception:
+        print(f"Target server not reachable at {API_BASE}; launching local server testbed...")
+        import tempfile
+        import threading
+        from pathlib import Path
+        import server
+        os.environ["NIMBUS_AUTH_DISABLED"] = "1"
+        tmp_dir = Path(tempfile.mkdtemp(prefix="nimbus-n10-"))
+        httpd = server.make_server("127.0.0.1", 0, tmp_dir)
+        server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+        API_BASE = f"http://127.0.0.1:{httpd.server_address[1]}"
+        time.sleep(0.5)
+
+        import atexit
+        atexit.register(httpd.shutdown)
 
     print("=== N10: Requester App and Operator Console Evaluation ===")
 
@@ -316,6 +339,8 @@ def run_n10():
 
     write_readme(out_dir, claim, pass_bar, command, GIT_COMMIT, verdict)
     print("Completed N10 experiment package successfully.")
+    if httpd:
+        httpd.shutdown()
 
 if __name__ == "__main__":
     run_n10()

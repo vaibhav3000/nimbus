@@ -40,5 +40,5 @@ Every fault injection event and profile status contains:
 ## 3. Status Synchronization and Security
 
 - When running against a cloud server (`server.py`), the proxy synchronizes state via `POST /fault`.
-- Because `server.py` enforces fail-closed authentication (C1), fault status updates transmit `Authorization: Bearer <token>` using `NIMBUS_ADMIN_TOKEN`, `NIMBUS_FAULT_TOKEN`, or `NIMBUS_EDGE_TOKEN`.
+- Because `server.py` enforces fail-closed authentication (C1), fault status updates transmit `Authorization: Bearer <token>` using `NIMBUS_ADMIN_TOKEN`, `NIMBUS_FAULT_TOKEN`, or `NIMBUS_AUTH_TOKEN`.
 - On shutdown, `_clear_fault_status()` increments `generation`, deletes local `data/fault_status.json`, and sends a reset payload to the server.

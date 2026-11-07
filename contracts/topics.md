@@ -1,6 +1,6 @@
 # Cloud-edge messaging topics
 
-The five topic patterns of the cloud-edge boundary (PRD v5.0 Fig 4 components
+The topic patterns of the cloud-edge boundary (lease, escalation, checkin, renewal, probe, notice) (PRD v5.0 Fig 4 components
 6-7). `cluster_id` is the edge cluster the topic concerns (SC-1: `east-wing`).
 Every message carries a `message_id` and the lease version it belongs to
 (FR-8); a repeated message is dropped, an outdated lease version is never
@@ -109,6 +109,40 @@ before delegating or reallocating tasks. The edge answers with a heartbeat or ch
   }
 }
 ```
+
+## `nimbus/{cluster_id}/notice`: cloud -> edge
+
+A message for people and robots at a cluster: the answer to a CLARIFY the edge asked (`type` ANSWER), a warning to
+the people working at a place, a map change (MAP), a stop notice (STOP) or a lease bundle (BUNDLE). Schema:
+`contracts/notice.schema.json`. `message_id` is derived from the content, so the same notice is never delivered twice.
+An ANSWER carries the `task_id` and `lease_version` of the CLARIFY it answers.
+
+```json
+{
+  "topic": "nimbus/east-wing/notice",
+  "payload": {
+    "type": "ANSWER",
+    "text": "Use the service lift",
+    "cluster_id": "east-wing",
+    "task_id": "task-000002",
+    "lease_version": 1,
+    "message_id": "notice-3f2a9c1b7e",
+    "ts": "2026-10-18T09:06:00Z"
+  }
+}
+```
+
+---
+
+## Result files: `POST /results/upload-url`, then `PUT`
+
+A result stays on the edge until it is uploaded; `OUTPUT_READY` carries the reference of the *uploaded* file.
+`POST /results/upload-url` with `{"task_id": "task-000002", "name": "photo-1.jpg", "content_type": "image/jpeg"}`
+(edge bearer token when one is set) answers `201 {"method": "PUT", "url": ..., "ref": ..., "headers": {...}, "max_bytes": 10485760}`.
+In the cloud `url` is a presigned S3 URL (valid 15 minutes); locally it is a path on the same server
+(`/results/upload/<task_id>/<name>`). The edge sends the file with that `PUT`, and reports `ref` as `result_ref` in
+`OUTPUT_READY` only after the `PUT` succeeded. A `storage://...` reference means the file is still on the edge; the
+cloud treats it as not uploaded.
 
 ---
 

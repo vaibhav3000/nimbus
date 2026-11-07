@@ -5,9 +5,15 @@ see); tests speak only HTTP plus the published schemas, never private helpers.
 """
 
 import os
+from pathlib import Path
+import sys
 import threading
 import uuid
 from urllib import request as urlreq
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import pytest
 

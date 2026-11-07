@@ -98,22 +98,32 @@ The cloud infrastructure is provisioned through modular Terraform configurations
   },
   gw/.style={
     draw=purple!75!black, fill=purple!6, rounded corners=3pt,
-    text width=2.6cm, minimum height=1.05cm, align=center,
+    text width=2.4cm, minimum height=1.05cm, align=center,
     font=\sffamily\scriptsize\bfseries, line width=0.7pt, drop shadow={opacity=0.08, shadow xshift=1pt, shadow yshift=-1pt}
+  },
+  privnet/.style={
+    draw=purple!85!black, fill=purple!4, rounded corners=3pt,
+    text width=2.3cm, minimum height=0.9cm, align=center,
+    font=\sffamily\scriptsize\bfseries, line width=0.6pt, drop shadow={opacity=0.08, shadow xshift=1pt, shadow yshift=-1pt}
+  },
+  alb/.style={
+    draw=blue!70!purple, fill=blue!4!purple!4, rounded corners=3pt,
+    text width=2.3cm, minimum height=0.9cm, align=center,
+    font=\sffamily\scriptsize\bfseries, line width=0.6pt, drop shadow={opacity=0.08, shadow xshift=1pt, shadow yshift=-1pt}
   },
   ecs/.style={
     draw=teal!85!black, fill=teal!4, rounded corners=4pt,
-    text width=3.8cm, minimum height=2.55cm, align=center,
+    text width=3.5cm, minimum height=2.55cm, align=center,
     font=\sffamily\scriptsize\bfseries, line width=0.8pt, drop shadow={opacity=0.08, shadow xshift=1pt, shadow yshift=-1pt}
   },
   subnode/.style={
     draw=teal!65!black, fill=white, rounded corners=2pt,
-    text width=3.4cm, minimum height=0.46cm, align=center,
+    text width=3.2cm, minimum height=0.46cm, align=center,
     font=\sffamily\tiny, line width=0.4pt
   },
   backend/.style={
     draw=orange!85!black, fill=orange!6, rounded corners=3pt,
-    text width=3.4cm, minimum height=0.9cm, align=center,
+    text width=3.2cm, minimum height=0.9cm, align=center,
     font=\sffamily\scriptsize\bfseries, line width=0.7pt, drop shadow={opacity=0.08, shadow xshift=1pt, shadow yshift=-1pt}
   },
   edge/.style={
@@ -128,21 +138,25 @@ The cloud infrastructure is provisioned through modular Terraform configurations
   \node[edge, below=0.75cm of client] (fleet) {Hospital Edge Fleet\\{\tiny\color{gray!75!black}6 Robots (East/West Wings)\\[-1pt]Gazebo Sim / Supervisors}};
 
   % Ingress (API Gateway)
-  \node[gw, right=1.6cm of client, yshift=-0.9cm] (apigw) {Amazon API Gateway\\{\tiny\color{gray!75!black}HTTP API v2 (\texttt{qrgdidp9te})\\[-1pt]TLS Termination \& CORS}};
+  \node[gw, right=1.0cm of client, yshift=-0.9cm] (apigw) {Amazon API Gateway\\{\tiny\color{gray!75!black}HTTP API v2 (\texttt{qrgdidp9te})\\[-1pt]TLS Termination \& CORS}};
+
+  % Private Network Integration (VPC Link + Internal ALB)
+  \node[privnet, right=0.8cm of apigw, yshift=0.65cm] (vpclink) {API Gateway VPC Link\\{\tiny\color{gray!75!black}\texttt{aws\_apigatewayv2\_vpc\_link}\\[-1pt]Private Subnet Integration}};
+  \node[alb, below=0.45cm of vpclink] (alb) {Internal ALB\\{\tiny\color{gray!75!black}Port 80 $\rightarrow$ TG:8000\\[-1pt]\texttt{aws\_lb.internal}}};
 
   % ECS Compute Core (Middle)
-  \node[ecs, right=1.2cm of apigw] (ecs) {};
+  \node[ecs, right=0.9cm of vpclink, yshift=-0.65cm] (ecs) {};
   \node[anchor=north, font=\sffamily\scriptsize\bfseries\color{teal!90!black}, yshift=-4pt] at (ecs.north) {ECS Fargate Service Core};
-  \node[anchor=north, font=\sffamily\tiny\color{gray!70!black}, yshift=-13pt] at (ecs.north) {\texttt{nimbus-ds252-service} (port 8000)};
+  \node[anchor=north, font=\sffamily\tiny\color{gray!70!black}, yshift=-13pt] at (ecs.north) {\texttt{nimbus-ds252-service} (private IP:8000)};
   
   \node[subnode, below=0.80cm of ecs.north] (ecs1) {\textbf{\texttt{server.py}} (\texttt{\_STATE\_LOCK}, Dedupe)};
   \node[subnode, below=0.10cm of ecs1] (ecs2) {Orchestrator, Allocator \& Policy Engine};
-  \node[subnode, below=0.10cm of ecs2] (ecs3) {LLM Circuit Breaker (Auto-Fallback)};
+  \node[subnode, below=0.10cm of ecs2] (ecs3) {Secrets Manager Token Injection};
 
   % Backends (Right)
-  \node[backend, right=1.6cm of ecs, yshift=1.3cm] (bedrock) {Amazon Bedrock (Nova-Lite)\\{\tiny\color{gray!75!black}Converse API Tool Calling\\[-1pt]\texttt{apac.amazon.nova-lite-v1:0}}};
-  \node[backend, right=1.6cm of ecs] (dynamo) {Amazon DynamoDB\\{\tiny\color{gray!75!black}5 Pay-Per-Request Tables\\[-1pt]Tasks, Leases, State, Logs, Status}};
-  \node[backend, right=1.6cm of ecs, yshift=-1.3cm] (sqs) {Amazon SQS (Escalations)\\{\tiny\color{gray!75!black}Queue: \texttt{nimbus-ds252-escalations}\\[-1pt]Edge Blockage Alert Buffering}};
+  \node[backend, right=1.2cm of ecs, yshift=1.3cm] (bedrock) {Amazon Bedrock (Nova-Lite)\\{\tiny\color{gray!75!black}Converse API Tool Calling\\[-1pt]\texttt{apac.amazon.nova-lite-v1:0}}};
+  \node[backend, right=1.2cm of ecs] (dynamo) {Amazon DynamoDB\\{\tiny\color{gray!75!black}5 Pay-Per-Request Tables\\[-1pt]Tasks, Leases, State, Logs, Status}};
+  \node[backend, right=1.2cm of ecs, yshift=-1.3cm] (sqs) {Amazon SQS (Escalations)\\{\tiny\color{gray!75!black}Queue: \texttt{nimbus-ds252-escalations}\\[-1pt]Edge Blockage Alert Buffering}};
 
   % Background Boxes
   \begin{scope}[on background layer]
@@ -151,10 +165,10 @@ The cloud infrastructure is provisioned through modular Terraform configurations
           fit=(apigw.north west) (apigw.south west) (ecs) (bedrock.north east) (dynamo.east) (sqs.south east), inner sep=10pt,
           label={[font=\sffamily\tiny\bfseries\color{awsblue!80!black}, anchor=north west, xshift=8pt, yshift=-3pt]north west:AWS Cloud (\texttt{ap-south-1} / Account \texttt{930124786284})}] (cloud) {};
     
-    % VPC Boundary around ECS
-    \node[draw=teal!30, fill=vpcbg, rounded corners=3pt, line width=0.5pt,
-          fit=(ecs.north west) (ecs.south east), inner sep=6pt] (vpc) {};
-    \node[font=\sffamily\tiny\bfseries\color{teal!70!black}, anchor=north, yshift=-1pt] at (vpc.south) {Amazon VPC (\texttt{10.20.0.0/16})};
+    % VPC Boundary around VPC Link, ALB, and ECS
+    \node[draw=teal!35, fill=vpcbg, rounded corners=3pt, line width=0.5pt,
+          fit=(vpclink.north west) (alb.south west) (ecs.north east) (ecs.south east), inner sep=6pt] (vpc) {};
+    \node[font=\sffamily\tiny\bfseries\color{teal!70!black}, anchor=north, yshift=-1pt] at (vpc.south) {Amazon VPC (\texttt{10.20.0.0/16}, Private Subnets, No Public IP)};
   \end{scope}
 
   % Arrows from Clients to Ingress
@@ -165,11 +179,15 @@ The cloud infrastructure is provisioned through modular Terraform configurations
     node[pos=0.35, below=1pt, font=\sffamily\tiny\bfseries, text=customemerald!85!black] {Telemetry} 
     ($(apigw.west)+(0,-0.3)$);
 
-  % Ingress to ECS
+  % Ingress through VPC Link to Internal ALB to ECS
   \draw[->, very thick, color=purple!80!black] (apigw.east) -- 
+    node[above=1pt, font=\sffamily\tiny\bfseries] {VPC Link} 
+    (vpclink.west);
+  \draw[->, thick, color=purple!70!black] (vpclink.south) -- (alb.north);
+  \draw[->, very thick, color=teal!80!black] (alb.east) -- 
     node[above=1pt, font=\sffamily\tiny\bfseries] {HTTP:8000} 
-    node[below=1pt, font=\sffamily\tiny\color{gray!70!black}] {Proxy Routing} 
-    (ecs.west);
+    node[below=1pt, font=\sffamily\tiny\color{gray!70!black}] {Private Route} 
+    ($(ecs.west)+(0,-0.4)$);
 
   % ECS to Backends (Smooth Curves with clear labels)
   \draw[->, thick, color=orange!85!black] ($(ecs.east)+(0,0.45)$) to[out=18, in=180] 
@@ -187,8 +205,9 @@ The cloud infrastructure is provisioned through modular Terraform configurations
 \vspace{-6pt}
 
 \begin{itemize}
-  \item \textbf{ECS Fargate (\texttt{nimbus-ds252-cluster} / \texttt{nimbus-ds252-service}):} Runs container \texttt{nimbus-app} on \texttt{linux/amd64} with 512 CPU units and 1024 MB RAM, deployed in private subnets with public IP assignment. Application updates are pushed to ECR (\texttt{930124786284.dkr.ecr.ap-south-1.amazonaws.com/nimbus-app}), updating the task definition revision followed by a rolling zero-downtime deployment (\texttt{--force-new-deployment}) at \texttt{desiredCount=1}.
-  \item \textbf{Amazon API Gateway (\texttt{qrgdidp9te}):} HTTP API v2 providing public HTTPS termination. Integrations use \texttt{HTTP\_PROXY} forwarding requests directly to the active container IP on port 8000.
+  \item \textbf{ECS Fargate (\texttt{nimbus-ds252-cluster} / \texttt{nimbus-ds252-service}):} Runs container \texttt{nimbus-app} on \texttt{linux/amd64} with 512 CPU units and 1024 MB RAM, deployed in private subnets \textbf{without} public IP assignment (\texttt{assign\_public\_ip = false}). Tasks receive traffic exclusively via target group attachments from the internal ALB, with ingress restricted to the ALB security group on port 8000. Application secrets (\texttt{NIMBUS\_*\_TOKEN}) are injected dynamically into the container environment from AWS Secrets Manager.
+  \item \textbf{Amazon API Gateway (\texttt{qrgdidp9te}) \& Private VPC Link:} HTTP API v2 providing public HTTPS termination. Integrations use a private \texttt{VPC\_LINK} (\texttt{aws\_apigatewayv2\_vpc\_link.main}) routing traffic into an internal Application Load Balancer (\texttt{aws\_lb.internal}) listening on port 80 across private subnets, completely eliminating the need for public IPs on ECS tasks.
+  \item \textbf{Deployment Identification \& Local Safety:} Live AWS identifiers (\texttt{930124786284}, \texttt{qrgdidp9te}) document the evaluated cloud target. Local execution and test runners default strictly to local cloud (\texttt{NIMBUS\_LOCAL\_CLOUD=1}) to avoid inadvertent access to production resources.
   \item \textbf{Amazon DynamoDB (Pay-Per-Request Tables):}
   \begin{itemize}
     \item \texttt{nimbus-ds252-tasks}: Stores task metadata, status, request text, and current lease state.

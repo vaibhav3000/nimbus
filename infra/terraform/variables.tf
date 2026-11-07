@@ -58,7 +58,7 @@ variable "knowledge_base_id" {
 }
 
 variable "ecs_target_url" {
-  description = "Target HTTP URL for the ECS Fargate service / container proxy. Can be set to a task public IP, internal ALB, or mock URL at apply time."
+  description = "Legacy target HTTP URL for container proxy (defaults to localhost). In the private VPC Link architecture, API Gateway integrates directly with the internal ALB listener (aws_lb_listener.app.arn) via aws_apigatewayv2_vpc_link without public IPs."
   type        = string
   default     = "http://127.0.0.1:8000"
 }

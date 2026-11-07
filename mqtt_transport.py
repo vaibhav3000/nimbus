@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 logger = logging.getLogger("nimbus.mqtt")
 
-CANONICAL_MESSAGE_TYPES = ("lease", "escalation", "checkin", "renewal", "probe")
+CANONICAL_MESSAGE_TYPES = ("lease", "escalation", "checkin", "renewal", "probe", "notice")
 
 
 def canonical_topic(cluster_id: str, message_type: str) -> str:
@@ -86,11 +86,13 @@ class StandinMQTTClient:
         self._subs_lock = threading.Lock()
         self._running = False
         self.connected = True
+        self._pending_messages: list[tuple[str, bytes]] = []
+        self._pending_lock = threading.Lock()
 
     def subscribe(self, pattern: str, handler: Callable[[str, dict], None]) -> None:
         with self._subs_lock:
             self._subscriptions.append((pattern, handler))
-        if self._running:
+        if self._running and self.connected:
             self._register(pattern, handler)
 
     def _register(self, pattern: str, handler: Callable[[str, dict], None]) -> None:
@@ -111,7 +113,29 @@ class StandinMQTTClient:
             raw = payload.encode("utf-8")
         else:
             raw = payload
+
+        if not self.connected:
+            with self._pending_lock:
+                if len(self._pending_messages) >= 500:
+                    self._pending_messages.pop(0)
+                self._pending_messages.append((topic, raw))
+            logger.info("Standin broker disconnected; buffered message for %s (total: %d)", topic, len(self._pending_messages))
+            return
+
         self.broker.publish(topic, raw)
+
+    def disconnect_broker(self) -> None:
+        """Simulate broker disconnection for resilience testing."""
+        self.connected = False
+
+    def reconnect_broker(self) -> None:
+        """Simulate broker reconnection and flush buffered messages."""
+        self.connected = True
+        with self._pending_lock:
+            pending = list(self._pending_messages)
+            self._pending_messages.clear()
+        for topic, raw in pending:
+            self.broker.publish(topic, raw)
 
     def start(self) -> None:
         if self._running:
@@ -139,8 +163,42 @@ class PahoMQTTClient:
 
         self._handlers: list[tuple[str, Callable[[str, dict], None]]] = []
         self._handlers_lock = threading.Lock()
+        self._pending_messages: list[tuple[str, bytes]] = []
+        self._pending_lock = threading.Lock()
+        self._stopping = False
+        self._reconnect_thread: threading.Thread | None = None
+
         self._client.on_message = self._on_message
+        self._client.on_connect = self._on_connect
+        self._client.on_disconnect = self._on_disconnect
         self.connected = False
+
+    def _on_connect(self, client, userdata, flags, rc, properties=None) -> None:
+        is_ok = (rc == 0) if isinstance(rc, int) else (not getattr(rc, "is_failure", True))
+        if is_ok:
+            self.connected = True
+            logger.info("Connected to MQTT broker at %s:%s", self.host, self.port)
+            with self._handlers_lock:
+                for pattern, _ in self._handlers:
+                    try:
+                        self._client.subscribe(pattern, qos=1)
+                    except Exception as e:
+                        logger.warning("Failed subscribing to %s: %s", pattern, e)
+
+            # Flush buffered pending messages upon reconnection
+            with self._pending_lock:
+                pending = list(self._pending_messages)
+                self._pending_messages.clear()
+            for topic, raw in pending:
+                try:
+                    self._client.publish(topic, raw, qos=1)
+                except Exception as exc:
+                    logger.warning("Error flushing pending message to %s: %s", topic, exc)
+
+    def _on_disconnect(self, client, userdata, rc, properties=None) -> None:
+        self.connected = False
+        if not self._stopping:
+            logger.warning("Disconnected from MQTT broker (%s:%s); auto-reconnect active", self.host, self.port)
 
     def _on_message(self, client, userdata, msg) -> None:
         topic = msg.topic
@@ -163,40 +221,71 @@ class PahoMQTTClient:
     def subscribe(self, pattern: str, handler: Callable[[str, dict], None]) -> None:
         with self._handlers_lock:
             self._handlers.append((pattern, handler))
+        if self.connected:
+            try:
+                self._client.subscribe(pattern, qos=1)
+            except Exception as e:
+                logger.warning("Failed subscribing to %s: %s", pattern, e)
 
     def publish(self, topic: str, payload: dict | str | bytes) -> None:
-        if not self.connected:
-            logger.debug("MQTT broker not connected; skipping publish on %s", topic)
-            return
         if isinstance(payload, dict):
             raw = json.dumps(payload).encode("utf-8")
         elif isinstance(payload, str):
             raw = payload.encode("utf-8")
         else:
             raw = payload
+
+        if not self.connected:
+            with self._pending_lock:
+                if len(self._pending_messages) >= 500:
+                    self._pending_messages.pop(0)  # Bounded queue
+                self._pending_messages.append((topic, raw))
+            logger.info("MQTT disconnected; buffered message on %s (pending: %d)", topic, len(self._pending_messages))
+            return
+
         try:
             self._client.publish(topic, raw, qos=1)
         except Exception as exc:
-            logger.warning("Failed to publish to MQTT topic %s: %s", topic, exc)
+            logger.warning("Failed to publish to MQTT topic %s: %s; buffering", topic, exc)
+            with self._pending_lock:
+                if len(self._pending_messages) >= 500:
+                    self._pending_messages.pop(0)
+                self._pending_messages.append((topic, raw))
 
     def start(self) -> None:
+        self._stopping = False
         try:
-            self._client.connect(self.host, self.port, 60)
-            for pattern, _ in self._handlers:
-                self._client.subscribe(pattern, qos=1)
+            self._client.connect_async(self.host, self.port, 60)
             self._client.loop_start()
-            self.connected = True
-            logger.info("Connected to MQTT broker at %s:%s", self.host, self.port)
+            logger.info("Paho MQTT background loop started for %s:%s", self.host, self.port)
         except Exception as exc:
             self.connected = False
             logger.warning(
-                "Failed to connect to MQTT broker at %s:%s (%s); server continuing without MQTT",
-                self.host,
-                self.port,
-                exc,
+                "Initial connection to MQTT broker at %s:%s failed (%s); starting background reconnect",
+                self.host, self.port, exc
             )
+            self._start_reconnect_loop()
+
+    def _start_reconnect_loop(self) -> None:
+        if self._reconnect_thread and self._reconnect_thread.is_alive():
+            return
+        def _loop():
+            import time
+            delay = 1.0
+            while not self._stopping and not self.connected:
+                time.sleep(delay)
+                try:
+                    self._client.connect(self.host, self.port, 60)
+                    self._client.loop_start()
+                    self.connected = True
+                    break
+                except Exception:
+                    delay = min(10.0, delay * 1.5)
+        self._reconnect_thread = threading.Thread(target=_loop, daemon=True, name="MQTT-Reconnect")
+        self._reconnect_thread.start()
 
     def stop(self) -> None:
+        self._stopping = True
         try:
             self._client.loop_stop()
             self._client.disconnect()

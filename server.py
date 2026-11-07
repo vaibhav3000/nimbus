@@ -33,7 +33,8 @@ from store import Store
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 _STATE_LOCK = threading.RLock()
-_IN_FLIGHT_MESSAGES: set[str] = set()
+_IN_FLIGHT_MESSAGES: dict[str, float] = {}
+_IN_FLIGHT_TIMEOUT = 120.0  # seconds before stuck reservation is evicted
 MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10 MB maximum request body size
 
 TERMINAL_STATUSES = ("completed", "cancelled", "rejected")
@@ -187,14 +188,16 @@ def apply_outcome(orch, store, cost, publish, task: dict, outcome) -> None:
         if outcome.children:
             store.put_task(task)
         # T_in/T_out from the model's usage (estimates for the offline stand-in);
-        # M: leases published; W: rows + task write; F/K: flat per-decision stand-ins.
+        # M: leases published; W: rows + task write.
+        # F: Fargate GB-seconds = container memory (1.0 GB per main.tf) * decision slice duration.
+        fargate_slice_s = getattr(outcome, "duration_s", 0.025)
         cost.record(
             llm_calls=outcome.llm_calls,
             input_tokens=outcome.tokens_in,
             output_tokens=outcome.tokens_out,
             iot_messages=len(outcome.publish),
             dynamodb_ops=len(outcome.rows) + 2,
-            fargate_gbs=0.001,
+            fargate_gbs=round(fargate_slice_s * 1.0, 4),
             cloudwatch_metrics=1,
         )
     # Planning can call the model (seconds): never while holding the lock that every check-in and heartbeat needs.
@@ -278,9 +281,14 @@ class Handler(BaseHTTPRequestHandler):
         Public routes (/, /app.js, /operator, /map, /pack, /health, /schemas/*)
         remain accessible without authentication.
         """
+        is_production = os.environ.get("NIMBUS_BACKEND") == "aws" or os.environ.get("ENVIRONMENT") == "production"
         auth_disabled = os.environ.get("NIMBUS_AUTH_DISABLED", "0").lower() in ("1", "true", "yes")
+        if is_production and auth_disabled:
+            logging.getLogger("nimbus.auth").warning("NIMBUS_AUTH_DISABLED=1 ignored in production mode (NIMBUS_BACKEND=aws)")
+            auth_disabled = False
+
         pytest_bypass = "PYTEST_CURRENT_TEST" in os.environ and not os.environ.get("NIMBUS_TEST_AUTH_CHECK")
-        if (auth_disabled or pytest_bypass) and not os.environ.get("NIMBUS_TEST_AUTH_CHECK"):
+        if (auth_disabled or pytest_bypass) and not os.environ.get("NIMBUS_TEST_AUTH_CHECK") and not is_production:
             edge_token = os.environ.get("NIMBUS_EDGE_TOKEN")
             if edge_token and path in EDGE_PATHS:
                 pass
@@ -358,7 +366,7 @@ class Handler(BaseHTTPRequestHandler):
             adm_tok = os.environ.get("NIMBUS_ADMIN_TOKEN") or os.environ.get("NIMBUS_FAULT_TOKEN")
             if adm_tok:
                 role_tokens.append(adm_tok)
-            if os.environ.get("NIMBUS_DEMO_FAULTS", "0").lower() in ("1", "true", "yes"):
+            if not is_production and os.environ.get("NIMBUS_DEMO_FAULTS", "0").lower() in ("1", "true", "yes"):
                 return True
 
         # Fail closed if no token configured for this role
@@ -634,10 +642,14 @@ class Handler(BaseHTTPRequestHandler):
             if message_id in self.store.seen_message_ids:
                 self._send_json(200, {"duplicate": True})
                 return True, message_id
+            now = time.monotonic()
+            expired = [mid for mid, ts in _IN_FLIGHT_MESSAGES.items() if now - ts > _IN_FLIGHT_TIMEOUT]
+            for mid in expired:
+                _IN_FLIGHT_MESSAGES.pop(mid, None)
             if message_id in _IN_FLIGHT_MESSAGES:
                 self._send_json(409, {"error": "message_id is in-flight", "duplicate": True})
                 return True, message_id
-            _IN_FLIGHT_MESSAGES.add(message_id)
+            _IN_FLIGHT_MESSAGES[message_id] = now
             return False, message_id
 
     def _post_request(self, body: dict):
@@ -679,7 +691,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._decide(task, lambda: self.orch.handle_request(task, text, history=history), created=True)
         finally:
             with _STATE_LOCK:
-                _IN_FLIGHT_MESSAGES.discard(message_id)
+                _IN_FLIGHT_MESSAGES.pop(message_id, None)
 
     def _decide(self, task: dict, run, *, created: bool = False) -> bool:
         """Run one orchestrator decision and answer the caller. Returns False
@@ -711,6 +723,8 @@ class Handler(BaseHTTPRequestHandler):
             for key in ("notice", "reason"):
                 if task.get(key):
                     view[key] = task[key]
+            if task.get("message_id"):
+                _IN_FLIGHT_MESSAGES.pop(task["message_id"], None)
             self._send_json(201, view)
             return True
 
@@ -762,7 +776,7 @@ class Handler(BaseHTTPRequestHandler):
                 task, task["request_text"], question=question, answer=text, history=history))
         finally:
             with _STATE_LOCK:
-                _IN_FLIGHT_MESSAGES.discard(message_id)
+                _IN_FLIGHT_MESSAGES.pop(message_id, None)
 
     def _post_escalation(self, body: dict):
         """Ingress for edge escalations (PRD Table 2; Person 3 replaces the
@@ -827,7 +841,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(201, {"duplicate": False, "accepted": True, "status": task["status"]})
         finally:
             with _STATE_LOCK:
-                _IN_FLIGHT_MESSAGES.discard(message_id)
+                _IN_FLIGHT_MESSAGES.pop(message_id, None)
 
     def _relay_edge_answer(self, task: dict, text: str, message_id: str) -> None:
         """P3: the requester answered a question the edge asked. Log it, tell the cluster, resume the task."""
@@ -1152,6 +1166,17 @@ class Handler(BaseHTTPRequestHandler):
             status_file = data_dir / "fault_status.json"
             MAX_INT = 2_147_483_647
 
+            # Monotonic generation fence (prevents late async POST overwriting reset)
+            current_gen = getattr(self.server, "fault_generation", 0)
+            req_gen = body.get("generation")
+            if req_gen is not None and isinstance(req_gen, int):
+                if req_gen < current_gen:
+                    self._send_json(409, {"error": "stale fault generation", "current_generation": current_gen})
+                    return
+                self.server.fault_generation = req_gen
+            else:
+                self.server.fault_generation = current_gen + 1
+
             # 1. Strict validation of body field types
             if "profile" in body:
                 if not isinstance(body["profile"], str):
@@ -1208,6 +1233,7 @@ class Handler(BaseHTTPRequestHandler):
 
             # 2. Handle clear / healthy profile
             if profile_name in ("none", "healthy", "clear") or body.get("active") is False:
+                self.server.fault_generation = getattr(self.server, "fault_generation", 0) + 1
                 self.server.fault_state = None
                 for p in (status_file, Path("data/fault_status.json")):
                     try:
@@ -1215,7 +1241,7 @@ class Handler(BaseHTTPRequestHandler):
                             p.unlink()
                     except Exception:
                         pass
-                self._send_json(200, {"accepted": True, "fault": self._fault_view()})
+                self._send_json(200, {"accepted": True, "generation": self.server.fault_generation, "fault": self._fault_view()})
                 return
 
             # 3. Preset profile resolution

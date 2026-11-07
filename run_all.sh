@@ -97,9 +97,11 @@ export NIMBUS_GOAL_TIMEOUT="${NIMBUS_GOAL_TIMEOUT:-600.0}"
 export NIMBUS_MINIMUM_FRONT_DISTANCE="${NIMBUS_MINIMUM_FRONT_DISTANCE:-0.30}"
 export NIMBUS_SLM_MODE="$SLM_MODE"
 export NIMBUS_SLM_MODEL="$SLM_MODEL"
-DEPLOYED_CLOUD_URL="https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com"
-if [ "${NIMBUS_LOCAL_CLOUD:-0}" = 1 ]; then
-  CLOUD="http://127.0.0.1:$PORT"
+# Default to local cloud (NIMBUS_LOCAL_CLOUD=1) to guarantee local runs never accidentally contact production.
+# To explicitly target deployed AWS cloud, set NIMBUS_LOCAL_CLOUD=0 and NIMBUS_CLOUD_URL.
+DEPLOYED_CLOUD_URL="${NIMBUS_DEPLOYED_CLOUD_URL:-https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com}"
+if [ "${NIMBUS_LOCAL_CLOUD:-1}" = 1 ]; then
+  CLOUD="${NIMBUS_CLOUD_URL:-http://127.0.0.1:$PORT}"
   USE_LOCAL_CLOUD=1
 else
   CLOUD="${NIMBUS_CLOUD_URL:-$DEPLOYED_CLOUD_URL}"
