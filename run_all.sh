@@ -75,6 +75,20 @@ case "$SYSTEM_MODE" in
 esac
 export NIMBUS_MODE="$SYSTEM_MODE"
 LOGS="${LOGS_DIR:-$ROOT/logs}"; PIDS="$LOGS/pids"; mkdir -p "$LOGS"; : > "$PIDS"
+# Keep the existing logs/ directory as the live, latest-run view.  In
+# addition, archive each process log under a unique run directory so evidence
+# from an earlier Gazebo run is not overwritten by the next startup.
+PERSISTENT_LOGS_ROOT="${PERSISTENT_LOGS_DIR:-$ROOT/run_logs}"
+RUN_ID="${NIMBUS_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+RUN_LOGS="$PERSISTENT_LOGS_ROOT/$RUN_ID"
+mkdir -p "$RUN_LOGS"
+{
+  echo "run_id=$RUN_ID"
+  echo "started_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "requested_mode=$MODE"
+  echo "system_mode=$SYSTEM_MODE"
+  echo "command=$0 $*"
+} > "$RUN_LOGS/run.env"
 
 # --- environment (ROS 2 if present) -------------------------------------------------------------
 for f in /opt/ros/*/setup.bash; do [ -f "$f" ] && { set +u; source "$f"; set -u; break; }; done
@@ -122,7 +136,15 @@ export NIMBUS_CLOUD_URL="$CLOUD"
 # The deployed two-cluster registry names its assigned vehicles robot_1 and
 # robot_2.  They map to the east/west Gazebo vehicles at the edge boundary.
 [ "$USE_LOCAL_CLOUD" = 1 ] || export NIMBUS_CLOUD_ROBOT_PROFILE="deployed-two-cluster"
-start() { local name="$1"; shift; "$@" > "$LOGS/$name.log" 2>&1 & echo $! >> "$PIDS"; echo "   started $name (pid $!, log logs/$name.log)"; }
+start() {
+  local name="$1"
+  shift
+  # tee preserves the long-standing logs/<process>.log files while copying
+  # identical stdout/stderr into this run's immutable archive.
+  "$@" > >(tee "$LOGS/$name.log" "$RUN_LOGS/$name.log" >/dev/null) 2>&1 &
+  echo $! >> "$PIDS"
+  echo "   started $name (pid $!, log logs/$name.log; archive ${RUN_LOGS#$ROOT/}/$name.log)"
+}
 waitfor() { for _ in $(seq 1 "${3:-60}"); do curl -fs "$1" >/dev/null 2>&1 && return 0; sleep 1; done; echo "!! $2 did not come up (see logs/)"; return 1; }
 
 LOGS_DIR="$LOGS" ./stop_all.sh quiet 2>/dev/null || true
@@ -207,4 +229,5 @@ echo " Operator      : $CLOUD/operator    Map: $CLOUD/map"
 [ "$MODE" = gazebo ] && echo " Robots moving : in the Gazebo window (or HEADLESS=1: no window)"
 echo " Scripted demo : python3 scripts/demo_e2e.py --api $CLOUD"
 echo " Local cloud   : NIMBUS_LOCAL_CLOUD=1 ./run_all.sh $MODE"
+echo " Run archive   : $RUN_LOGS"
 echo " Stop          : ./stop_all.sh"
