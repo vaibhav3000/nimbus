@@ -85,6 +85,7 @@ class StandinMQTTClient:
         self._subscriptions: list[tuple[str, Callable[[str, dict], None]]] = []
         self._subs_lock = threading.Lock()
         self._running = False
+        self.connected = True
 
     def subscribe(self, pattern: str, handler: Callable[[str, dict], None]) -> None:
         with self._subs_lock:
@@ -139,6 +140,7 @@ class PahoMQTTClient:
         self._handlers: list[tuple[str, Callable[[str, dict], None]]] = []
         self._handlers_lock = threading.Lock()
         self._client.on_message = self._on_message
+        self.connected = False
 
     def _on_message(self, client, userdata, msg) -> None:
         topic = msg.topic
@@ -163,19 +165,36 @@ class PahoMQTTClient:
             self._handlers.append((pattern, handler))
 
     def publish(self, topic: str, payload: dict | str | bytes) -> None:
+        if not self.connected:
+            logger.debug("MQTT broker not connected; skipping publish on %s", topic)
+            return
         if isinstance(payload, dict):
             raw = json.dumps(payload).encode("utf-8")
         elif isinstance(payload, str):
             raw = payload.encode("utf-8")
         else:
             raw = payload
-        self._client.publish(topic, raw, qos=1)
+        try:
+            self._client.publish(topic, raw, qos=1)
+        except Exception as exc:
+            logger.warning("Failed to publish to MQTT topic %s: %s", topic, exc)
 
     def start(self) -> None:
-        self._client.connect(self.host, self.port, 60)
-        for pattern, _ in self._handlers:
-            self._client.subscribe(pattern, qos=1)
-        self._client.loop_start()
+        try:
+            self._client.connect(self.host, self.port, 60)
+            for pattern, _ in self._handlers:
+                self._client.subscribe(pattern, qos=1)
+            self._client.loop_start()
+            self.connected = True
+            logger.info("Connected to MQTT broker at %s:%s", self.host, self.port)
+        except Exception as exc:
+            self.connected = False
+            logger.warning(
+                "Failed to connect to MQTT broker at %s:%s (%s); server continuing without MQTT",
+                self.host,
+                self.port,
+                exc,
+            )
 
     def stop(self) -> None:
         try:
@@ -218,6 +237,10 @@ class MQTTTransport:
 
     def start(self) -> None:
         self.client.start()
+
+    @property
+    def is_connected(self) -> bool:
+        return getattr(self.client, "connected", False)
 
     def stop(self) -> None:
         self.client.stop()

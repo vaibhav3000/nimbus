@@ -18,7 +18,7 @@ from scripts.p4_shared import (
 )
 from playwright.sync_api import sync_playwright
 
-API_BASE = "https://qrgdidp9te.execute-api.ap-south-1.amazonaws.com"
+API_BASE = os.environ.get("NIMBUS_CLOUD_URL", "http://127.0.0.1:8000")
 
 def api_call(method, path, body=None, timeout=10):
     url = f"{API_BASE}{path}"
